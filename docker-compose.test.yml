@@ -1,0 +1,32 @@
+version: '3'
+
+networks:
+  api-tests:
+    driver: bridge
+
+services:
+  # Test Container for running tests locally
+  local_tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    env_file:
+      - dockertest.env
+    # TODO replace template-serverless-service
+    volumes:
+      - $PWD:/go/src/github.com/pennsieve/template-serverless-service
+    networks:
+      - api-tests
+
+  # Test Container for Jenkins
+  ci-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    env_file:
+      - dockertest.env
+    # TODO replace template-serverless-service
+    volumes:
+      - $PWD:/go/src/github.com/pennsieve/template-serverless-service
+    networks:
+      - api-tests
