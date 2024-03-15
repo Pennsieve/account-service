@@ -12,9 +12,8 @@ services:
       dockerfile: Dockerfile.test
     env_file:
       - dockertest.env
-    # TODO replace template-serverless-service
     volumes:
-      - $PWD:/go/src/github.com/pennsieve/template-serverless-service
+      - $PWD:/go/src/github.com/pennsieve/account-service
     networks:
       - api-tests
 
@@ -25,8 +24,7 @@ services:
       dockerfile: Dockerfile.test
     env_file:
       - dockertest.env
-    # TODO replace template-serverless-service
     volumes:
-      - $PWD:/go/src/github.com/pennsieve/template-serverless-service
+      - $PWD:/go/src/github.com/pennsieve/account-service
     networks:
       - api-tests

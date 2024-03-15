@@ -32,8 +32,7 @@ resource "aws_iam_policy" "service_lambda_iam_policy" {
 data "aws_iam_policy_document" "service_iam_policy_document" {
 
   statement {
-    # TODO update sid
-    sid     = "TemplateServiceLambdaLogsPermissions"
+    sid     = "AccountServiceLambdaLogsPermissions"
     effect  = "Allow"
     actions = [
       "logs:CreateLogGroup",
@@ -46,8 +45,7 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
   }
 
   statement {
-    # TODO update sid
-    sid     = "TemplateServiceLambdaEC2Permissions"
+    sid     = "AccountServiceLambdaEC2Permissions"
     effect  = "Allow"
     actions = [
       "ec2:CreateNetworkInterface",

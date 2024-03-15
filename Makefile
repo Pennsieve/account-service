@@ -2,8 +2,7 @@
 
 LAMBDA_BUCKET ?= "pennsieve-cc-lambda-functions-use1"
 WORKING_DIR   ?= "$(shell pwd)"
-# TODO replace template-serverless-service
-SERVICE_NAME  ?= "template-serverless-service"
+SERVICE_NAME  ?= "account-service"
 PACKAGE_NAME  ?= "${SERVICE_NAME}-${IMAGE_TAG}.zip"
 
 .DEFAULT: help
