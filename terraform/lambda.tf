@@ -3,7 +3,7 @@ resource "aws_lambda_function" "service_lambda" {
   description   = "Template for building a Lambda Function which handles requests for a new serverless Service"
   function_name = "${var.environment_name}-${var.service_name}-service-lambda-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
   handler       = "bootstrap"
-  runtime       = "provided.al2023"
+  runtime       = "provided.al2"
   architectures = ["arm64"]
   role          = aws_iam_role.service_lambda_role.arn
   timeout       = 300
