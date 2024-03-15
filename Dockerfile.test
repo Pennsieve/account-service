@@ -6,8 +6,7 @@ apk update; \
 apk add --no-cache git
 
   # Set working directory
-  # TODO replace template-serverless-service
-WORKDIR /go/src/github.com/pennsieve/template-serverless-service/lambda/service
+WORKDIR /go/src/github.com/pennsieve/account-service/lambda/service
 
   # Run tests
 CMD CGO_ENABLED=0 go test -v ./...
