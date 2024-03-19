@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -36,12 +35,9 @@ func TestGetPennsieveAccountsHandler(t *testing.T) {
 	}
 	request := events.APIGatewayV2HTTPRequest{
 		RouteKey:       "GET /pennsieve-accounts",
-		RawPath:        "/pennsieve-accounts/AWS", // case-insensitive param
+		RawPath:        "/pennsieve-accounts/SomeUnsupportedAccountType", // case-insensitive param
 		RequestContext: requestContext,
 	}
-	resp, err := AccountServiceHandler(request)
-	if assert.NoError(t, err) {
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "{\"accountId\":\"12345\",\"accountType\":\"aws\"}", resp.Body)
-	}
+	_, err := AccountServiceHandler(request)
+	assert.Equal(t, "unsupported account type", err.Error())
 }
