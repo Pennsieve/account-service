@@ -13,17 +13,11 @@ func init() {
 	logger.Info("init()")
 }
 
-func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (*events.APIGatewayV2HTTPResponse, error) {
+func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	logger = logger.With(slog.String("requestID", request.RequestContext.RequestID))
 
-	apiResponse, err := handleRequest()
-
-	return apiResponse, err
-}
-
-func handleRequest() (*events.APIGatewayV2HTTPResponse, error) {
-	logger.Info("handleRequest()")
-	apiResponse := events.APIGatewayV2HTTPResponse{Body: "{'response':'hello'}", StatusCode: 200}
-
-	return &apiResponse, nil
+	router := NewLambdaRouter()
+	// register routes based on their supported methods
+	router.GET("/pennsieve-accounts", GetPennsieveAccountsHandler)
+	return router.Start(request)
 }
