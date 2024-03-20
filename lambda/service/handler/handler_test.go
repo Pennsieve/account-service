@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -20,9 +21,9 @@ func TestHandler(t *testing.T) {
 		RawPath:        "/accounts",
 		RequestContext: requestContext,
 	}
-	_, err := AccountServiceHandler(request)
-	assert.Equal(t, "unsupported route", err.Error())
-
+	resp, _ := AccountServiceHandler(request)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, ErrUnsupportedRoute.Error(), resp.Body)
 }
 
 func TestGetPennsieveAccountsHandler(t *testing.T) {
@@ -38,6 +39,7 @@ func TestGetPennsieveAccountsHandler(t *testing.T) {
 		RawPath:        "/pennsieve-accounts/SomeUnsupportedAccountType", // case-insensitive param
 		RequestContext: requestContext,
 	}
-	_, err := AccountServiceHandler(request)
-	assert.Equal(t, "unsupported account type", err.Error())
+	resp, _ := AccountServiceHandler(request)
+	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	assert.Equal(t, "GetPennsieveAccountsHandler: unsupported account type", resp.Body)
 }

@@ -30,8 +30,8 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: 500,
-				Body:       handlerName,
-			}, ErrConfig
+				Body:       handlerError(handlerName, ErrConfig),
+			}, nil
 		}
 
 		client := sts.NewFromConfig(cfg)
@@ -42,8 +42,8 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: 500,
-				Body:       handlerName,
-			}, ErrSTS
+				Body:       handlerError(handlerName, ErrSTS),
+			}, nil
 		}
 		accountId := *req.Account
 		m, err := json.Marshal(models.PennsieveAccount{
@@ -54,8 +54,8 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: 500,
-				Body:       handlerName,
-			}, ErrMarshaling
+				Body:       handlerError(handlerName, ErrMarshaling),
+			}, nil
 		}
 		response := events.APIGatewayV2HTTPResponse{
 			StatusCode: 200,
@@ -63,9 +63,10 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 		}
 		return response, nil
 	default:
+		log.Println(ErrUnsupportedAccountType.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 422,
-			Body:       handlerName,
-		}, ErrUnsupportedAccountType
+			Body:       handlerError(handlerName, ErrUnsupportedAccountType),
+		}, nil
 	}
 }

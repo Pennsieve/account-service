@@ -57,14 +57,14 @@ func (r *LambdaRouter) Start(request events.APIGatewayV2HTTPRequest) (events.API
 	default:
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 422,
-			Body:       "LambdaRouter",
-		}, ErrUnsupportedPath
+			Body:       ErrUnsupportedPath.Error(),
+		}, nil
 	}
 }
 
 func handleError() (events.APIGatewayV2HTTPResponse, error) {
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: 404,
-		Body:       "LambdaRouter",
-	}, ErrUnsupportedRoute
+		Body:       ErrUnsupportedRoute.Error(),
+	}, nil
 }
