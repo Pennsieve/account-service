@@ -21,10 +21,11 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 	handlerName := "GetPennsieveAccountsHandler"
 	accountType := utils.ExtractParam(request.RawPath)
 	log.Println("request.RequestContext.AccountID", request.RequestContext.AccountID)
+	ctx := context.Background()
 
 	switch strings.ToLower(accountType) {
 	case AWS:
-		cfg, err := config.LoadDefaultConfig(context.Background())
+		cfg, err := config.LoadDefaultConfig(ctx)
 		if err != nil {
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
@@ -36,7 +37,7 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 		client := sts.NewFromConfig(cfg)
 		input := &sts.GetCallerIdentityInput{}
 
-		req, err := client.GetCallerIdentity(context.TODO(), input)
+		req, err := client.GetCallerIdentity(ctx, input)
 		if err != nil {
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
