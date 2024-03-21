@@ -26,14 +26,12 @@ ansiColor('xterm') {
         sh "IMAGE_TAG=${imageTag} make publish"
       }
 
-      if(isRealService) {
-        stage("Deploy") {
-            build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
-            parameters: [
-                string(name: 'IMAGE_TAG', value: imageTag),
-                string(name: 'TERRAFORM_ACTION', value: 'apply')
-            ]
-        }
+      stage("Deploy") {
+          build job: "service-deploy/pennsieve-non-prod/us-east-1/dev-vpc-use1/dev/${serviceName}",
+          parameters: [
+              string(name: 'IMAGE_TAG', value: imageTag),
+              string(name: 'TERRAFORM_ACTION', value: 'apply')
+          ]
       }
     }
   } catch (e) {
