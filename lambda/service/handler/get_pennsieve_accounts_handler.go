@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pennsieve/account-service/service/models"
-	"github.com/pennsieve/account-service/service/utils"
 )
 
 const (
@@ -19,7 +18,7 @@ const (
 
 func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetPennsieveAccountsHandler"
-	accountType := utils.ExtractParam(request.RawPath)
+	accountType := request.PathParameters["accountType"]
 	log.Println("request.RequestContext.AccountID", request.RequestContext.AccountID)
 	ctx := context.Background()
 
