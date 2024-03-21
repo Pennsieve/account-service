@@ -8,7 +8,6 @@ ansiColor('xterm') {
   def authorName  = sh(returnStdout: true, script: 'git --no-pager show --format="%an" --no-patch')
   def isMain    = env.BRANCH_NAME == "main"
   def serviceName = env.JOB_NAME.tokenize("/")[1]
-  def isRealService = serviceName != "template-serverless-service"
 
   def commitHash  = sh(returnStdout: true, script: 'git rev-parse HEAD | cut -c-7').trim()
   def imageTag    = "${env.BUILD_NUMBER}-${commitHash}"
