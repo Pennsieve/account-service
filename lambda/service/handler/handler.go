@@ -16,7 +16,7 @@ func init() {
 func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	logger = logger.With(slog.String("requestID", request.RequestContext.RequestID))
 
-	logger.Debug("request parameters",
+	logger.Info("request parameters",
 		"routeKey", request.RouteKey,
 		"pathParameters", request.PathParameters,
 		"rawPath", request.RawPath,
