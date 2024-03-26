@@ -35,7 +35,7 @@ func TestGetPennsieveAccountsHandler(t *testing.T) {
 		},
 	}
 	request := events.APIGatewayV2HTTPRequest{
-		RouteKey:       "GET /pennsieve-accounts",
+		RouteKey:       "GET /pennsieve-accounts/{accountType}",
 		RawPath:        "/pennsieve-accounts/SomeUnsupportedAccountType", // case-insensitive param
 		RequestContext: requestContext,
 	}
