@@ -23,9 +23,9 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 		}, nil
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
-	integrationsTable := os.Getenv("ACCOUNTS_TABLE")
-	log.Println(integrationsTable)
-	_ = store_dynamodb.NewIntegrationDatabaseStore(dynamoDBClient, integrationsTable)
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	log.Println(accountsTable)
+	_ = store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
 
 	return events.APIGatewayV2HTTPResponse{}, nil
 }

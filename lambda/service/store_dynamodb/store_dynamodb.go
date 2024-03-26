@@ -10,21 +10,21 @@ import (
 )
 
 type DynamoDBStore interface {
-	Insert(context.Context, Integration) error
-	GetById(context.Context, string) (Integration, error)
+	Insert(context.Context, Account) error
+	GetById(context.Context, string) (Account, error)
 }
 
-type IntegrationDatabaseStore struct {
+type AccountDatabaseStore struct {
 	DB        *dynamodb.Client
 	TableName string
 }
 
-func NewIntegrationDatabaseStore(db *dynamodb.Client, tableName string) DynamoDBStore {
-	return &IntegrationDatabaseStore{db, tableName}
+func NewAccountDatabaseStore(db *dynamodb.Client, tableName string) DynamoDBStore {
+	return &AccountDatabaseStore{db, tableName}
 }
 
-func (r *IntegrationDatabaseStore) Insert(ctx context.Context, integration Integration) error {
-	item, err := attributevalue.MarshalMap(integration)
+func (r *AccountDatabaseStore) Insert(ctx context.Context, account Account) error {
+	item, err := attributevalue.MarshalMap(account)
 	if err != nil {
 		return err
 	}
@@ -32,24 +32,24 @@ func (r *IntegrationDatabaseStore) Insert(ctx context.Context, integration Integ
 		TableName: aws.String(r.TableName), Item: item,
 	})
 	if err != nil {
-		log.Printf("couldn't add integration to table. Here's why: %v\n", err)
+		log.Printf("couldn't add account information to table. Here's why: %v\n", err)
 	}
 	return err
 }
 
-func (r *IntegrationDatabaseStore) GetById(ctx context.Context, integrationId string) (Integration, error) {
-	integration := Integration{Uuid: integrationId}
+func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Account, error) {
+	account := Account{Uuid: uuid}
 	response, err := r.DB.GetItem(ctx, &dynamodb.GetItemInput{
-		Key: integration.GetKey(), TableName: aws.String(r.TableName),
+		Key: account.GetKey(), TableName: aws.String(r.TableName),
 	})
 	if err != nil {
-		log.Printf("couldn't get info about %v. Here's why: %v\n", integrationId, err)
+		log.Printf("couldn't get info about %v. Here's why: %v\n", uuid, err)
 	} else {
-		err = attributevalue.UnmarshalMap(response.Item, &integration)
+		err = attributevalue.UnmarshalMap(response.Item, &account)
 		if err != nil {
 			log.Printf("couldn't unmarshal response. Here's why: %v\n", err)
 		}
 	}
 
-	return integration, err
+	return account, err
 }

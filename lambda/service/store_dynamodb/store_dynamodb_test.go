@@ -42,39 +42,37 @@ func getClient() *dynamodb.Client {
 }
 
 func TestInsertGet(t *testing.T) {
-	tableName := "integrations"
+	tableName := "accounts"
 	dynamoDBClient := getClient()
 
 	// create table
-	_, err := CreateIntegrationsTable(dynamoDBClient, tableName)
+	_, err := CreateAccountsTable(dynamoDBClient, tableName)
 	if err != nil {
 		t.Fatalf("err creating table")
 	}
-	dynamo_store := store_dynamodb.NewIntegrationDatabaseStore(dynamoDBClient, tableName)
+	dynamo_store := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, tableName)
 	id := uuid.New()
-	integrationId := id.String()
-	packageIds := []string{"packageId1", "packageId2"}
-	params := `{
-		"target_path" : "output-folder"
-	}`
-	store_integration := store_dynamodb.Integration{
-		Uuid:          integrationId,
-		ApplicationId: 1,
-		DatasetNodeId: "xyz",
-		PackageIds:    packageIds,
-		Params:        params,
+	registeredAccountId := id.String()
+	store_account := store_dynamodb.Account{
+		Uuid:           registeredAccountId,
+		UserId:         "SomeId",
+		OrganizationId: "SomeOrgId",
+		AccountId:      "SomeAccountId",
+		AccountType:    "aws",
+		RoleName:       "SomeRoleName",
+		ExternalId:     "SomeExternalId",
 	}
-	err = dynamo_store.Insert(context.Background(), store_integration)
+	err = dynamo_store.Insert(context.Background(), store_account)
 	if err != nil {
 		t.Errorf("error inserting item into table")
 	}
-	integrationItem, err := dynamo_store.GetById(context.Background(), integrationId)
+	accountItem, err := dynamo_store.GetById(context.Background(), registeredAccountId)
 	if err != nil {
 		t.Errorf("error inserting item into table")
 	}
 
-	if integrationItem.Uuid != integrationId {
-		t.Errorf("expected uuid to equal %s", integrationId)
+	if accountItem.Uuid != registeredAccountId {
+		t.Errorf("expected uuid to equal %s", registeredAccountId)
 	}
 
 	// delete table
@@ -85,7 +83,7 @@ func TestInsertGet(t *testing.T) {
 
 }
 
-func CreateIntegrationsTable(dynamoDBClient *dynamodb.Client, tableName string) (*types.TableDescription, error) {
+func CreateAccountsTable(dynamoDBClient *dynamodb.Client, tableName string) (*types.TableDescription, error) {
 	var tableDesc *types.TableDescription
 	table, err := dynamoDBClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
 		AttributeDefinitions: []types.AttributeDefinition{{
