@@ -47,7 +47,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 	registeredAccountId := id.String()
 
 	// persist to dynamodb
-	store_integration := store_dynamodb.Account{
+	store_account := store_dynamodb.Account{
 		Uuid:           registeredAccountId,
 		UserId:         userId,
 		OrganizationId: organizationId,
@@ -56,7 +56,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 		RoleName:       account.RoleName,
 		ExternalId:     account.ExternalId,
 	}
-	err = accountsStore.Insert(context.Background(), store_integration)
+	err = accountsStore.Insert(context.Background(), store_account)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
