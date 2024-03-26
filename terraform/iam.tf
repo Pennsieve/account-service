@@ -57,7 +57,7 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = ["*"]
   }
 
-   statement {
+  statement {
     sid = "LambdaAccessToDynamoDB"
     effect = "Allow"
 
