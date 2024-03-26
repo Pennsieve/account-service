@@ -16,7 +16,7 @@ func init() {
 func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	logger = logger.With(slog.String("requestID", request.RequestContext.RequestID))
 
-	logger.Debug("request parameters",
+	logger.Info("request parameters",
 		"routeKey", request.RouteKey,
 		"pathParameters", request.PathParameters,
 		"rawPath", request.RawPath,
@@ -25,7 +25,6 @@ func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (events.APIGa
 
 	router := NewLambdaRouter()
 	// register routes based on their supported methods
-	router.GET("/pennsieve-accounts", GetPennsieveAccountsHandler)
-	router.GET("/accounts", PostAccountsHandler)
+	router.GET("/pennsieve-accounts/{accountType}", GetPennsieveAccountsHandler)
 	return router.Start(request)
 }
