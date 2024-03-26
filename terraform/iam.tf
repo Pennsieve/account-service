@@ -57,4 +57,25 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = ["*"]
   }
 
+  statement {
+    sid = "LambdaAccessToDynamoDB"
+    effect = "Allow"
+
+    actions = [
+      "dynamodb:BatchGetItem",
+      "dynamodb:GetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem"
+    ]
+
+    resources = [
+      aws_dynamodb_table.accounts_table.arn,
+      "${aws_dynamodb_table.accounts_table.arn}/*"
+    ]
+
+  }
+
 }
