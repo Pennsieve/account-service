@@ -38,6 +38,7 @@ func (r *LambdaRouter) GET(routeKey string, handler RouterHandlerFunc) {
 }
 
 func (r *LambdaRouter) Start(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	log.Println(request)
 	routeKey := utils.ExtractRoute(request.RouteKey)
 
 	switch request.RequestContext.HTTP.Method {
