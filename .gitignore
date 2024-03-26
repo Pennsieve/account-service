@@ -19,3 +19,6 @@
 
 # Lambda Binaries Zip files
 lambda/bin
+
+# dynamodb data
+test-dynamodb-data

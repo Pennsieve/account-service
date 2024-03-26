@@ -12,6 +12,8 @@ services:
       dockerfile: Dockerfile.test
     env_file:
       - dockertest.env
+    depends_on:
+      - dynamodb  
     volumes:
       - $PWD:/go/src/github.com/pennsieve/account-service
     networks:
@@ -24,7 +26,29 @@ services:
       dockerfile: Dockerfile.test
     env_file:
       - dockertest.env
+    depends_on:
+      - dynamodb-ci
     volumes:
       - $PWD:/go/src/github.com/pennsieve/account-service
     networks:
       - api-tests
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    restart: always
+    volumes:
+      - ./test-dynamodb-data:/home/dynamodblocal/data
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/"
+    networks:
+      - api-tests
+
+  dynamodb-ci:
+    image: amazon/dynamodb-local
+    restart: always
+    volumes:
+      - ./test-dynamodb-data:/home/dynamodblocal/data
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/"
+    networks:
+      - api-tests       
