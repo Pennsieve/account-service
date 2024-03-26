@@ -25,6 +25,6 @@ func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (events.APIGa
 
 	router := NewLambdaRouter()
 	// register routes based on their supported methods
-	router.GET("/pennsieve-accounts", GetPennsieveAccountsHandler)
+	router.GET("/pennsieve-accounts/{accountType}", GetPennsieveAccountsHandler)
 	return router.Start(request)
 }
