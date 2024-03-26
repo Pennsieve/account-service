@@ -12,7 +12,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.31.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.5
 	github.com/google/uuid v1.6.0
-	github.com/stretchr/testify v1.7.2
+	github.com/pennsieve/pennsieve-go-core v1.8.0
+	github.com/stretchr/testify v1.8.1
 )
 
 require (
@@ -29,6 +30,9 @@ require (
 	github.com/aws/smithy-go v1.20.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/lib/pq v1.10.7 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/sirupsen/logrus v1.9.0 // indirect
+	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
