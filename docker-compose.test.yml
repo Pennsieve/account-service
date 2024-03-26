@@ -25,7 +25,7 @@ services:
       context: .
       dockerfile: Dockerfile.test
     env_file:
-      - dockertest.env
+      - dockertestCI.env
     depends_on:
       - dynamodb-ci
     volumes:
@@ -51,4 +51,4 @@ services:
       - ./test-dynamodb-data:/home/dynamodblocal/data
     command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/"
     networks:
-      - api-tests       
+      - api-tests
