@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -21,7 +22,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 	if err := json.Unmarshal([]byte(request.Body), &account); err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: 500,
+			StatusCode: http.StatusInternalServerError,
 			Body:       handlerError(handlerName, ErrUnmarshaling),
 		}, nil
 	}
@@ -34,7 +35,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: 500,
+			StatusCode: http.StatusInternalServerError,
 			Body:       handlerError(handlerName, ErrConfig),
 		}, nil
 	}
@@ -60,7 +61,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: 500,
+			StatusCode: http.StatusInternalServerError,
 			Body:       handlerError(handlerName, ErrDynamoDB),
 		}, nil
 	}
@@ -71,13 +72,13 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: 500,
+			StatusCode: http.StatusInternalServerError,
 			Body:       handlerError(handlerName, ErrMarshaling),
 		}, nil
 	}
 
 	return events.APIGatewayV2HTTPResponse{
-		StatusCode: 200,
+		StatusCode: http.StatusCreated,
 		Body:       string(m),
 	}, nil
 }

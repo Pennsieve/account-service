@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -28,7 +29,7 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 		if err != nil {
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
-				StatusCode: 500,
+				StatusCode: http.StatusInternalServerError,
 				Body:       handlerError(handlerName, ErrConfig),
 			}, nil
 		}
@@ -40,7 +41,7 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 		if err != nil {
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
-				StatusCode: 500,
+				StatusCode: http.StatusInternalServerError,
 				Body:       handlerError(handlerName, ErrSTS),
 			}, nil
 		}
@@ -52,19 +53,19 @@ func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events
 		if err != nil {
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
-				StatusCode: 500,
+				StatusCode: http.StatusInternalServerError,
 				Body:       handlerError(handlerName, ErrMarshaling),
 			}, nil
 		}
 		response := events.APIGatewayV2HTTPResponse{
-			StatusCode: 200,
+			StatusCode: http.StatusOK,
 			Body:       string(m),
 		}
 		return response, nil
 	default:
 		log.Println(ErrUnsupportedAccountType.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: 422,
+			StatusCode: http.StatusUnprocessableEntity,
 			Body:       handlerError(handlerName, ErrUnsupportedAccountType),
 		}, nil
 	}
