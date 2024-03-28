@@ -65,5 +65,19 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 		}, nil
 	}
 
-	return events.APIGatewayV2HTTPResponse{}, nil
+	m, err := json.Marshal(models.AccountResponse{
+		Uuid: registeredAccountId,
+	})
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 500,
+			Body:       handlerError(handlerName, ErrMarshaling),
+		}, nil
+	}
+
+	return events.APIGatewayV2HTTPResponse{
+		StatusCode: 200,
+		Body:       string(m),
+	}, nil
 }
