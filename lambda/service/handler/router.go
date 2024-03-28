@@ -59,7 +59,7 @@ func (r *LambdaRouter) Start(request events.APIGatewayV2HTTPRequest) (events.API
 	default:
 		log.Println(ErrUnsupportedPath.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: 422,
+			StatusCode: http.StatusUnprocessableEntity,
 			Body:       ErrUnsupportedPath.Error(),
 		}, nil
 	}
@@ -68,7 +68,7 @@ func (r *LambdaRouter) Start(request events.APIGatewayV2HTTPRequest) (events.API
 func handleError() (events.APIGatewayV2HTTPResponse, error) {
 	log.Println(ErrUnsupportedRoute.Error())
 	return events.APIGatewayV2HTTPResponse{
-		StatusCode: 404,
+		StatusCode: http.StatusNotFound,
 		Body:       ErrUnsupportedRoute.Error(),
 	}, nil
 }

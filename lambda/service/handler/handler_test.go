@@ -59,7 +59,7 @@ func TestPostAccountsHandler(t *testing.T) {
 		RequestContext: requestContext,
 	}
 
-	expectedStatusCode := 500
+	expectedStatusCode := http.StatusInternalServerError
 	response, _ := AccountServiceHandler(request)
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("expected status code %v, got %v", expectedStatusCode, response.StatusCode)
