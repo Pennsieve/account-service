@@ -6,3 +6,7 @@ type Account struct {
 	RoleName    string `json:"roleName"`
 	ExternalId  string `json:"externalId"`
 }
+
+type AccountResponse struct {
+	Uuid string `json:"uuid"`
+}
