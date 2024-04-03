@@ -27,5 +27,6 @@ func AccountServiceHandler(request events.APIGatewayV2HTTPRequest) (events.APIGa
 	// register routes based on their supported methods
 	router.GET("/pennsieve-accounts/{accountType}", GetPennsieveAccountsHandler)
 	router.POST("/accounts", PostAccountsHandler)
+	router.GET("/accounts", GetAccountsHandler)
 	return router.Start(request)
 }
