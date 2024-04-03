@@ -12,6 +12,7 @@ import (
 type DynamoDBStore interface {
 	Insert(context.Context, Account) error
 	GetById(context.Context, string) (Account, error)
+	Get(context.Context) ([]Account, error)
 }
 
 type AccountDatabaseStore struct {
@@ -52,4 +53,29 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 	}
 
 	return account, err
+}
+
+func (r *AccountDatabaseStore) Get(ctx context.Context) ([]Account, error) {
+	accounts := []Account{}
+
+	response, err := r.DB.Scan(ctx,
+		&dynamodb.ScanInput{
+			TableName: aws.String(r.TableName),
+		})
+	if err != nil {
+		log.Printf("couldn't get accounts. Here's why: %v\n", err)
+	} else {
+		for _, i := range response.Items {
+			account := Account{}
+
+			err = attributevalue.UnmarshalMap(i, &account)
+			if err != nil {
+				log.Fatalf("got error unmarshalling: %s", err)
+			}
+			err = attributevalue.UnmarshalMap(i, &account)
+			accounts = append(accounts, account)
+		}
+	}
+
+	return accounts, err
 }
