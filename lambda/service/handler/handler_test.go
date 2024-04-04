@@ -61,6 +61,7 @@ func TestPostAccountsHandler(t *testing.T) {
 
 	expectedStatusCode := http.StatusInternalServerError
 	response, _ := AccountServiceHandler(request)
+	assert.Contains(t, response.Body, "PostAccountsHandler")
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("expected status code %v, got %v", expectedStatusCode, response.StatusCode)
 	}
@@ -82,6 +83,29 @@ func TestGetAccountHandler(t *testing.T) {
 
 	expectedStatusCode := http.StatusNotFound
 	response, _ := AccountServiceHandler(request)
+	assert.Contains(t, response.Body, "GetAccountHandler")
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("expected status code %v, got %v", expectedStatusCode, response.StatusCode)
+	}
+}
+
+func TestGetAccountsHandler(t *testing.T) {
+	requestContext := events.APIGatewayV2HTTPRequestContext{
+		HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{
+			Method: "GET",
+		},
+		Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{
+			Lambda: make(map[string]interface{}),
+		},
+	}
+	request := events.APIGatewayV2HTTPRequest{
+		RouteKey:       "GET /accounts",
+		RequestContext: requestContext,
+	}
+
+	expectedStatusCode := http.StatusInternalServerError
+	response, _ := AccountServiceHandler(request)
+	assert.Contains(t, response.Body, "GetAccountsHandler")
 	if response.StatusCode != expectedStatusCode {
 		t.Errorf("expected status code %v, got %v", expectedStatusCode, response.StatusCode)
 	}

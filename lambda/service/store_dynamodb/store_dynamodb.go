@@ -65,15 +65,10 @@ func (r *AccountDatabaseStore) Get(ctx context.Context) ([]Account, error) {
 	if err != nil {
 		log.Printf("couldn't get accounts. Here's why: %v\n", err)
 	} else {
-		for _, i := range response.Items {
-			account := Account{}
-
-			err = attributevalue.UnmarshalMap(i, &account)
-			if err != nil {
-				log.Fatalf("got error unmarshalling: %s", err)
-			}
-			err = attributevalue.UnmarshalMap(i, &account)
-			accounts = append(accounts, account)
+		err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
+		if err != nil {
+			log.Printf("couldn't unmarshall accounts. Here's why: %v\n", err)
+			return accounts, err
 		}
 	}
 
