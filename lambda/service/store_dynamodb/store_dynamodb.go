@@ -2,7 +2,7 @@ package store_dynamodb
 
 import (
 	"context"
-	"log"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -27,15 +27,13 @@ func NewAccountDatabaseStore(db *dynamodb.Client, tableName string) DynamoDBStor
 func (r *AccountDatabaseStore) Insert(ctx context.Context, account Account) error {
 	item, err := attributevalue.MarshalMap(account)
 	if err != nil {
-		log.Printf("couldn't perform insert. Here's why: %v\n", err)
-		return err
+		return fmt.Errorf("error marshaling account: %w", err)
 	}
 	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.TableName), Item: item,
 	})
 	if err != nil {
-		log.Printf("couldn't add account information to table. Here's why: %v\n", err)
-		return err
+		return fmt.Errorf("error inserting account: %w", err)
 	}
 
 	return nil
@@ -47,14 +45,12 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 		Key: account.GetKey(), TableName: aws.String(r.TableName),
 	})
 	if err != nil {
-		log.Printf("couldn't get info about %v. Here's why: %v\n", uuid, err)
-		return account, err
+		return account, fmt.Errorf("error getting account: %w", err)
 	}
 
 	err = attributevalue.UnmarshalMap(response.Item, &account)
 	if err != nil {
-		log.Printf("couldn't unmarshal response. Here's why: %v\n", err)
-		return account, err
+		return account, fmt.Errorf("error unmarshaling account: %w", err)
 	}
 
 	return account, nil
@@ -67,14 +63,12 @@ func (r *AccountDatabaseStore) Get(ctx context.Context) ([]Account, error) {
 		TableName: aws.String(r.TableName),
 	})
 	if err != nil {
-		log.Printf("couldn't get accounts. Here's why: %v\n", err)
-		return accounts, err
+		return accounts, fmt.Errorf("error getting accounts: %w", err)
 	}
 
 	err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
 	if err != nil {
-		log.Printf("couldn't unmarshal accounts. Here's why: %v\n", err)
-		return accounts, err
+		return accounts, fmt.Errorf("error unmarshaling accounts: %w", err)
 	}
 
 	return accounts, nil
