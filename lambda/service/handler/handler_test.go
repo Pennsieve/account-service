@@ -65,3 +65,24 @@ func TestPostAccountsHandler(t *testing.T) {
 		t.Errorf("expected status code %v, got %v", expectedStatusCode, response.StatusCode)
 	}
 }
+
+func TestGetAccountHandler(t *testing.T) {
+	requestContext := events.APIGatewayV2HTTPRequestContext{
+		HTTP: events.APIGatewayV2HTTPRequestContextHTTPDescription{
+			Method: "GET",
+		},
+		Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{
+			Lambda: make(map[string]interface{}),
+		},
+	}
+	request := events.APIGatewayV2HTTPRequest{
+		RouteKey:       "GET /accounts/{id}",
+		RequestContext: requestContext,
+	}
+
+	expectedStatusCode := http.StatusNotFound
+	response, _ := AccountServiceHandler(request)
+	if response.StatusCode != expectedStatusCode {
+		t.Errorf("expected status code %v, got %v", expectedStatusCode, response.StatusCode)
+	}
+}

@@ -13,6 +13,7 @@ var ErrConfig = errors.New("error loading AWS config")
 var ErrSTS = errors.New("error performing STS action")
 var ErrUnmarshaling = errors.New("error unmarshaling body")
 var ErrDynamoDB = errors.New("error performing action on DynamoDB table")
+var ErrNoRecordsFound = errors.New("error no records found")
 
 func handlerError(handlerName string, handlerError error) string {
 	return fmt.Sprintf("%s: %s", handlerName, handlerError.Error())
