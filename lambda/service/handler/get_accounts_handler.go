@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/pennsieve/account-service/service/models"
+	"github.com/pennsieve/account-service/service/mappers"
 	"github.com/pennsieve/account-service/service/store_dynamodb"
 )
 
@@ -39,20 +39,7 @@ func GetAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatew
 		}, nil
 	}
 
-	var accounts []models.Account
-	for _, a := range dynamoAccounts {
-		accounts = append(accounts, models.Account{
-			Uuid:           a.Uuid,
-			AccountId:      a.AccountId,
-			AccountType:    a.AccountType,
-			RoleName:       a.RoleName,
-			ExternalId:     a.ExternalId,
-			OrganizationId: a.OrganizationId,
-			UserId:         a.UserId,
-		})
-	}
-
-	m, err := json.Marshal(accounts)
+	m, err := json.Marshal(mappers.DynamoDBAccountToJsonAccount(dynamoAccounts))
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
