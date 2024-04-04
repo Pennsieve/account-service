@@ -30,7 +30,7 @@ func (r *AccountDatabaseStore) Insert(ctx context.Context, account Account) erro
 		log.Printf("couldn't perform insert. Here's why: %v\n", err)
 		return err
 	}
-	_, err = r.DB.PutItem(context.TODO(), &dynamodb.PutItemInput{
+	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.TableName), Item: item,
 	})
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
-func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account
 	if err := json.Unmarshal([]byte(request.Body), &account); err != nil {
@@ -31,7 +31,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 	organizationId := claims.OrgClaim.NodeId
 	userId := claims.UserClaim.NodeId
 
-	cfg, err := config.LoadDefaultConfig(context.Background())
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -57,7 +57,7 @@ func PostAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGate
 		RoleName:       account.RoleName,
 		ExternalId:     account.ExternalId,
 	}
-	err = accountsStore.Insert(context.Background(), store_account)
+	err = accountsStore.Insert(ctx, store_account)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

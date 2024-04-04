@@ -14,11 +14,10 @@ import (
 	"github.com/pennsieve/account-service/service/store_dynamodb"
 )
 
-func GetAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetAccountsHandler"
-	ctx := context.Background()
 
-	cfg, err := config.LoadDefaultConfig(context.Background())
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

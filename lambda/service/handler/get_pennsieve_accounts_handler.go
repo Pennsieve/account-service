@@ -17,11 +17,10 @@ const (
 	AWS = "aws"
 )
 
-func GetPennsieveAccountsHandler(request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+func GetPennsieveAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetPennsieveAccountsHandler"
 	accountType := request.PathParameters["accountType"]
 	log.Println("request.RequestContext.AccountID", request.RequestContext.AccountID)
-	ctx := context.Background()
 
 	switch strings.ToLower(accountType) {
 	case AWS:
