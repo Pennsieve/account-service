@@ -27,6 +27,7 @@ func NewAccountDatabaseStore(db *dynamodb.Client, tableName string) DynamoDBStor
 func (r *AccountDatabaseStore) Insert(ctx context.Context, account Account) error {
 	item, err := attributevalue.MarshalMap(account)
 	if err != nil {
+		log.Printf("couldn't perform insert. Here's why: %v\n", err)
 		return err
 	}
 	_, err = r.DB.PutItem(context.TODO(), &dynamodb.PutItemInput{
@@ -34,8 +35,10 @@ func (r *AccountDatabaseStore) Insert(ctx context.Context, account Account) erro
 	})
 	if err != nil {
 		log.Printf("couldn't add account information to table. Here's why: %v\n", err)
+		return err
 	}
-	return err
+
+	return nil
 }
 
 func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Account, error) {
@@ -45,32 +48,34 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 	})
 	if err != nil {
 		log.Printf("couldn't get info about %v. Here's why: %v\n", uuid, err)
-	} else {
-		err = attributevalue.UnmarshalMap(response.Item, &account)
-		if err != nil {
-			log.Printf("couldn't unmarshal response. Here's why: %v\n", err)
-		}
+		return account, err
 	}
 
-	return account, err
+	err = attributevalue.UnmarshalMap(response.Item, &account)
+	if err != nil {
+		log.Printf("couldn't unmarshal response. Here's why: %v\n", err)
+		return account, err
+	}
+
+	return account, nil
 }
 
 func (r *AccountDatabaseStore) Get(ctx context.Context) ([]Account, error) {
 	accounts := []Account{}
 
-	response, err := r.DB.Scan(ctx,
-		&dynamodb.ScanInput{
-			TableName: aws.String(r.TableName),
-		})
+	response, err := r.DB.Scan(ctx, &dynamodb.ScanInput{
+		TableName: aws.String(r.TableName),
+	})
 	if err != nil {
 		log.Printf("couldn't get accounts. Here's why: %v\n", err)
-	} else {
-		err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
-		if err != nil {
-			log.Printf("couldn't unmarshall accounts. Here's why: %v\n", err)
-			return accounts, err
-		}
+		return accounts, err
 	}
 
-	return accounts, err
+	err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
+	if err != nil {
+		log.Printf("couldn't unmarshal accounts. Here's why: %v\n", err)
+		return accounts, err
+	}
+
+	return accounts, nil
 }
