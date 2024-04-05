@@ -41,7 +41,7 @@ func getClient() *dynamodb.Client {
 	return svc
 }
 
-func TestInsertGet(t *testing.T) {
+func TestInsertAndGetById(t *testing.T) {
 	tableName := "accounts"
 	dynamoDBClient := getClient()
 
@@ -68,11 +68,56 @@ func TestInsertGet(t *testing.T) {
 	}
 	accountItem, err := dynamo_store.GetById(context.Background(), registeredAccountId)
 	if err != nil {
-		t.Errorf("error inserting item into table")
+		t.Errorf("error getting item from table")
 	}
 
 	if accountItem.Uuid != registeredAccountId {
 		t.Errorf("expected uuid to equal %s", registeredAccountId)
+	}
+
+	// delete table
+	err = DeleteTable(dynamoDBClient, tableName)
+	if err != nil {
+		t.Fatalf("err creating table")
+	}
+
+}
+
+func TestInsertAndGet(t *testing.T) {
+	tableName := "accounts"
+	dynamoDBClient := getClient()
+
+	// create table
+	_, err := CreateAccountsTable(dynamoDBClient, tableName)
+	if err != nil {
+		t.Fatalf("err creating table")
+	}
+	dynamo_store := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, tableName)
+
+	uuids := []string{uuid.New().String(), uuid.New().String()}
+	for _, u := range uuids {
+		store_account := store_dynamodb.Account{
+			Uuid:           u,
+			UserId:         "SomeId",
+			OrganizationId: "SomeOrgId",
+			AccountId:      "SomeAccountId",
+			AccountType:    "aws",
+			RoleName:       "SomeRoleName",
+			ExternalId:     "SomeExternalId",
+		}
+		err = dynamo_store.Insert(context.Background(), store_account)
+		if err != nil {
+			t.Errorf("error inserting item into table")
+		}
+	}
+
+	accounts, err := dynamo_store.Get(context.Background())
+	if err != nil {
+		t.Errorf("error gettting items")
+	}
+
+	if len(accounts) != len(uuids) {
+		t.Errorf("expected %v accounts, not %v", len(uuids), len(accounts))
 	}
 
 	// delete table
