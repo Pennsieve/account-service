@@ -94,12 +94,13 @@ func TestInsertAndGet(t *testing.T) {
 	}
 	dynamo_store := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, tableName)
 
+	organizationId := "SomeOrgId"
 	uuids := []string{uuid.New().String(), uuid.New().String()}
 	for _, u := range uuids {
 		store_account := store_dynamodb.Account{
 			Uuid:           u,
 			UserId:         "SomeId",
-			OrganizationId: "SomeOrgId",
+			OrganizationId: organizationId,
 			AccountId:      "SomeAccountId",
 			AccountType:    "aws",
 			RoleName:       "SomeRoleName",
@@ -111,9 +112,9 @@ func TestInsertAndGet(t *testing.T) {
 		}
 	}
 
-	accounts, err := dynamo_store.Get(context.Background())
+	accounts, err := dynamo_store.Get(context.Background(), organizationId)
 	if err != nil {
-		t.Errorf("error gettting items")
+		t.Errorf("error getting items")
 	}
 
 	if len(accounts) != len(uuids) {

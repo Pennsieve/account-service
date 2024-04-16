@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/service/mappers"
 	"github.com/pennsieve/account-service/service/store_dynamodb"
+	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
 func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -28,8 +29,11 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 
+	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
+	organizationId := claims.OrgClaim.NodeId
+
 	dynamo_store := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
-	dynamoAccounts, err := dynamo_store.Get(ctx)
+	dynamoAccounts, err := dynamo_store.Get(ctx, organizationId)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

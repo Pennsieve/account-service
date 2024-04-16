@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go/aws"
 )
@@ -12,7 +13,7 @@ import (
 type DynamoDBStore interface {
 	Insert(context.Context, Account) error
 	GetById(context.Context, string) (Account, error)
-	Get(context.Context) ([]Account, error)
+	Get(context.Context, string) ([]Account, error)
 }
 
 type AccountDatabaseStore struct {
@@ -56,11 +57,20 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 	return account, nil
 }
 
-func (r *AccountDatabaseStore) Get(ctx context.Context) ([]Account, error) {
+func (r *AccountDatabaseStore) Get(ctx context.Context, filter string) ([]Account, error) {
 	accounts := []Account{}
+	filt := expression.Name("organizationId").Equal((expression.Value(filter)))
+	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	if err != nil {
+		return accounts, fmt.Errorf("error building expression: %w", err)
+	}
 
 	response, err := r.DB.Scan(ctx, &dynamodb.ScanInput{
-		TableName: aws.String(r.TableName),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		FilterExpression:          expr.Filter(),
+		ProjectionExpression:      expr.Projection(),
+		TableName:                 aws.String(r.TableName),
 	})
 	if err != nil {
 		return accounts, fmt.Errorf("error getting accounts: %w", err)
