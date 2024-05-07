@@ -61,7 +61,7 @@ publish:
 	@echo "*   Publishing lambda   *"
 	@echo "*************************"
 	@echo ""
-	aws s3 cp $(WORKING_DIR)/lambda/bin/service/$(PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/
+	aws s3 cp $(WORKING_DIR)/lambda/bin/service/$(PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
 	rm -rf $(WORKING_DIR)/lambda/bin/service/$(PACKAGE_NAME) $(WORKING_DIR)/lambda/bin/service/bootstrap
 
 # Run go mod tidy on modules
