@@ -20,13 +20,6 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		logger = logger.With(slog.String("requestID", lc.AwsRequestID))
 	}
 
-	logger.Info("request parameters",
-		"routeKey", request.RouteKey,
-		"pathParameters", request.PathParameters,
-		"rawPath", request.RawPath,
-		"requestContext.routeKey", request.RequestContext.RouteKey,
-		"requestContext.http.path", request.RequestContext.HTTP.Path)
-
 	router := NewLambdaRouter()
 	// register routes based on their supported methods
 	router.GET("/pennsieve-accounts/{accountType}", GetPennsieveAccountsHandler)
