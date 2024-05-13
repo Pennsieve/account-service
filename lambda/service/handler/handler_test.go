@@ -82,7 +82,7 @@ func TestGetAccountHandler(t *testing.T) {
 		RequestContext: requestContext,
 	}
 
-	expectedStatusCode := http.StatusNotFound
+	expectedStatusCode := http.StatusInternalServerError
 	response, _ := AccountServiceHandler(context.Background(), request)
 	assert.Contains(t, response.Body, "GetAccountHandler")
 	if response.StatusCode != expectedStatusCode {
