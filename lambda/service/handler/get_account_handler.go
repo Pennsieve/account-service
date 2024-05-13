@@ -34,6 +34,13 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       handlerError(handlerName, ErrDynamoDB),
+		}, nil
+	}
+
+	if (store_dynamodb.Account{}) == account {
+		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       handlerError(handlerName, ErrNoRecordsFound),
 		}, nil
