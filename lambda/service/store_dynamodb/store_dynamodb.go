@@ -46,7 +46,10 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 		Key: account.GetKey(), TableName: aws.String(r.TableName),
 	})
 	if err != nil {
-		return account, fmt.Errorf("error getting account: %w", err)
+		return Account{}, fmt.Errorf("error getting account: %w", err)
+	}
+	if response.Item == nil {
+		return Account{}, nil
 	}
 
 	err = attributevalue.UnmarshalMap(response.Item, &account)

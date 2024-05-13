@@ -6,7 +6,7 @@ import (
 )
 
 func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account) []models.Account {
-	var accounts []models.Account
+	accounts := []models.Account{}
 
 	for _, a := range dynamoAccounts {
 		accounts = append(accounts, models.Account{
