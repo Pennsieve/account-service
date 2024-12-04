@@ -42,9 +42,10 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	accountsStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+
+	// Get account(s) by organisationId/workspaceId and accountId
 	queryParams := make(map[string]string)
 	queryParams["accountId"] = account.AccountId
-
 	accounts, err := accountsStore.Get(ctx, organizationId, queryParams)
 	if err != nil {
 		log.Println(err.Error())
