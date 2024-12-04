@@ -41,8 +41,24 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
-	log.Println(accountsTable)
 	accountsStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	queryParams := make(map[string]string)
+	queryParams["accountId"] = account.AccountId
+
+	accounts, err := accountsStore.Get(ctx, organizationId, queryParams)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       handlerError(handlerName, ErrConfig),
+		}, nil
+	}
+	if len(accounts) > 0 {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusUnprocessableEntity,
+			Body:       handlerError(handlerName, ErrNoRecordAlreadyExists),
+		}, nil
+	}
 
 	id := uuid.New()
 	registeredAccountId := id.String()

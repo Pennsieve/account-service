@@ -17,6 +17,7 @@ import (
 
 func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetAccountsHandler"
+	queryParams := request.QueryStringParameters
 
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -33,7 +34,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	organizationId := claims.OrgClaim.NodeId
 
 	dynamo_store := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
-	dynamoAccounts, err := dynamo_store.Get(ctx, organizationId)
+	dynamoAccounts, err := dynamo_store.Get(ctx, organizationId, queryParams)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
