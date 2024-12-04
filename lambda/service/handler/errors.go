@@ -14,7 +14,7 @@ var ErrSTS = errors.New("error performing STS action")
 var ErrUnmarshaling = errors.New("error unmarshaling body")
 var ErrDynamoDB = errors.New("error performing action on DynamoDB table")
 var ErrNoRecordsFound = errors.New("error no records found")
-var ErrNoRecordAlreadyExists = errors.New("error records exists")
+var ErrRecordAlreadyExists = errors.New("error records exists")
 
 func handlerError(handlerName string, handlerError error) string {
 	return fmt.Sprintf("%s: %s", handlerName, handlerError.Error())
