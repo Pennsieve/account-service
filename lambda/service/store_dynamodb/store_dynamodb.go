@@ -13,7 +13,7 @@ import (
 type DynamoDBStore interface {
 	Insert(context.Context, Account) error
 	GetById(context.Context, string) (Account, error)
-	Get(context.Context, string) ([]Account, error)
+	Get(context.Context, string, map[string]string) ([]Account, error)
 }
 
 type AccountDatabaseStore struct {
@@ -60,10 +60,17 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 	return account, nil
 }
 
-func (r *AccountDatabaseStore) Get(ctx context.Context, filter string) ([]Account, error) {
+func (r *AccountDatabaseStore) Get(ctx context.Context, organizationId string, params map[string]string) ([]Account, error) {
 	accounts := []Account{}
-	filt := expression.Name("organizationId").Equal((expression.Value(filter)))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+
+	var c expression.ConditionBuilder
+	c = expression.Name("organizationId").Equal((expression.Value(organizationId)))
+
+	if accountId, found := params["accountId"]; found {
+		c = c.And(expression.Name("accountId").Equal((expression.Value(accountId))))
+	}
+
+	expr, err := expression.NewBuilder().WithFilter(c).Build()
 	if err != nil {
 		return accounts, fmt.Errorf("error building expression: %w", err)
 	}

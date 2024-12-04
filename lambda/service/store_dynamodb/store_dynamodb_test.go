@@ -101,7 +101,7 @@ func TestInsertAndGet(t *testing.T) {
 			Uuid:           u,
 			UserId:         "SomeId",
 			OrganizationId: organizationId,
-			AccountId:      "SomeAccountId",
+			AccountId:      u,
 			AccountType:    "aws",
 			RoleName:       "SomeRoleName",
 			ExternalId:     "SomeExternalId",
@@ -111,14 +111,25 @@ func TestInsertAndGet(t *testing.T) {
 			t.Errorf("error inserting item into table")
 		}
 	}
-
-	accounts, err := dynamo_store.Get(context.Background(), organizationId)
+	queryParams := make(map[string]string)
+	accounts, err := dynamo_store.Get(context.Background(), organizationId, queryParams)
 	if err != nil {
 		t.Errorf("error getting items")
 	}
 
 	if len(accounts) != len(uuids) {
 		t.Errorf("expected %v accounts, not %v", len(uuids), len(accounts))
+	}
+
+	queryParams = make(map[string]string)
+	queryParams["accountId"] = uuids[0]
+	accounts, err = dynamo_store.Get(context.Background(), organizationId, queryParams)
+	if err != nil {
+		t.Errorf("error getting items")
+	}
+
+	if len(accounts) != 1 {
+		t.Errorf("expected %v account(s), not %v", 1, len(accounts))
 	}
 
 	// delete table
