@@ -57,7 +57,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if len(accounts) > 0 {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusUnprocessableEntity,
-			Body:       handlerError(handlerName, ErrNoRecordAlreadyExists),
+			Body:       handlerError(handlerName, ErrRecordAlreadyExists),
 		}, nil
 	}
 
