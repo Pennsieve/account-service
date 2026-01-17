@@ -28,7 +28,6 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	organizationId := claims.OrgClaim.NodeId
 	userId := claims.UserClaim.NodeId
 
 	cfg, err := config.LoadDefaultConfig(ctx)
@@ -41,12 +40,13 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
-	accountsStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	accountsStore := &store_dynamodb.AccountDatabaseStore{
+		DB:        dynamoDBClient,
+		TableName: accountsTable,
+	}
 
-	// Get account(s) by organisationId/workspaceId and accountId
-	queryParams := make(map[string]string)
-	queryParams["accountId"] = account.AccountId
-	accounts, err := accountsStore.Get(ctx, organizationId, queryParams)
+	// Check if user already has this account registered
+	userAccounts, err := accountsStore.GetByUserId(ctx, userId)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -54,25 +54,28 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 			Body:       handlerError(handlerName, ErrConfig),
 		}, nil
 	}
-	if len(accounts) > 0 {
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusUnprocessableEntity,
-			Body:       handlerError(handlerName, ErrRecordAlreadyExists),
-		}, nil
+	
+	// Check for duplicate account for this user
+	for _, existingAccount := range userAccounts {
+		if existingAccount.AccountId == account.AccountId {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusUnprocessableEntity,
+				Body:       handlerError(handlerName, ErrRecordAlreadyExists),
+			}, nil
+		}
 	}
 
 	id := uuid.New()
 	registeredAccountId := id.String()
 
-	// persist to dynamodb
+	// persist to dynamodb - now only associated with user
 	store_account := store_dynamodb.Account{
-		Uuid:           registeredAccountId,
-		UserId:         userId,
-		OrganizationId: organizationId,
-		AccountId:      account.AccountId,
-		AccountType:    account.AccountType,
-		RoleName:       account.RoleName,
-		ExternalId:     account.ExternalId,
+		Uuid:        registeredAccountId,
+		UserId:      userId,
+		AccountId:   account.AccountId,
+		AccountType: account.AccountType,
+		RoleName:    account.RoleName,
+		ExternalId:  account.ExternalId,
 	}
 	err = accountsStore.Insert(ctx, store_account)
 	if err != nil {

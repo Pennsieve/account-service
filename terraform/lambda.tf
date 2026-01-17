@@ -21,6 +21,7 @@ resource "aws_lambda_function" "service_lambda" {
       PENNSIEVE_DOMAIN = data.terraform_remote_state.account.outputs.domain_name,
       REGION           = var.aws_region,
       ACCOUNTS_TABLE = aws_dynamodb_table.accounts_table.name
+      ACCOUNT_WORKSPACE_ENABLEMENT_TABLE = aws_dynamodb_table.account_workspace_enablement_table.name
     }
   }
 }

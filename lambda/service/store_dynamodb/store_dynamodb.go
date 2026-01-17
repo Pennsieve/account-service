@@ -62,25 +62,29 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 
 func (r *AccountDatabaseStore) Get(ctx context.Context, organizationId string, params map[string]string) ([]Account, error) {
 	accounts := []Account{}
+	
+	// Legacy method - kept for backward compatibility
+	// In new model, accounts are not directly associated with organizations
+	// This method should be deprecated once migration is complete
+	return accounts, nil
+}
 
-	var c expression.ConditionBuilder
-	c = expression.Name("organizationId").Equal((expression.Value(organizationId)))
+func (r *AccountDatabaseStore) GetByUserId(ctx context.Context, userId string) ([]Account, error) {
+	accounts := []Account{}
 
-	if accountId, found := params["accountId"]; found {
-		c = c.And(expression.Name("accountId").Equal((expression.Value(accountId))))
-	}
-
-	expr, err := expression.NewBuilder().WithFilter(c).Build()
+	expr, err := expression.NewBuilder().WithKeyCondition(
+		expression.Key("userId").Equal(expression.Value(userId)),
+	).Build()
 	if err != nil {
 		return accounts, fmt.Errorf("error building expression: %w", err)
 	}
 
-	response, err := r.DB.Scan(ctx, &dynamodb.ScanInput{
+	response, err := r.DB.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 aws.String(r.TableName),
+		IndexName:                 aws.String("userId-index"),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
-		ProjectionExpression:      expr.Projection(),
-		TableName:                 aws.String(r.TableName),
+		KeyConditionExpression:    expr.KeyCondition(),
 	})
 	if err != nil {
 		return accounts, fmt.Errorf("error getting accounts: %w", err)

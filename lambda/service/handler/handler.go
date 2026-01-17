@@ -26,5 +26,7 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	router.POST("/accounts", PostAccountsHandler)
 	router.GET("/accounts", GetAccountsHandler)
 	router.GET("/accounts/{id}", GetAccountHandler)
+	router.POST("/accounts/{uuid}/workspaces", PostAccountWorkspaceEnablementHandler)
+	router.DELETE("/accounts/{uuid}/workspaces/{workspaceId}", DeleteAccountWorkspaceEnablementHandler)
 	return router.Start(ctx, request)
 }
