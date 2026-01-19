@@ -1,0 +1,284 @@
+#file: noinspection MaybeTerraformTemplateInspection
+openapi: 3.0.1
+info:
+  version: "3.0"
+  title: Accounts API
+  description: |
+    This is the serverless accounts api
+  termsOfService: https://docs.pennsieve.io/page/pennsieve-terms-of-use
+  contact:
+    name: Pennsieve Support
+    email: support@pennsieve.net
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+servers:
+  - url: https://api2.pennsieve.io/accounts/cloud
+    description: Production server
+  - url: https://api2.pennsieve.net/accounts/cloud
+    description: Development server
+externalDocs:
+  description: Find more info here
+  url: https://docs.pennsieve.io
+tags:
+  - name: Datasets Service
+    description: Management of datasets
+    externalDocs:
+      url: https://docs.pennsieve.io/reference
+components:
+  x-amazon-apigateway-integrations:
+    account-service:
+      type: aws_proxy
+      uri: ${account_service_lambda_arn}
+      httpMethod: POST
+      passthroughBehavior: when_no_match
+      contentHandling: CONVERT_TO_TEXT
+      payloadFormatVersion: 2.0
+  securitySchemes:
+    token_dataset_auth:
+      type: "apiKey"
+      name: "Unused"
+      in: "header"
+      x-amazon-apigateway-authorizer:
+        identitySource: "$request.header.Authorization,$request.querystring.dataset_id"
+        authorizerUri: ${authorize_lambda_invoke_uri}
+        authorizerPayloadFormatVersion: "2.0"
+        authorizerResultTtlInSeconds: 300
+        type: "request"
+        enableSimpleResponses: true
+        authorizerCredentials: ${gateway_authorizer_role}
+    token_auth:
+      type: "apiKey"
+      name: "Authorization"
+      in: "header"
+      x-amazon-apigateway-authorizer:
+        identitySource: "$request.header.Authorization"
+        authorizerUri: ${authorize_lambda_invoke_uri}
+        authorizerPayloadFormatVersion: "2.0"
+        authorizerResultTtlInSeconds: 300
+        type: "request"
+        enableSimpleResponses: true
+        authorizerCredentials: ${gateway_authorizer_role}
+  schemas:
+    accountRequest:
+      type: object
+      properties:
+        accountId:
+          type: string
+          description: the registered accountId
+        accountType:
+          type: string
+          description: the type of account
+        roleName:
+          type: string
+          description: the name of the created role
+        externalId:
+          type: string
+          description: a unique identifier for the role
+    pennsieveAccountsGetResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+          description: the accountId of the Pennsieve Account
+        accountType:
+          type: string
+          description: the account type of Pennsieve Account
+    postAccountsResponse:
+      type: object
+      properties:
+        uuid:
+          type: string
+          description: the uuid of the created compute resource account
+    accountsGetResponse:
+      type: object
+      properties:
+        uuid:
+          type: string
+          description: the uuid of the compute resource account
+        accountId:
+          type: string
+          description: the accountId of the compute resource account
+        accountType:
+          type: string
+          description: the account type of compute resource account
+        roleName:
+          type: string
+          description: the name of the role in the compute resource account
+        externalId:
+          type: string
+          description: the generated externalId for compute resource account
+        organizationId:
+          type: string
+          description: the organization of the role creator for the compute resource account
+        userId:
+          type: string
+          description: the user that created the role for the compute resource account
+  responses:
+    Unauthorized:
+      description: Incorrect authentication or user has incorrect permissions.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+    Error:
+      description: Server Error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+paths:
+  /pennsieve-accounts/{accountType}:
+    get:
+      summary: Get Pennsieve Accounts
+      description: |
+        Gets Pennsieve Accounts by accountType
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getPennsieveAccounts
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account Service
+      parameters:
+        - in: path
+          name: accountType
+          required: true
+          schema:
+            type: string
+          description: The Pennsieve account type.
+      responses:
+        '200':
+          description: The requested account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pennsieveAccountsGetResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /:
+    post:
+      summary: Creates an external compute resource account
+      description: |
+        Creates an account for an external compute resource. Such as an AWS account.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: postAccounts
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account Service
+      requestBody:
+        description: Payload
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/accountRequest'
+      responses:
+        '201':
+          description: Successfully created compute resource account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/postAccountsResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get account details for compute resources
+      description: |
+        Get account details for compute resources
+      parameters:
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: true
+          description: The organization ID.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getAccounts
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Account Service
+      responses:
+        '200':
+          description: The requested compute resource accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/accountsGetResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /{id}:
+    get:
+      summary: Get account details for a specific compute resource
+      description: |
+        Get account details for a specific compute resource
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getAccount
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account Service
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The uuid of the compute resource account
+      responses:
+        '200':
+          description: The requested compute resource account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountsGetResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'

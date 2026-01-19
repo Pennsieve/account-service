@@ -10,6 +10,10 @@ variable "vpc_name" {}
 
 variable "domain_name" {}
 
+variable "api_domain_name" {
+  default = var.environment_name == "prod" ? "api2.pennsieve.io" : "api2.pennsieve.net"
+}
+
 variable "image_tag" {}
 
 variable "lambda_bucket" {
@@ -23,4 +27,7 @@ locals {
     aws_region       = data.aws_region.current_region.name
     environment_name = var.environment_name
   }
+
+  cors_allowed_origins  = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"]
+
 }
