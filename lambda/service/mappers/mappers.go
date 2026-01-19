@@ -10,13 +10,12 @@ func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account) []mod
 
 	for _, a := range dynamoAccounts {
 		accounts = append(accounts, models.Account{
-			Uuid:           a.Uuid,
-			AccountId:      a.AccountId,
-			AccountType:    a.AccountType,
-			RoleName:       a.RoleName,
-			ExternalId:     a.ExternalId,
-			OrganizationId: a.OrganizationId,
-			UserId:         a.UserId,
+			Uuid:        a.Uuid,
+			AccountId:   a.AccountId,
+			AccountType: a.AccountType,
+			RoleName:    a.RoleName,
+			ExternalId:  a.ExternalId,
+			UserId:      a.UserId,
 		})
 	}
 

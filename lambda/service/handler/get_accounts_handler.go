@@ -34,7 +34,8 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	organizationId := claims.OrgClaim.NodeId
+	// organizationId is only used when filtering by workspace
+	// organizationId := claims.OrgClaim.NodeId
 
 	// Get user's accounts
 	accountStore := &store_dynamodb.AccountDatabaseStore{

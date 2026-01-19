@@ -47,13 +47,12 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 	}
 
 	m, err := json.Marshal(models.Account{
-		Uuid:           account.Uuid,
-		AccountId:      account.AccountId,
-		AccountType:    account.AccountType,
-		RoleName:       account.RoleName,
-		ExternalId:     account.ExternalId,
-		OrganizationId: account.OrganizationId,
-		UserId:         account.UserId,
+		Uuid:        account.Uuid,
+		AccountId:   account.AccountId,
+		AccountType: account.AccountType,
+		RoleName:    account.RoleName,
+		ExternalId:  account.ExternalId,
+		UserId:      account.UserId,
 	})
 	if err != nil {
 		log.Println(err.Error())

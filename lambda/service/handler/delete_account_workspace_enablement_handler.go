@@ -21,7 +21,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 	if accountUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, "missing account uuid"),
+			Body:       handlerError(handlerName, ErrMissingAccountUuid),
 		}, nil
 	}
 	
@@ -30,7 +30,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 	if workspaceId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, "missing workspace id"),
+			Body:       handlerError(handlerName, ErrMissingWorkspaceId),
 		}, nil
 	}
 
@@ -68,14 +68,14 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 	if account.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, "account not found"),
+			Body:       handlerError(handlerName, ErrAccountNotFound),
 		}, nil
 	}
 	
 	if account.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
-			Body:       handlerError(handlerName, "account does not belong to user"),
+			Body:       handlerError(handlerName, ErrAccountDoesNotBelongToUser),
 		}, nil
 	}
 	
@@ -93,7 +93,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 	if existingEnablement.AccountUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, "workspace enablement not found"),
+			Body:       handlerError(handlerName, ErrWorkspaceEnablementNotFound),
 		}, nil
 	}
 	

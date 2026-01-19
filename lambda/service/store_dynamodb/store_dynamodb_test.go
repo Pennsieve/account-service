@@ -54,13 +54,12 @@ func TestInsertAndGetById(t *testing.T) {
 	id := uuid.New()
 	registeredAccountId := id.String()
 	store_account := store_dynamodb.Account{
-		Uuid:           registeredAccountId,
-		UserId:         "SomeId",
-		OrganizationId: "SomeOrgId",
-		AccountId:      "SomeAccountId",
-		AccountType:    "aws",
-		RoleName:       "SomeRoleName",
-		ExternalId:     "SomeExternalId",
+		Uuid:        registeredAccountId,
+		UserId:      "SomeId",
+		AccountId:   "SomeAccountId",
+		AccountType: "aws",
+		RoleName:    "SomeRoleName",
+		ExternalId:  "SomeExternalId",
 	}
 	err = dynamo_store.Insert(context.Background(), store_account)
 	if err != nil {
@@ -83,59 +82,63 @@ func TestInsertAndGetById(t *testing.T) {
 
 }
 
-func TestInsertAndGet(t *testing.T) {
+func TestInsertAndGetByUserId(t *testing.T) {
 	tableName := "accounts"
 	dynamoDBClient := getClient()
 
-	// create table
-	_, err := CreateAccountsTable(dynamoDBClient, tableName)
+	// create table with userId index
+	_, err := CreateAccountsTableWithUserIndex(dynamoDBClient, tableName)
 	if err != nil {
-		t.Fatalf("err creating table")
+		t.Fatalf("err creating table: %v", err)
 	}
-	dynamo_store := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, tableName)
+	
+	// Use concrete type to access GetByUserId method
+	dynamo_store := &store_dynamodb.AccountDatabaseStore{
+		DB:        dynamoDBClient,
+		TableName: tableName,
+	}
 
-	organizationId := "SomeOrgId"
+	userId := "SomeUserId"
 	uuids := []string{uuid.New().String(), uuid.New().String()}
 	for _, u := range uuids {
 		store_account := store_dynamodb.Account{
-			Uuid:           u,
-			UserId:         "SomeId",
-			OrganizationId: organizationId,
-			AccountId:      u,
-			AccountType:    "aws",
-			RoleName:       "SomeRoleName",
-			ExternalId:     "SomeExternalId",
+			Uuid:        u,
+			UserId:      userId,
+			AccountId:   u,
+			AccountType: "aws",
+			RoleName:    "SomeRoleName",
+			ExternalId:  "SomeExternalId",
 		}
 		err = dynamo_store.Insert(context.Background(), store_account)
 		if err != nil {
-			t.Errorf("error inserting item into table")
+			t.Errorf("error inserting item into table: %v", err)
 		}
 	}
-	queryParams := make(map[string]string)
-	accounts, err := dynamo_store.Get(context.Background(), organizationId, queryParams)
+	
+	// Test GetByUserId method
+	accounts, err := dynamo_store.GetByUserId(context.Background(), userId)
 	if err != nil {
-		t.Errorf("error getting items")
+		t.Errorf("error getting items by userId: %v", err)
 	}
 
 	if len(accounts) != len(uuids) {
 		t.Errorf("expected %v accounts, not %v", len(uuids), len(accounts))
 	}
 
-	queryParams = make(map[string]string)
-	queryParams["accountId"] = uuids[0]
-	accounts, err = dynamo_store.Get(context.Background(), organizationId, queryParams)
+	// Verify individual account
+	account, err := dynamo_store.GetById(context.Background(), uuids[0])
 	if err != nil {
-		t.Errorf("error getting items")
+		t.Errorf("error getting account by id: %v", err)
 	}
 
-	if len(accounts) != 1 {
-		t.Errorf("expected %v account(s), not %v", 1, len(accounts))
+	if account.Uuid != uuids[0] {
+		t.Errorf("expected account uuid %v, got %v", uuids[0], account.Uuid)
 	}
 
 	// delete table
 	err = DeleteTable(dynamoDBClient, tableName)
 	if err != nil {
-		t.Fatalf("err creating table")
+		t.Fatalf("err deleting table")
 	}
 
 }
@@ -152,7 +155,55 @@ func CreateAccountsTable(dynamoDBClient *dynamodb.Client, tableName string) (*ty
 			KeyType:       types.KeyTypeHash,
 		}},
 		TableName:   aws.String(tableName),
-		BillingMode: "PAY_PER_REQUEST",
+		BillingMode: types.BillingModePayPerRequest,
+	})
+	if err != nil {
+		log.Printf("couldn't create table %v. Here's why: %v\n", tableName, err)
+	} else {
+		waiter := dynamodb.NewTableExistsWaiter(dynamoDBClient)
+		err = waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{
+			TableName: aws.String(tableName)}, 5*time.Minute)
+		if err != nil {
+			log.Printf("wait for table exists failed. Here's why: %v\n", err)
+		}
+		tableDesc = table.TableDescription
+	}
+	return tableDesc, err
+}
+
+func CreateAccountsTableWithUserIndex(dynamoDBClient *dynamodb.Client, tableName string) (*types.TableDescription, error) {
+	var tableDesc *types.TableDescription
+	table, err := dynamoDBClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+		AttributeDefinitions: []types.AttributeDefinition{
+			{
+				AttributeName: aws.String("uuid"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
+			{
+				AttributeName: aws.String("userId"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
+		},
+		KeySchema: []types.KeySchemaElement{{
+			AttributeName: aws.String("uuid"),
+			KeyType:       types.KeyTypeHash,
+		}},
+		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
+			{
+				IndexName: aws.String("userId-index"),
+				KeySchema: []types.KeySchemaElement{
+					{
+						AttributeName: aws.String("userId"),
+						KeyType:       types.KeyTypeHash,
+					},
+				},
+				Projection: &types.Projection{
+					ProjectionType: types.ProjectionTypeAll,
+				},
+			},
+		},
+		TableName:   aws.String(tableName),
+		BillingMode: types.BillingModePayPerRequest,
 	})
 	if err != nil {
 		log.Printf("couldn't create table %v. Here's why: %v\n", tableName, err)
