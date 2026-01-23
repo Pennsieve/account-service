@@ -13,9 +13,9 @@ info:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 servers:
-  - url: https://api2.pennsieve.io/accounts/compute-resource
+  - url: https://api2.pennsieve.io/compute/resources
     description: Production server
-  - url: https://api2.pennsieve.net/accounts/compute-resource
+  - url: https://api2.pennsieve.net/compute/resources
     description: Development server
 externalDocs:
   description: Find more info here
