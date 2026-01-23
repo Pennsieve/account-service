@@ -2,9 +2,9 @@
 openapi: 3.0.1
 info:
   version: "3.0"
-  title: Accounts API
+  title: Compute Resources API
   description: |
-    This is the serverless accounts api
+    This is the serverless Compute Resources API
   termsOfService: https://docs.pennsieve.io/page/pennsieve-terms-of-use
   contact:
     name: Pennsieve Support
@@ -191,7 +191,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
-  /:
+  /accounts:
     post:
       summary: Creates an external compute resource account
       description: |
@@ -252,7 +252,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
-  /{id}:
+  /accounts/{id}:
     get:
       summary: Get account details for a specific compute resource
       description: |
