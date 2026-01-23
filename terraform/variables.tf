@@ -10,9 +10,7 @@ variable "vpc_name" {}
 
 variable "domain_name" {}
 
-variable "api_domain_name" {
-  default = var.environment_name == "prod" ? "api2.pennsieve.io" : "api2.pennsieve.net"
-}
+variable "api_domain_name" {}
 
 variable "image_tag" {}
 

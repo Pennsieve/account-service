@@ -1,11 +1,11 @@
-// Create log group for packages-service API Lambda.
+// Create log group for accounts-service API Lambda.
 resource "aws_cloudwatch_log_group" "accounts_service_api_lambda_log_group" {
   name              = "/aws/lambda/${aws_lambda_function.service_lambda.function_name}"
   retention_in_days = 30
   tags              = local.common_tags
 }
 
-// Send logs from packages-service API Lambda to Datadog
+// Send logs from accounts-service API Lambda to Datadog
 resource "aws_cloudwatch_log_subscription_filter" "accounts_service_api_lambda_datadog_subscription" {
   name            = "${aws_cloudwatch_log_group.accounts_service_api_lambda_log_group.name}-subscription"
   log_group_name  = aws_cloudwatch_log_group.accounts_service_api_lambda_log_group.name

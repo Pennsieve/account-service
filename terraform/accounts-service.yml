@@ -13,16 +13,16 @@ info:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 servers:
-  - url: https://api2.pennsieve.io/accounts/cloud
+  - url: https://api2.pennsieve.io/accounts/compute-resource
     description: Production server
-  - url: https://api2.pennsieve.net/accounts/cloud
+  - url: https://api2.pennsieve.net/accounts/compute-resource
     description: Development server
 externalDocs:
   description: Find more info here
   url: https://docs.pennsieve.io
 tags:
-  - name: Datasets Service
-    description: Management of datasets
+  - name: Accounts Service
+    description: Management of external accounts that can provide compute and/or storage capabilities.
     externalDocs:
       url: https://docs.pennsieve.io/reference
 components:

@@ -25,4 +25,4 @@ jobs:
       - name: Run `openapi` command 🚀
         uses: readmeio/rdme@v9
         with:
-          rdme: openapi terraform/account-service.yml --key=${{ secrets.README_API_KEY }} --id=696e4ddb3484eaed427370f3
+          rdme: openapi terraform/accounts-service.yml --key=${{ secrets.README_API_KEY }} --id=696e4ddb3484eaed427370f3
