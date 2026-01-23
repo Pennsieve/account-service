@@ -21,7 +21,7 @@ resource "aws_apigatewayv2_api_mapping" "accounts_service_api_map" {
   api_id          = aws_apigatewayv2_api.accounts_service_api.id
   domain_name     = var.api_domain_name
   stage           = aws_apigatewayv2_stage.accounts_service_gateway_stage.id
-  api_mapping_key = "accounts/compute-resource"
+  api_mapping_key = "compute/resources"
 
 }
 
