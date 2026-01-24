@@ -18,7 +18,7 @@ import (
 func TestPostAccountWorkspaceEnablementHandler(t *testing.T) {
 	// Set required environment variables
 	os.Setenv("ACCOUNTS_TABLE", "test-accounts-table")
-	os.Setenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE", "test-enablement-table")
+	os.Setenv("ACCOUNT_WORKSPACE_TABLE", "test-workspace-table")
 	
 	tests := []struct {
 		name           string
@@ -108,7 +108,7 @@ func TestPostAccountWorkspaceEnablementHandler(t *testing.T) {
 func TestDeleteAccountWorkspaceEnablementHandler(t *testing.T) {
 	// Set required environment variables
 	os.Setenv("ACCOUNTS_TABLE", "test-accounts-table")
-	os.Setenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE", "test-enablement-table")
+	os.Setenv("ACCOUNT_WORKSPACE_TABLE", "test-workspace-table")
 	
 	tests := []struct {
 		name           string

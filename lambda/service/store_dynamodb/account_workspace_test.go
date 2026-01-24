@@ -62,7 +62,7 @@ func CreateWorkspaceEnablementTable(dynamoDBClient *dynamodb.Client, tableName s
 	err = waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{
 		TableName: aws.String(tableName),
 	}, 5*time.Minute)
-	
+
 	return err
 }
 
@@ -75,14 +75,14 @@ func TestWorkspaceEnablementInsertAndGet(t *testing.T) {
 	require.NoError(t, err, "Failed to create workspace enablement table")
 	defer DeleteTable(dynamoDBClient, tableName)
 
-	store := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, tableName)
+	store := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, tableName)
 
 	// Test data
 	accountUuid := uuid.New().String()
 	organizationId := "org-123"
 	userId := "user-456"
 
-	enablement := store_dynamodb.AccountWorkspaceEnablement{
+	enablement := store_dynamodb.AccountWorkspace{
 		AccountUuid:    accountUuid,
 		OrganizationId: organizationId,
 		IsPublic:       true,
@@ -117,7 +117,7 @@ func TestWorkspaceEnablementGetByAccount(t *testing.T) {
 	require.NoError(t, err, "Failed to create workspace enablement table")
 	defer DeleteTable(dynamoDBClient, tableName)
 
-	store := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, tableName)
+	store := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, tableName)
 
 	// Test data - one account enabled for multiple workspaces
 	accountUuid := uuid.New().String()
@@ -126,7 +126,7 @@ func TestWorkspaceEnablementGetByAccount(t *testing.T) {
 
 	// Insert enablements for multiple organizations
 	for i, orgId := range organizations {
-		enablement := store_dynamodb.AccountWorkspaceEnablement{
+		enablement := store_dynamodb.AccountWorkspace{
 			AccountUuid:    accountUuid,
 			OrganizationId: orgId,
 			IsPublic:       i%2 == 0, // Alternate public/private
@@ -162,7 +162,7 @@ func TestWorkspaceEnablementGetByOrganization(t *testing.T) {
 	require.NoError(t, err, "Failed to create workspace enablement table")
 	defer DeleteTable(dynamoDBClient, tableName)
 
-	store := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, tableName)
+	store := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, tableName)
 
 	// Test data - multiple accounts enabled for one workspace
 	organizationId := "org-shared"
@@ -171,7 +171,7 @@ func TestWorkspaceEnablementGetByOrganization(t *testing.T) {
 
 	// Insert enablements for multiple accounts
 	for i, accUuid := range accountUuids {
-		enablement := store_dynamodb.AccountWorkspaceEnablement{
+		enablement := store_dynamodb.AccountWorkspace{
 			AccountUuid:    accUuid,
 			OrganizationId: organizationId,
 			IsPublic:       i == 0, // Only first is public
@@ -182,8 +182,8 @@ func TestWorkspaceEnablementGetByOrganization(t *testing.T) {
 		require.NoError(t, err, "Failed to insert enablement for account %s", accUuid)
 	}
 
-	// Test GetByOrganization
-	enablements, err := store.GetByOrganization(context.Background(), organizationId)
+	// Test GetByWorkspace
+	enablements, err := store.GetByWorkspace(context.Background(), organizationId)
 	assert.NoError(t, err, "Failed to get enablements by organization")
 	assert.Len(t, enablements, 3, "Should have 3 enablements")
 
@@ -212,14 +212,14 @@ func TestWorkspaceEnablementDelete(t *testing.T) {
 	require.NoError(t, err, "Failed to create workspace enablement table")
 	defer DeleteTable(dynamoDBClient, tableName)
 
-	store := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, tableName)
+	store := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, tableName)
 
 	// Test data
 	accountUuid := uuid.New().String()
 	organizationId := "org-to-delete"
 	userId := "user-123"
 
-	enablement := store_dynamodb.AccountWorkspaceEnablement{
+	enablement := store_dynamodb.AccountWorkspace{
 		AccountUuid:    accountUuid,
 		OrganizationId: organizationId,
 		IsPublic:       false,
@@ -259,10 +259,10 @@ func TestWorkspaceEnablementPrivatePublicFlag(t *testing.T) {
 	require.NoError(t, err, "Failed to create workspace enablement table")
 	defer DeleteTable(dynamoDBClient, tableName)
 
-	store := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, tableName)
+	store := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, tableName)
 
 	accountUuid := uuid.New().String()
-	
+
 	// Test data - same account for different workspaces with different privacy settings
 	testCases := []struct {
 		orgId    string
@@ -275,7 +275,7 @@ func TestWorkspaceEnablementPrivatePublicFlag(t *testing.T) {
 
 	// Insert with different privacy settings
 	for _, tc := range testCases {
-		enablement := store_dynamodb.AccountWorkspaceEnablement{
+		enablement := store_dynamodb.AccountWorkspace{
 			AccountUuid:    accountUuid,
 			OrganizationId: tc.orgId,
 			IsPublic:       tc.isPublic,
@@ -290,7 +290,7 @@ func TestWorkspaceEnablementPrivatePublicFlag(t *testing.T) {
 	for _, tc := range testCases {
 		retrieved, err := store.Get(context.Background(), accountUuid, tc.orgId)
 		assert.NoError(t, err)
-		assert.Equal(t, tc.isPublic, retrieved.IsPublic, 
+		assert.Equal(t, tc.isPublic, retrieved.IsPublic,
 			"Privacy setting for %s should be %v", tc.orgId, tc.isPublic)
 	}
 
@@ -298,7 +298,7 @@ func TestWorkspaceEnablementPrivatePublicFlag(t *testing.T) {
 	enablements, err := store.GetByAccount(context.Background(), accountUuid)
 	assert.NoError(t, err)
 	assert.Len(t, enablements, 3)
-	
+
 	publicCount := 0
 	for _, e := range enablements {
 		if e.IsPublic {
