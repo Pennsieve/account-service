@@ -28,7 +28,7 @@ This guide describes the migration from workspace-coupled accounts to user-owned
 ```bash
 # Set environment variables
 export ACCOUNTS_TABLE=your-accounts-table
-export ACCOUNT_WORKSPACE_ENABLEMENT_TABLE=your-enablement-table
+export ACCOUNT_WORKSPACE_TABLE=your-workspace-table
 
 # Run in dry-run mode first
 export DRY_RUN=true

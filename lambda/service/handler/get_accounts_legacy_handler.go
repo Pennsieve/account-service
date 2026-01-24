@@ -31,13 +31,13 @@ func GetAccountsLegacyHandler(ctx context.Context, request events.APIGatewayV2HT
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
-	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
+	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	organizationId := claims.OrgClaim.NodeId
 
 	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
-	
+
 	// First, get old-style accounts (pre-migration)
 	oldStyleAccounts, err := accountStore.Get(ctx, organizationId, queryParams)
 	if err != nil {
@@ -47,12 +47,12 @@ func GetAccountsLegacyHandler(ctx context.Context, request events.APIGatewayV2HT
 			Body:       handlerError(handlerName, ErrDynamoDB),
 		}, nil
 	}
-	
+
 	// Then, get new-style accounts (post-migration) through workspace enablement
 	var newStyleAccounts []store_dynamodb.Account
 	if enablementTable != "" {
-		enablementStore := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, enablementTable)
-		enablements, err := enablementStore.GetByOrganization(ctx, organizationId)
+		enablementStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
+		enablements, err := enablementStore.GetByWorkspace(ctx, organizationId)
 		if err != nil {
 			log.Printf("Error getting workspace enablements: %v", err)
 			// Don't fail the entire request if we can't get enablements
@@ -71,13 +71,13 @@ func GetAccountsLegacyHandler(ctx context.Context, request events.APIGatewayV2HT
 				if alreadyHave {
 					continue
 				}
-				
+
 				// Avoid duplicates from multiple enablements
 				if accountUuids[enablement.AccountUuid] {
 					continue
 				}
 				accountUuids[enablement.AccountUuid] = true
-				
+
 				account, err := accountStore.GetById(ctx, enablement.AccountUuid)
 				if err != nil {
 					log.Printf("Error getting account %s: %v", enablement.AccountUuid, err)
@@ -93,10 +93,10 @@ func GetAccountsLegacyHandler(ctx context.Context, request events.APIGatewayV2HT
 			}
 		}
 	}
-	
+
 	// Combine both lists
 	allAccounts := append(oldStyleAccounts, newStyleAccounts...)
-	
+
 	// Convert to response format
 	var responseAccounts []models.Account
 	for _, account := range allAccounts {
@@ -118,7 +118,7 @@ func GetAccountsLegacyHandler(ctx context.Context, request events.APIGatewayV2HT
 			Body:       handlerError(handlerName, ErrMarshaling),
 		}, nil
 	}
-	
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
 		Body:       string(m),

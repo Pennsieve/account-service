@@ -5,10 +5,11 @@ AWS Lambda-based microservice for managing cloud provider account registrations 
 ## Overview
 
 The Account Service provides REST API endpoints for:
-- Creating and registering cloud provider accounts (AWS)
-- Retrieving account information for organizations
+- Creating and registering cloud provider accounts (AWS) 
+- Retrieving account information for authenticated users
 - Managing account metadata and configurations
 - Querying Pennsieve platform AWS account details
+- Enabling and disabling workspaces for compute resource accounts
 
 ## Architecture
 
@@ -25,8 +26,10 @@ This service is built as a serverless application using:
 |--------|----------|-------------|
 | `GET` | `/pennsieve-accounts/{accountType}` | Retrieve Pennsieve AWS account information |
 | `POST` | `/accounts` | Create a new account registration |
-| `GET` | `/accounts` | List accounts for an organization |
+| `GET` | `/accounts` | List accounts for the authenticated user |
 | `GET` | `/accounts/{id}` | Retrieve specific account by ID |
+| `POST` | `/accounts/{uuid}/workspaces` | Enable a workspace for an account |
+| `DELETE` | `/accounts/{uuid}/workspaces/{workspaceId}` | Disable a workspace for an account |
 
 ### Request/Response Models
 
@@ -48,6 +51,23 @@ This service is built as a serverless application using:
 {
   "accountId": "string",
   "type": "aws"
+}
+```
+
+#### Workspace Enablement Request
+```json
+{
+  "isPublic": true  // if true, workspace managers can create compute nodes; if false, only account owner can
+}
+```
+
+#### Workspace Enablement Response
+```json
+{
+  "uuid": "string",
+  "workspaceId": "string",
+  "isPublic": true,  // indicates whether workspace managers can create compute nodes on this account
+  "createdAt": "2024-01-01T00:00:00Z"
 }
 ```
 

@@ -22,3 +22,6 @@ lambda/bin
 
 # dynamodb data
 test-dynamodb-data
+
+# Migration exports
+migration/exports

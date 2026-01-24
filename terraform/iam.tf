@@ -75,8 +75,8 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = [
       aws_dynamodb_table.accounts_table.arn,
       "${aws_dynamodb_table.accounts_table.arn}/*",
-      aws_dynamodb_table.account_workspace_enablement_table.arn,
-      "${aws_dynamodb_table.account_workspace_enablement_table.arn}/*"
+      aws_dynamodb_table.account_workspace_table.arn,
+      "${aws_dynamodb_table.account_workspace_table.arn}/*"
     ]
 
   }

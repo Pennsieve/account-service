@@ -30,7 +30,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
-	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
+	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
@@ -53,10 +53,10 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 
 	// If workspace filter is provided, filter accounts by workspace enablement
 	if workspaceFilter, ok := queryParams["workspace"]; ok && workspaceFilter != "" {
-		enablementStore := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, enablementTable)
-		
+		enablementStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
+
 		// Get all enablements for the workspace
-		workspaceEnablements, err := enablementStore.GetByOrganization(ctx, workspaceFilter)
+		workspaceEnablements, err := enablementStore.GetByWorkspace(ctx, workspaceFilter)
 		if err != nil {
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
@@ -64,13 +64,13 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 				Body:       handlerError(handlerName, ErrDynamoDB),
 			}, nil
 		}
-		
+
 		// Create map for quick lookup
 		enabledAccountUuids := make(map[string]bool)
 		for _, enablement := range workspaceEnablements {
 			enabledAccountUuids[enablement.AccountUuid] = true
 		}
-		
+
 		// Filter user accounts by enabled accounts
 		var filteredAccounts []store_dynamodb.Account
 		for _, account := range userAccounts {
@@ -81,30 +81,30 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		userAccounts = filteredAccounts
 	}
 
-	// Include workspace enablements if requested
+	// Include workspaces information if requested
 	if includeWorkspaces, ok := queryParams["includeWorkspaces"]; ok && includeWorkspaces == "true" {
-		enablementStore := store_dynamodb.NewWorkspaceEnablementDatabaseStore(dynamoDBClient, enablementTable)
-		
+		enablementStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
+
 		var accountsWithWorkspaces []models.AccountWithWorkspaces
 		for _, account := range userAccounts {
 			enablements, err := enablementStore.GetByAccount(ctx, account.Uuid)
 			if err != nil {
 				log.Println(err.Error())
 				// Continue without enablements rather than failing
-				enablements = []store_dynamodb.AccountWorkspaceEnablement{}
+				enablements = []store_dynamodb.AccountWorkspace{}
 			}
-			
+
 			modelEnablements := make([]models.AccountWorkspaceEnablement, len(enablements))
 			for i, e := range enablements {
 				modelEnablements[i] = models.AccountWorkspaceEnablement{
 					AccountUuid:    e.AccountUuid,
-					OrganizationId: e.OrganizationId,
+					OrganizationId: e.WorkspaceId,  // WorkspaceId from DB maps to OrganizationId in model
 					IsPublic:       e.IsPublic,
 					EnabledBy:      e.EnabledBy,
 					EnabledAt:      e.EnabledAt,
 				}
 			}
-			
+
 			accountsWithWorkspaces = append(accountsWithWorkspaces, models.AccountWithWorkspaces{
 				Account: models.Account{
 					Uuid:        account.Uuid,
@@ -117,7 +117,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 				EnabledWorkspaces: modelEnablements,
 			})
 		}
-		
+
 		m, err := json.Marshal(accountsWithWorkspaces)
 		if err != nil {
 			log.Println(err.Error())

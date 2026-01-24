@@ -59,6 +59,18 @@ components:
         type: "request"
         enableSimpleResponses: true
         authorizerCredentials: ${gateway_authorizer_role}
+    token_workspace_auth:
+      type: "apiKey"
+      name: "Authorization"
+      in: "header"
+      x-amazon-apigateway-authorizer:
+        identitySource: "$request.header.Authorization,$request.querystring.organization_id"
+        authorizerUri: ${authorize_lambda_invoke_uri}
+        authorizerPayloadFormatVersion: "2.0"
+        authorizerResultTtlInSeconds: 300
+        type: "request"
+        enableSimpleResponses: true
+        authorizerCredentials: ${gateway_authorizer_role}
   schemas:
     accountRequest:
       type: object
@@ -114,6 +126,28 @@ components:
         userId:
           type: string
           description: the user that created the role for the compute resource account
+    workspaceEnablementRequest:
+      type: object
+      properties:
+        isPublic:
+          type: boolean
+          description: if true, workspace managers can create compute nodes on this account; if false, only the account owner can
+    workspaceEnablementResponse:
+      type: object
+      properties:
+        uuid:
+          type: string
+          description: the uuid of the compute resource account
+        workspaceId:
+          type: string
+          description: the workspace ID
+        isPublic:
+          type: boolean
+          description: if true, workspace managers can create compute nodes on this account; if false, only the account owner can
+        createdAt:
+          type: string
+          format: date-time
+          description: timestamp when the enablement was created
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -191,6 +225,83 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+  /accounts/{uuid}/workspaces:
+    post:
+      summary: Enable a workspace for an account
+      description: |
+        Enables a workspace for a specific compute resource account. The isPublic flag determines
+        who can create compute nodes on this account: if true, workspace managers can create nodes;
+        if false, only the account owner can create nodes
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: postAccountWorkspaceEnablement
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Account Service
+      parameters:
+        - in: path
+          name: uuid
+          required: true
+          schema:
+            type: string
+          description: The uuid of the compute resource account
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: true
+          description: Node Id of the workspace that we want to enable.
+      requestBody:
+        description: Workspace enablement configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/workspaceEnablementRequest'
+      responses:
+        '201':
+          description: Successfully enabled workspace for account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/workspaceEnablementResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /accounts/{uuid}/workspaces/{workspaceId}:
+    delete:
+      summary: Disable a workspace for an account
+      description: |
+        Disables a workspace for a specific compute resource account
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteAccountWorkspaceEnablement
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account Service
+      parameters:
+        - in: path
+          name: uuid
+          required: true
+          schema:
+            type: string
+          description: The uuid of the compute resource account
+        - in: path
+          name: workspaceId
+          required: true
+          schema:
+            type: string
+          description: The workspace ID to disable
+      responses:
+        '204':
+          description: Successfully disabled workspace for account
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
   /accounts:
     post:
       summary: Creates an external compute resource account
@@ -222,21 +333,29 @@ paths:
         '5XX':
           $ref: '#/components/responses/Error'
     get:
-      summary: Get account details for compute resources
+      summary: Get account details for the authenticated user
       description: |
-        Get account details for compute resources
+        Get account details for compute resources belonging to the authenticated user.
+        Optionally filter by workspace or include workspace enablement details.
       parameters:
         - in: query
-          name: organization_id
+          name: workspace
           schema:
             type: string
-          required: true
-          description: The organization ID.
+          required: false
+          description: Filter accounts by workspace ID (only returns accounts enabled for this workspace)
+        - in: query
+          name: includeWorkspaces
+          schema:
+            type: string
+            enum: ["true", "false"]
+          required: false
+          description: Include workspace enablement details in the response
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getAccounts
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Account Service
       responses:
