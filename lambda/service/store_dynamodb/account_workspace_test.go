@@ -22,7 +22,7 @@ func CreateWorkspaceEnablementTable(dynamoDBClient *dynamodb.Client, tableName s
 				AttributeType: types.ScalarAttributeTypeS,
 			},
 			{
-				AttributeName: aws.String("organizationId"),
+				AttributeName: aws.String("workspaceId"),
 				AttributeType: types.ScalarAttributeTypeS,
 			},
 		},
@@ -32,16 +32,16 @@ func CreateWorkspaceEnablementTable(dynamoDBClient *dynamodb.Client, tableName s
 				KeyType:       types.KeyTypeHash,
 			},
 			{
-				AttributeName: aws.String("organizationId"),
+				AttributeName: aws.String("workspaceId"),
 				KeyType:       types.KeyTypeRange,
 			},
 		},
 		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
 			{
-				IndexName: aws.String("organizationId-index"),
+				IndexName: aws.String("workspaceId-index"),
 				KeySchema: []types.KeySchemaElement{
 					{
-						AttributeName: aws.String("organizationId"),
+						AttributeName: aws.String("workspaceId"),
 						KeyType:       types.KeyTypeHash,
 					},
 				},
@@ -84,7 +84,7 @@ func TestWorkspaceEnablementInsertAndGet(t *testing.T) {
 
 	enablement := store_dynamodb.AccountWorkspace{
 		AccountUuid:    accountUuid,
-		OrganizationId: organizationId,
+		WorkspaceId:    organizationId,  // Use WorkspaceId instead of OrganizationId
 		IsPublic:       true,
 		EnabledBy:      userId,
 		EnabledAt:      time.Now().Unix(),
@@ -98,7 +98,7 @@ func TestWorkspaceEnablementInsertAndGet(t *testing.T) {
 	retrieved, err := store.Get(context.Background(), accountUuid, organizationId)
 	assert.NoError(t, err, "Failed to get enablement")
 	assert.Equal(t, accountUuid, retrieved.AccountUuid)
-	assert.Equal(t, organizationId, retrieved.OrganizationId)
+	assert.Equal(t, organizationId, retrieved.WorkspaceId)  // Check WorkspaceId field
 	assert.Equal(t, true, retrieved.IsPublic)
 	assert.Equal(t, userId, retrieved.EnabledBy)
 
@@ -128,7 +128,7 @@ func TestWorkspaceEnablementGetByAccount(t *testing.T) {
 	for i, orgId := range organizations {
 		enablement := store_dynamodb.AccountWorkspace{
 			AccountUuid:    accountUuid,
-			OrganizationId: orgId,
+			WorkspaceId: orgId,
 			IsPublic:       i%2 == 0, // Alternate public/private
 			EnabledBy:      userId,
 			EnabledAt:      time.Now().Unix(),
@@ -145,7 +145,7 @@ func TestWorkspaceEnablementGetByAccount(t *testing.T) {
 	// Verify all organizations are present
 	orgMap := make(map[string]bool)
 	for _, e := range enablements {
-		orgMap[e.OrganizationId] = true
+		orgMap[e.WorkspaceId] = true
 		assert.Equal(t, accountUuid, e.AccountUuid)
 	}
 	for _, orgId := range organizations {
@@ -173,7 +173,7 @@ func TestWorkspaceEnablementGetByOrganization(t *testing.T) {
 	for i, accUuid := range accountUuids {
 		enablement := store_dynamodb.AccountWorkspace{
 			AccountUuid:    accUuid,
-			OrganizationId: organizationId,
+			WorkspaceId: organizationId,
 			IsPublic:       i == 0, // Only first is public
 			EnabledBy:      userId,
 			EnabledAt:      time.Now().Unix(),
@@ -192,7 +192,7 @@ func TestWorkspaceEnablementGetByOrganization(t *testing.T) {
 	publicCount := 0
 	for _, e := range enablements {
 		accountMap[e.AccountUuid] = true
-		assert.Equal(t, organizationId, e.OrganizationId)
+		assert.Equal(t, organizationId, e.WorkspaceId)
 		if e.IsPublic {
 			publicCount++
 		}
@@ -221,7 +221,7 @@ func TestWorkspaceEnablementDelete(t *testing.T) {
 
 	enablement := store_dynamodb.AccountWorkspace{
 		AccountUuid:    accountUuid,
-		OrganizationId: organizationId,
+		WorkspaceId: organizationId,
 		IsPublic:       false,
 		EnabledBy:      userId,
 		EnabledAt:      time.Now().Unix(),
@@ -277,7 +277,7 @@ func TestWorkspaceEnablementPrivatePublicFlag(t *testing.T) {
 	for _, tc := range testCases {
 		enablement := store_dynamodb.AccountWorkspace{
 			AccountUuid:    accountUuid,
-			OrganizationId: tc.orgId,
+			WorkspaceId: tc.orgId,
 			IsPublic:       tc.isPublic,
 			EnabledBy:      "user-123",
 			EnabledAt:      time.Now().Unix(),
