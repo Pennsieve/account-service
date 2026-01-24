@@ -68,12 +68,15 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       "dynamodb:Scan",
       "dynamodb:BatchWriteItem",
       "dynamodb:PutItem",
-      "dynamodb:UpdateItem"
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem"
     ]
 
     resources = [
       aws_dynamodb_table.accounts_table.arn,
-      "${aws_dynamodb_table.accounts_table.arn}/*"
+      "${aws_dynamodb_table.accounts_table.arn}/*",
+      aws_dynamodb_table.account_workspace_table.arn,
+      "${aws_dynamodb_table.account_workspace_table.arn}/*"
     ]
 
   }

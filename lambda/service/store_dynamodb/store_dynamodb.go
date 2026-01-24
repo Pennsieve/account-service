@@ -62,25 +62,61 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 
 func (r *AccountDatabaseStore) Get(ctx context.Context, organizationId string, params map[string]string) ([]Account, error) {
 	accounts := []Account{}
-
+	
+	// Legacy method - handles both old (pre-migration) and new (post-migration) data
+	// Old records: have organizationId field directly in accounts table
+	// New records: use workspace enablement table
+	
+	// First, try to get old-style records that haven't been migrated yet
 	var c expression.ConditionBuilder
 	c = expression.Name("organizationId").Equal((expression.Value(organizationId)))
-
+	
 	if accountId, found := params["accountId"]; found {
 		c = c.And(expression.Name("accountId").Equal((expression.Value(accountId))))
 	}
-
+	
 	expr, err := expression.NewBuilder().WithFilter(c).Build()
 	if err != nil {
 		return accounts, fmt.Errorf("error building expression: %w", err)
 	}
-
+	
 	response, err := r.DB.Scan(ctx, &dynamodb.ScanInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
 		ProjectionExpression:      expr.Projection(),
 		TableName:                 aws.String(r.TableName),
+	})
+	if err != nil {
+		return accounts, fmt.Errorf("error getting accounts: %w", err)
+	}
+	
+	err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
+	if err != nil {
+		return accounts, fmt.Errorf("error unmarshaling accounts: %w", err)
+	}
+	
+	// During migration period, this will return old-style records
+	// After migration is complete, this will return empty and the new endpoints should be used
+	return accounts, nil
+}
+
+func (r *AccountDatabaseStore) GetByUserId(ctx context.Context, userId string) ([]Account, error) {
+	accounts := []Account{}
+
+	expr, err := expression.NewBuilder().WithKeyCondition(
+		expression.Key("userId").Equal(expression.Value(userId)),
+	).Build()
+	if err != nil {
+		return accounts, fmt.Errorf("error building expression: %w", err)
+	}
+
+	response, err := r.DB.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 aws.String(r.TableName),
+		IndexName:                 aws.String("userId-index"),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
 	})
 	if err != nil {
 		return accounts, fmt.Errorf("error getting accounts: %w", err)
