@@ -32,11 +32,11 @@ export ACCOUNT_WORKSPACE_TABLE=your-workspace-table
 
 # Run in dry-run mode first
 export DRY_RUN=true
-go run migration/migrate_accounts.go
+go run cmd/migration/migrate-accounts/
 
 # Run actual migration
 export DRY_RUN=false
-go run migration/migrate_accounts.go
+go run cmd/migration/migrate-accounts/
 ```
 
 The migration script will:
@@ -99,6 +99,50 @@ Watch for:
 - Migration script completion metrics
 - API latency changes
 - Client error rates
+
+## Migration Tools
+
+The project includes several migration tools in the `cmd/migration/` directory:
+
+### Account Migration
+```bash
+# Migrate accounts from old to new model
+go run cmd/migration/migrate-accounts/
+```
+
+### Workspace Enablements Creation
+```bash
+# Create workspace enablements from export data
+go run cmd/migration/create-workspace-enablements/ <export_directory>
+```
+
+### Table Import
+```bash
+# Import account data from export files
+go run cmd/migration/import-tables/ <export_directory>
+```
+
+## Project Structure
+
+The service has been reorganized to follow Go standard project layout:
+
+```
+├── cmd/                          # Executables
+│   ├── api/                     # Main Lambda service
+│   └── migration/               # Migration tools
+│       ├── migrate-accounts/    # Account migration tool
+│       ├── create-workspace-enablements/  # Workspace enablement tool
+│       └── import-tables/       # Table import tool
+├── internal/                    # Private application code
+│   ├── handler/                 # Lambda handlers
+│   ├── models/                  # Data models
+│   ├── store_dynamodb/          # DynamoDB operations
+│   ├── utils/                   # Utilities
+│   ├── logging/                 # Logging setup
+│   └── mappers/                 # Data mappers
+├── go.mod                       # Go module (at root)
+└── Makefile                     # Build commands
+```
 
 ## Support
 

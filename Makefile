@@ -48,10 +48,9 @@ package:
 	@echo "*   Building lambda   *"
 	@echo "***********************"
 	@echo ""
-	cd lambda/service; \
-  		env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/lambda/bin/service/bootstrap; \
-		cd $(WORKING_DIR)/lambda/bin/service/ ; \
-			zip -r $(WORKING_DIR)/lambda/bin/service/$(PACKAGE_NAME) .
+	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/api/bootstrap $(WORKING_DIR)/cmd/api; \
+	cd $(WORKING_DIR)/bin/api/; \
+		zip -r $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) .
 
 # Copy Service lambda to S3 location
 publish:
@@ -61,9 +60,9 @@ publish:
 	@echo "*   Publishing lambda   *"
 	@echo "*************************"
 	@echo ""
-	aws s3 cp $(WORKING_DIR)/lambda/bin/service/$(PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
-	rm -rf $(WORKING_DIR)/lambda/bin/service/$(PACKAGE_NAME) $(WORKING_DIR)/lambda/bin/service/bootstrap
+	aws s3 cp $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
+	rm -rf $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) $(WORKING_DIR)/bin/api/bootstrap
 
 # Run go mod tidy on modules
 tidy:
-	cd ${WORKING_DIR}/lambda/service; go mod tidy
+	go mod tidy
