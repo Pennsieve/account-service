@@ -113,6 +113,9 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 					RoleName:    account.RoleName,
 					ExternalId:  account.ExternalId,
 					UserId:      account.UserId,
+					Name:        account.Name,
+					Description: account.Description,
+					Status:      account.Status,
 				},
 				EnabledWorkspaces: modelEnablements,
 			})

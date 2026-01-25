@@ -107,6 +107,9 @@ func GetAccountsLegacyHandler(ctx context.Context, request events.APIGatewayV2HT
 			RoleName:    account.RoleName,
 			ExternalId:  account.ExternalId,
 			UserId:      account.UserId,
+			Name:        account.Name,
+			Description: account.Description,
+			Status:      account.Status,
 		})
 	}
 

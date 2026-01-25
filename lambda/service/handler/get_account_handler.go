@@ -53,6 +53,9 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		RoleName:    account.RoleName,
 		ExternalId:  account.ExternalId,
 		UserId:      account.UserId,
+		Name:        account.Name,
+		Description: account.Description,
+		Status:      account.Status,
 	})
 	if err != nil {
 		log.Println(err.Error())
