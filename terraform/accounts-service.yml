@@ -222,7 +222,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account Service
+        - Account
       parameters:
         - in: path
           name: accountType
@@ -254,7 +254,7 @@ paths:
       security:
         - token_workspace_auth: [ ]
       tags:
-        - Account Service
+        - Workspace
       parameters:
         - in: path
           name: uuid
@@ -297,7 +297,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account Service
+        - Workspace
       parameters:
         - in: path
           name: uuid
@@ -320,16 +320,18 @@ paths:
           $ref: '#/components/responses/Error'
   /accounts:
     post:
-      summary: Creates an external compute resource account
+      summary: Registers an external compute resource account
       description: |
-        Creates an account for an external compute resource. Such as an AWS account.
+        Registers an external compute resource (such as AWS). This method assumes that this account has a role that
+        the Pennsieve platform can assume to deploy infrastructure for the compute nodes.
+        The Pennsieve Agent handles the creation of this role.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: postAccounts
       security:
         - token_auth: [ ]
       tags:
-        - Account Service
+        - Account
       requestBody:
         description: Payload
         required: true
@@ -373,7 +375,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account Service
+        - Account
       responses:
         '200':
           description: The requested compute resource accounts
@@ -398,7 +400,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account Service
+        - Account
       parameters:
         - in: path
           name: id
@@ -420,14 +422,15 @@ paths:
     patch:
       summary: Update account details
       description: |
-        Partially update the status, name, and/or description of a specific compute resource account
+        Partially update the status, name, and/or description of a specific compute resource account. Setting the status
+        to PAUSED will disable the use of the account for analytic workflows. This does not affect storage functions.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: patchAccount
       security:
         - token_auth: [ ]
       tags:
-        - Account Service
+        - Account
       parameters:
         - in: path
           name: id
