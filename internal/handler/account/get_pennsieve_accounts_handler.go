@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 const (
@@ -29,7 +30,7 @@ func GetPennsieveAccountsHandler(ctx context.Context, request events.APIGatewayV
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
-				Body:       handlerError(handlerName, ErrConfig),
+				Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 			}, nil
 		}
 
@@ -41,7 +42,7 @@ func GetPennsieveAccountsHandler(ctx context.Context, request events.APIGatewayV
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
-				Body:       handlerError(handlerName, ErrSTS),
+				Body:       errors.HandlerError(handlerName, errors.ErrSTS),
 			}, nil
 		}
 		accountId := *req.Account
@@ -53,7 +54,7 @@ func GetPennsieveAccountsHandler(ctx context.Context, request events.APIGatewayV
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
-				Body:       handlerError(handlerName, ErrMarshaling),
+				Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 			}, nil
 		}
 		response := events.APIGatewayV2HTTPResponse{
@@ -62,10 +63,10 @@ func GetPennsieveAccountsHandler(ctx context.Context, request events.APIGatewayV
 		}
 		return response, nil
 	default:
-		log.Println(ErrUnsupportedAccountType.Error())
+		log.Println(errors.ErrUnsupportedAccountType.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusUnprocessableEntity,
-			Body:       handlerError(handlerName, ErrUnsupportedAccountType),
+			Body:       errors.HandlerError(handlerName, errors.ErrUnsupportedAccountType),
 		}, nil
 	}
 }

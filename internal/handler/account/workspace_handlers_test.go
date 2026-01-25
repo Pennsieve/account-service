@@ -1,4 +1,4 @@
-package handler_test
+package account_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/handler"
+	"github.com/pennsieve/account-service/internal/handler/account"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,7 +94,7 @@ func TestPostAccountWorkspaceEnablementHandler(t *testing.T) {
 				},
 			}
 
-			response, err := handler.PostAccountWorkspaceEnablementHandler(context.Background(), request)
+			response, err := account.PostAccountWorkspaceEnablementHandler(context.Background(), request)
 			assert.NoError(t, err, "Handler should not return error")
 			assert.Equal(t, tt.expectedStatus, response.StatusCode, "Status code mismatch")
 
@@ -167,7 +167,7 @@ func TestDeleteAccountWorkspaceEnablementHandler(t *testing.T) {
 				},
 			}
 
-			response, err := handler.DeleteAccountWorkspaceEnablementHandler(context.Background(), request)
+			response, err := account.DeleteAccountWorkspaceEnablementHandler(context.Background(), request)
 			assert.NoError(t, err, "Handler should not return error")
 			assert.Equal(t, tt.expectedStatus, response.StatusCode, "Status code mismatch")
 

@@ -22,6 +22,13 @@ resource "aws_lambda_function" "service_lambda" {
       REGION           = var.aws_region,
       ACCOUNTS_TABLE = aws_dynamodb_table.accounts_table.name
       ACCOUNT_WORKSPACE_TABLE = aws_dynamodb_table.account_workspace_table.name
+      COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
+      # ECS Configuration for compute node provisioning
+      TASK_DEF_ARN = data.terraform_remote_state.compute_node_service.outputs.task_definition_arn
+      CLUSTER_ARN = data.terraform_remote_state.compute_node_service.outputs.ecs_cluster_arn
+      SUBNET_IDS = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
+      SECURITY_GROUP = data.terraform_remote_state.compute_node_service.outputs.fargate_security_group_id
+      TASK_DEF_CONTAINER_NAME = data.terraform_remote_state.compute_node_service.outputs.task_container_name
     }
   }
 }

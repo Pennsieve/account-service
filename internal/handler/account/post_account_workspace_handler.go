@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // WorkspaceEnablementRequest contains the parameters for enabling a workspace on an account
@@ -32,7 +33,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 	if accountUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrMissingAccountUuid),
+			Body:       errors.HandlerError(handlerName, errors.ErrMissingAccountUuid),
 		}, nil
 	}
 
@@ -41,7 +42,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrUnmarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
 
@@ -54,7 +55,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 
@@ -73,21 +74,21 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
 	if account.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, ErrAccountNotFound),
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountNotFound),
 		}, nil
 	}
 
 	if account.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
-			Body:       handlerError(handlerName, ErrAccountDoesNotBelongToUser),
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountDoesNotBelongToUser),
 		}, nil
 	}
 
@@ -98,14 +99,14 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
 	if existingEnablement.AccountUuid != "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusUnprocessableEntity,
-			Body:       handlerError(handlerName, ErrAccountAlreadyEnabledForWorkspace),
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountAlreadyEnabledForWorkspace),
 		}, nil
 	}
 
@@ -123,7 +124,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
@@ -139,7 +140,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrMarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
 

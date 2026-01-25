@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 type AccountUpdateRequest struct {
@@ -29,7 +30,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if accountUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrMissingAccountUuid),
+			Body:       errors.HandlerError(handlerName, errors.ErrMissingAccountUuid),
 		}, nil
 	}
 
@@ -39,7 +40,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrUnmarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
 
@@ -47,7 +48,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if updateReq.Status != nil && *updateReq.Status != "Enabled" && *updateReq.Status != "Paused" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrInvalidStatus),
+			Body:       errors.HandlerError(handlerName, errors.ErrInvalidStatus),
 		}, nil
 	}
 	
@@ -55,7 +56,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if updateReq.Status == nil && updateReq.Name == nil && updateReq.Description == nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrUnmarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
 
@@ -67,7 +68,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 
@@ -84,7 +85,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Printf("error getting account: %v", err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
@@ -92,7 +93,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if account.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, ErrNotFound),
+			Body:       errors.HandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
 
@@ -100,7 +101,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if account.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
-			Body:       handlerError(handlerName, ErrAccountDoesNotBelongToUser),
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountDoesNotBelongToUser),
 		}, nil
 	}
 
@@ -120,7 +121,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Printf("error updating account: %v", err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
@@ -142,7 +143,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrMarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
 

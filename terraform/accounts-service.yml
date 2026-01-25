@@ -25,6 +25,8 @@ tags:
     description: Management of external accounts that can provide compute and/or storage capabilities.
     externalDocs:
       url: https://docs.pennsieve.io/reference
+  - name: Compute Nodes
+    description: Management of compute nodes for running analytical workflows on the Pennsieve platform.
 components:
   x-amazon-apigateway-integrations:
     account-service:
@@ -164,6 +166,95 @@ components:
           type: string
           format: date-time
           description: timestamp when the enablement was created
+    computeNodeRequest:
+      type: object
+      required:
+        - name
+        - account
+      properties:
+        name:
+          type: string
+          description: Name of the compute node
+        description:
+          type: string
+          description: Description of the compute node
+        account:
+          type: object
+          required:
+            - uuid
+          properties:
+            uuid:
+              type: string
+              description: UUID of the compute resource account to use
+        workflowManagerTag:
+          type: string
+          description: Docker tag for the workflow manager
+          default: latest
+    computeNodeResponse:
+      type: object
+      properties:
+        uuid:
+          type: string
+          description: UUID of the compute node
+        name:
+          type: string
+          description: Name of the compute node
+        description:
+          type: string
+          description: Description of the compute node
+        computeNodeGatewayUrl:
+          type: string
+          description: Gateway URL for the compute node
+        efsId:
+          type: string
+          description: EFS ID for the compute node storage
+        queueUrl:
+          type: string
+          description: SQS Queue URL for the compute node
+        account:
+          type: object
+          properties:
+            uuid:
+              type: string
+              description: UUID of the account
+            accountId:
+              type: string
+              description: AWS Account ID
+            accountType:
+              type: string
+              description: Type of account (e.g., aws)
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        organizationId:
+          type: string
+          description: Organization ID (workspace) this node belongs to
+        userId:
+          type: string
+          description: User ID who created this node
+        identifier:
+          type: string
+          description: Unique identifier for the compute node
+        workflowManagerTag:
+          type: string
+          description: Docker tag for the workflow manager
+    computeNodeUpdateRequest:
+      type: object
+      properties:
+        workflowManagerTag:
+          type: string
+          description: Docker tag for the workflow manager
+        workflowManagerCpu:
+          type: integer
+          description: CPU units for the workflow manager
+        workflowManagerMemory:
+          type: integer
+          description: Memory (MB) for the workflow manager
+        authorizationType:
+          type: string
+          enum: ["NONE", "AWS_IAM"]
+          description: Authorization type for the API Gateway
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -463,6 +554,175 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/accountsGetResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes:
+    post:
+      summary: Create a new compute node
+      description: |
+        Creates a new compute node for running analytical workflows. This will provision the necessary
+        infrastructure in the specified account including ECS tasks, API Gateway, EFS storage, and SQS queues.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: postComputeNodes
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: true
+          description: Node Id of the workspace to create the compute node in
+      requestBody:
+        description: Compute node configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/computeNodeRequest'
+      responses:
+        '201':
+          description: Successfully created compute node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/computeNodeResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: List compute nodes
+      description: |
+        Lists all compute nodes accessible to the user. Returns nodes from the current workspace
+        or those owned by the user depending on permissions.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getComputeNodes
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: false
+          description: Filter by workspace ID
+      responses:
+        '200':
+          description: List of compute nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/computeNodeResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}:
+    get:
+      summary: Get compute node details
+      description: |
+        Retrieves detailed information about a specific compute node
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getComputeNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Compute node details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/computeNodeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: Update compute node configuration
+      description: |
+        Updates the configuration of an existing compute node, such as workflow manager settings
+        or authorization type
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putComputeNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        description: Compute node update configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/computeNodeUpdateRequest'
+      responses:
+        '200':
+          description: Successfully updated compute node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/computeNodeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete a compute node
+      description: |
+        Deletes a compute node and all its associated infrastructure. This will terminate running tasks,
+        delete the API Gateway, EFS storage, and SQS queues.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteComputeNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node to delete
+      responses:
+        '204':
+          description: Successfully deleted compute node
+        '404':
+          $ref: '#/components/responses/NotFound'
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':
