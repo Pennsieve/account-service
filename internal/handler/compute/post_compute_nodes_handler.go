@@ -76,6 +76,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	descriptionValue := node.Description
 	wmTagKey := "WM_TAG"
 	wmTagValue := node.WorkflowManagerTag
+	statusKey := "STATUS"
+	statusValue := "Enabled" // Default status for new compute nodes
 
 	runTaskIn := &ecs.RunTaskInput{
 		TaskDefinition: aws.String(TaskDefinitionArn),
@@ -135,6 +137,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 						{
 							Name:  &wmTagKey,
 							Value: &wmTagValue,
+						},
+						{
+							Name:  &statusKey,
+							Value: &statusValue,
 						},
 					},
 				},

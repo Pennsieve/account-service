@@ -63,6 +63,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		UserId:             computeNode.UserId,
 		Identifier:         computeNode.Identifier,
 		WorkflowManagerTag: computeNode.WorkflowManagerTag,
+		Status:             computeNode.Status,
 	})
 	if err != nil {
 		log.Println(err.Error())

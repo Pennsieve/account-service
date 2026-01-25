@@ -26,6 +26,7 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			UserId:             c.UserId,
 			Identifier:         c.Identifier,
 			WorkflowManagerTag: c.WorkflowManagerTag,
+			Status:             c.Status,
 		})
 	}
 
