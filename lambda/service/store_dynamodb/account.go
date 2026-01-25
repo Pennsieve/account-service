@@ -12,6 +12,9 @@ type Account struct {
     AccountType string `dynamodbav:"accountType"`
     RoleName    string `dynamodbav:"roleName"`
     ExternalId  string `dynamodbav:"externalId"`
+    Name        string `dynamodbav:"name"`
+    Description string `dynamodbav:"description"`
+    Status      string `dynamodbav:"status"` // "Enabled" or "Paused"
 }
 
 // AccountWorkspace represents the DynamoDB record for workspace enablement on an account

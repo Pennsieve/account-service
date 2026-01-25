@@ -21,6 +21,9 @@ var ErrAccountNotFound = errors.New("account not found")
 var ErrAccountDoesNotBelongToUser = errors.New("account does not belong to user")
 var ErrWorkspaceEnablementNotFound = errors.New("workspace enablement not found")
 var ErrAccountAlreadyEnabledForWorkspace = errors.New("account already enabled for workspace")
+var ErrNotFound = errors.New("not found")
+var ErrInvalidStatus = errors.New("invalid status value")
+var ErrUnauthorized = errors.New("unauthorized")
 
 func handlerError(handlerName string, handlerError error) string {
 	return fmt.Sprintf("%s: %s", handlerName, handlerError.Error())
