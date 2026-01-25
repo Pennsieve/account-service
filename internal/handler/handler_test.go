@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 func TestHandler(t *testing.T) {
@@ -24,7 +25,7 @@ func TestHandler(t *testing.T) {
 	}
 	resp, _ := AccountServiceHandler(context.Background(), request)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	assert.Equal(t, ErrUnsupportedRoute.Error(), resp.Body)
+	assert.Equal(t, errors.ErrUnsupportedRoute.Error(), resp.Body)
 }
 
 func TestGetPennsieveAccountsHandler(t *testing.T) {

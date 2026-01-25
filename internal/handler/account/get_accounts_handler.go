@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -25,7 +26,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
@@ -47,7 +48,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
@@ -61,7 +62,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
-				Body:       handlerError(handlerName, ErrDynamoDB),
+				Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 			}, nil
 		}
 
@@ -126,7 +127,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			log.Println(err.Error())
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
-				Body:       handlerError(handlerName, ErrMarshaling),
+				Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 			}, nil
 		}
 		return events.APIGatewayV2HTTPResponse{
@@ -141,7 +142,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrMarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
 	response := events.APIGatewayV2HTTPResponse{

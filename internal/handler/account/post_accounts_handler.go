@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -23,7 +24,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrUnmarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
 
@@ -35,7 +36,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
@@ -51,7 +52,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 	
@@ -60,7 +61,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		if existingAccount.AccountId == account.AccountId {
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusUnprocessableEntity,
-				Body:       handlerError(handlerName, ErrRecordAlreadyExists),
+				Body:       errors.HandlerError(handlerName, errors.ErrRecordAlreadyExists),
 			}, nil
 		}
 	}
@@ -85,7 +86,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
@@ -96,7 +97,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrMarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
 

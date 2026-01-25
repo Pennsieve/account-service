@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -21,7 +22,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 	if accountUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrMissingAccountUuid),
+			Body:       errors.HandlerError(handlerName, errors.ErrMissingAccountUuid),
 		}, nil
 	}
 
@@ -30,7 +31,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 	if workspaceId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       handlerError(handlerName, ErrMissingWorkspaceId),
+			Body:       errors.HandlerError(handlerName, errors.ErrMissingWorkspaceId),
 		}, nil
 	}
 
@@ -42,7 +43,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 
@@ -61,21 +62,21 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
 	if account.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, ErrAccountNotFound),
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountNotFound),
 		}, nil
 	}
 
 	if account.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
-			Body:       handlerError(handlerName, ErrAccountDoesNotBelongToUser),
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountDoesNotBelongToUser),
 		}, nil
 	}
 
@@ -86,14 +87,14 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
 	if existingEnablement.AccountUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, ErrWorkspaceEnablementNotFound),
+			Body:       errors.HandlerError(handlerName, errors.ErrWorkspaceEnablementNotFound),
 		}, nil
 	}
 
@@ -105,7 +106,7 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 

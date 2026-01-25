@@ -76,9 +76,31 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       aws_dynamodb_table.accounts_table.arn,
       "${aws_dynamodb_table.accounts_table.arn}/*",
       aws_dynamodb_table.account_workspace_table.arn,
-      "${aws_dynamodb_table.account_workspace_table.arn}/*"
+      "${aws_dynamodb_table.account_workspace_table.arn}/*",
+      aws_dynamodb_table.compute_resource_nodes_table.arn,
+      "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*"
     ]
 
+  }
+
+  statement {
+    sid    = "ECSTaskPermissions"
+    effect = "Allow"
+    actions = [
+      "ecs:DescribeTasks",
+      "ecs:RunTask",
+      "ecs:ListTasks"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ECSPassRole"
+    effect = "Allow"
+    actions = [
+      "iam:PassRole",
+    ]
+    resources = ["*"]
   }
 
 }

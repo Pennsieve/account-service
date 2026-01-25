@@ -1,4 +1,4 @@
-package handler
+package account
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 )
 
 func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -23,7 +24,7 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrConfig),
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
@@ -35,14 +36,14 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrDynamoDB),
+			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
 	if (store_dynamodb.Account{}) == account {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
-			Body:       handlerError(handlerName, ErrNoRecordsFound),
+			Body:       errors.HandlerError(handlerName, errors.ErrNoRecordsFound),
 		}, nil
 	}
 
@@ -61,7 +62,7 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
-			Body:       handlerError(handlerName, ErrMarshaling),
+			Body:       errors.HandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
 	response := events.APIGatewayV2HTTPResponse{
