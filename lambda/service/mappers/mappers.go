@@ -16,6 +16,9 @@ func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account) []mod
 			RoleName:    a.RoleName,
 			ExternalId:  a.ExternalId,
 			UserId:      a.UserId,
+			Name:        a.Name,
+			Description: a.Description,
+			Status:      a.Status,
 		})
 	}
 

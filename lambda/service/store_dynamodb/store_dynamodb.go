@@ -14,6 +14,7 @@ type DynamoDBStore interface {
 	Insert(context.Context, Account) error
 	GetById(context.Context, string) (Account, error)
 	Get(context.Context, string, map[string]string) ([]Account, error)
+	Update(context.Context, Account) error
 }
 
 type AccountDatabaseStore struct {
@@ -128,4 +129,22 @@ func (r *AccountDatabaseStore) GetByUserId(ctx context.Context, userId string) (
 	}
 
 	return accounts, nil
+}
+
+func (r *AccountDatabaseStore) Update(ctx context.Context, account Account) error {
+	// Use PutItem to update the entire account record
+	item, err := attributevalue.MarshalMap(account)
+	if err != nil {
+		return fmt.Errorf("error marshaling account: %w", err)
+	}
+	
+	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(r.TableName), 
+		Item: item,
+	})
+	if err != nil {
+		return fmt.Errorf("error updating account: %w", err)
+	}
+
+	return nil
 }

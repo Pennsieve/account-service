@@ -7,6 +7,9 @@ type Account struct {
 	RoleName    string `json:"roleName"`
 	ExternalId  string `json:"externalId"`
 	UserId      string `json:"userId"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"` // "Enabled" or "Paused"
 }
 
 type AccountResponse struct {

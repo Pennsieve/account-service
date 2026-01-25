@@ -76,6 +76,9 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		AccountType: account.AccountType,
 		RoleName:    account.RoleName,
 		ExternalId:  account.ExternalId,
+		Name:        account.Name,
+		Description: account.Description,
+		Status:      "Enabled", // Default status is Enabled
 	}
 	err = accountsStore.Insert(ctx, store_account)
 	if err != nil {

@@ -87,6 +87,12 @@ components:
         externalId:
           type: string
           description: a unique identifier for the role
+        name:
+          type: string
+          description: optional name for the account
+        description:
+          type: string
+          description: optional description for the account
     pennsieveAccountsGetResponse:
       type: object
       properties:
@@ -126,6 +132,16 @@ components:
         userId:
           type: string
           description: the user that created the role for the compute resource account
+        name:
+          type: string
+          description: the name of the account
+        description:
+          type: string
+          description: the description of the account
+        status:
+          type: string
+          enum: ["Enabled", "Paused"]
+          description: the status of the account
     workspaceEnablementRequest:
       type: object
       properties:
@@ -393,6 +409,53 @@ paths:
       responses:
         '200':
           description: The requested compute resource account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountsGetResponse'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: Update account details
+      description: |
+        Partially update the status, name, and/or description of a specific compute resource account
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: patchAccount
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account Service
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The uuid of the compute resource account
+      requestBody:
+        description: Account update payload
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: ["Enabled", "Paused"]
+                  description: The new status for the account
+                name:
+                  type: string
+                  description: The new name for the account
+                description:
+                  type: string
+                  description: The new description for the account
+      responses:
+        '200':
+          description: Successfully updated account status
           content:
             application/json:
               schema:
