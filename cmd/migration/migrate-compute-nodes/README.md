@@ -20,21 +20,21 @@ These scripts help migrate compute nodes data from the old compute-node-service 
 
 ```bash
 # Build the export tool
-go build -o export ./export
+cd export && go build -o ../export-tool . && cd ..
 
 # Set environment variables and run export
 export SOURCE_COMPUTE_NODES_TABLE="dev-compute-nodes-table-use1"  # Old table name
 export OUTPUT_FILE="compute_nodes_backup.json"                     # Optional, defaults to compute_nodes_export.json
 
 # Run the export
-./export
+./export-tool
 ```
 
 ### Step 2: Import to New Table
 
 ```bash
 # Build the import tool
-go build -o import ./import
+cd import && go build -o ../import-tool . && cd ..
 
 # Set environment variables
 export TARGET_COMPUTE_NODES_TABLE="dev-compute-resource-nodes-table-use1"  # New table name
@@ -42,12 +42,12 @@ export INPUT_FILE="compute_nodes_backup.json"                              # Opt
 
 # Optional: Run a dry run first to see what would be imported
 export DRY_RUN="true"
-./import
+./import-tool
 
 # Run the actual import
 unset DRY_RUN
 export SKIP_EXISTING="true"  # Optional: skip nodes that already exist
-./import
+./import-tool
 ```
 
 ## Environment Variables
@@ -107,21 +107,25 @@ The import script automatically ensures all compute nodes have a `Status` field:
 ## Example Migration Flow
 
 ```bash
-# 1. Export from production old table
+# 1. Build tools
+cd export && go build -o ../export-tool . && cd ..
+cd import && go build -o ../import-tool . && cd ..
+
+# 2. Export from production old table
 export SOURCE_COMPUTE_NODES_TABLE="prod-compute-nodes-table-use1"
 export OUTPUT_FILE="prod_compute_nodes_backup_$(date +%Y%m%d).json"
-go run ./export
+./export-tool
 
-# 2. Test import with dry run
+# 3. Test import with dry run
 export TARGET_COMPUTE_NODES_TABLE="prod-compute-resource-nodes-table-use1"
 export INPUT_FILE="prod_compute_nodes_backup_$(date +%Y%m%d).json"
 export DRY_RUN="true"
-go run ./import
+./import-tool
 
-# 3. Perform actual import
+# 4. Perform actual import
 unset DRY_RUN
 export SKIP_EXISTING="true"
-go run ./import
+./import-tool
 ```
 
 ## Notes
