@@ -134,7 +134,11 @@ func importComputeNodes() {
 
 		if skipExisting {
 			// Use condition expression to avoid overwriting existing items
-			putItemInput.ConditionExpression = aws.String("attribute_not_exists(uuid)")
+			// Use expression attribute names because "uuid" is a DynamoDB reserved keyword
+			putItemInput.ConditionExpression = aws.String("attribute_not_exists(#uuid)")
+			putItemInput.ExpressionAttributeNames = map[string]string{
+				"#uuid": "uuid",
+			}
 		}
 
 		_, err = dynamoClient.PutItem(ctx, putItemInput)
