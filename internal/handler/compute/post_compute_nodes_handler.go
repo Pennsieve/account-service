@@ -11,10 +11,14 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/google/uuid"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/runner"
+	"github.com/pennsieve/account-service/internal/service"
+	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 )
@@ -78,6 +82,11 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	wmTagValue := node.WorkflowManagerTag
 	statusKey := "STATUS"
 	statusValue := "Enabled" // Default status for new compute nodes
+	
+	// Generate a UUID for the new node
+	nodeUuid := uuid.New().String()
+	nodeUuidKey := "NODE_UUID"
+	nodeUuidValue := nodeUuid
 
 	runTaskIn := &ecs.RunTaskInput{
 		TaskDefinition: aws.String(TaskDefinitionArn),
@@ -142,6 +151,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 							Name:  &statusKey,
 							Value: &statusValue,
 						},
+						{
+							Name:  &nodeUuidKey,
+							Value: &nodeUuidValue,
+						},
 					},
 				},
 			},
@@ -156,6 +169,27 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			StatusCode: 500,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
 		}, nil
+	}
+	
+	// Set up initial permissions for the node
+	// Default to private visibility (only owner can access)
+	dynamoDBClient := dynamodb.NewFromConfig(cfg)
+	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+	if nodeAccessTable != "" {
+		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+		permissionService := service.NewPermissionService(nodeAccessStore, nil) // No PostgreSQL in Lambda for now
+		
+		// Set initial permissions - private by default
+		permissionReq := models.NodeAccessRequest{
+			NodeUuid:    nodeUuid,
+			AccessScope: models.AccessScopePrivate,
+		}
+		
+		err = permissionService.SetNodePermissions(ctx, nodeUuid, permissionReq, userId, organizationId, userId)
+		if err != nil {
+			log.Printf("Warning: Failed to set initial permissions for node %s: %v", nodeUuid, err)
+			// Don't fail the request, but log the error
+		}
 	}
 
 	m, err := json.Marshal(models.NodeResponse{

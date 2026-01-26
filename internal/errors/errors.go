@@ -25,6 +25,17 @@ var ErrInvalidStatus = errors.New("invalid status value")
 
 // Compute-specific errors
 var ErrRunningFargateTask = errors.New("error running Rehydrate fargate task")
+var ErrMissingNodeUuid = errors.New("missing node uuid")
+var ErrMissingUserId = errors.New("missing user id")
+var ErrMissingTeamId = errors.New("missing team id")
+var ErrForbidden = errors.New("forbidden")
+var ErrOnlyOwnerCanChangePermissions = errors.New("only owner can change permissions")
+var ErrUpdatingPermissions = errors.New("error updating permissions")
+var ErrGettingPermissions = errors.New("error getting permissions")
+var ErrCheckingAccess = errors.New("error checking access")
+var ErrGrantingAccess = errors.New("error granting access")
+var ErrRevokingAccess = errors.New("error revoking access")
+var ErrCannotRevokeOwnerAccess = errors.New("cannot revoke access from owner")
 
 // Common errors used across handlers
 var ErrMarshaling = errors.New("error marshaling item")

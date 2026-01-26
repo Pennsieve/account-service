@@ -239,6 +239,14 @@ components:
         workflowManagerTag:
           type: string
           description: Docker tag for the workflow manager
+        accessScope:
+          type: string
+          enum: ["private", "workspace", "shared"]
+          description: Current access scope level of the compute node
+        status:
+          type: string
+          enum: ["Enabled", "Paused"]
+          description: Current status of the compute node
     computeNodeUpdateRequest:
       type: object
       properties:
@@ -255,6 +263,103 @@ components:
           type: string
           enum: ["NONE", "AWS_IAM"]
           description: Authorization type for the API Gateway
+    computeNodePermissionsRequest:
+      type: object
+      required:
+        - accessScope
+      properties:
+        accessScope:
+          type: string
+          enum: ["private", "workspace", "shared"]
+          description: |
+            Access scope level for the compute node:
+            - private: Only the owner can access
+            - workspace: All workspace members can access
+            - shared: Specific users and/or teams can access
+        sharedWithUsers:
+          type: array
+          items:
+            type: string
+          description: List of user IDs to share with (only used when accessScope is "shared")
+        sharedWithTeams:
+          type: array
+          items:
+            type: string
+          description: List of team IDs to share with (only used when accessScope is "shared")
+    computeNodePermissionsResponse:
+      type: object
+      properties:
+        nodeUuid:
+          type: string
+          description: UUID of the compute node
+        accessScope:
+          type: string
+          enum: ["private", "workspace", "shared"]
+          description: Current access scope level
+        owner:
+          type: string
+          description: User ID of the node owner
+        sharedWithUsers:
+          type: array
+          items:
+            type: string
+          description: List of user IDs the node is shared with
+        sharedWithTeams:
+          type: array
+          items:
+            type: string
+          description: List of team IDs the node is shared with
+        organizationId:
+          type: string
+          description: Organization ID for workspace access scope
+    computeNodeAccessScopeRequest:
+      type: object
+      required:
+        - accessScope
+      properties:
+        accessScope:
+          type: string
+          enum: ["private", "workspace", "shared"]
+          description: |
+            Access scope level for the compute node:
+            - private: Only the owner can access
+            - workspace: All workspace members can access
+            - shared: Specific users and/or teams can access (existing shared access remains)
+    grantUserAccessRequest:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+          description: ID of the user to grant access to
+    grantTeamAccessRequest:
+      type: object
+      required:
+        - teamId
+      properties:
+        teamId:
+          type: string
+          description: ID of the team to grant access to
+    permissionActionResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+        nodeUuid:
+          type: string
+          description: UUID of the compute node
+        action:
+          type: string
+          description: Action performed (granted/revoked)
+        entityType:
+          type: string
+          enum: ["user", "team"]
+          description: Type of entity the action was performed on
+        entityId:
+          type: string
+          description: ID of the entity the action was performed on
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -345,7 +450,7 @@ paths:
       security:
         - token_workspace_auth: [ ]
       tags:
-        - Workspace
+        - Account
       parameters:
         - in: path
           name: uuid
@@ -388,7 +493,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Workspace
+        - Account
       parameters:
         - in: path
           name: uuid
@@ -721,6 +826,254 @@ paths:
       responses:
         '204':
           description: Successfully deleted compute node
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/permissions:
+    get:
+      summary: Get compute node permissions
+      description: |
+        Retrieves the current permission settings for a compute node. Only accessible by users
+        who have access to the node.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getComputeNodePermissions
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Current permission settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/computeNodePermissionsResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: Set compute node access scope
+      description: |
+        Sets the access scope for a compute node. Only the owner of the node can modify the access scope.
+        
+        Access scope levels:
+        - **private**: Only the owner can access the node  
+        - **workspace**: All members of the workspace can access the node
+        - **shared**: Maintains existing user/team sharing but removes workspace access if any (use POST endpoints to add new shares)
+        
+        Note: When setting to "shared", existing individual user and team permissions are preserved.
+        Use the granular POST/DELETE endpoints on /permissions/users and /permissions/teams to manage specific access grants.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: setComputeNodeAccessScope
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        description: Access scope configuration
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/computeNodeAccessScopeRequest'
+      responses:
+        '200':
+          description: Successfully updated access scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/computeNodePermissionsResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/permissions/users:
+    post:
+      summary: Grant access to a user
+      description: |
+        Grants access to a specific user for a compute node. Only the owner of the node can grant access.
+        This will automatically set the node's access scope to "shared" if it's currently "private" or "workspace".
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: grantUserAccess
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        description: User to grant access to
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/grantUserAccessRequest'
+      responses:
+        '201':
+          description: Successfully granted access to user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/permissionActionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/permissions/users/{userId}:
+    delete:
+      summary: Revoke access from a user
+      description: |
+        Revokes access from a specific user for a compute node. Only the owner of the node can revoke access.
+        Cannot revoke access from the node owner.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: revokeUserAccess
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: The ID of the user to revoke access from
+      responses:
+        '200':
+          description: Successfully revoked access from user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/permissionActionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/permissions/teams:
+    post:
+      summary: Grant access to a team
+      description: |
+        Grants access to a specific team for a compute node. Only the owner of the node can grant access.
+        This will automatically set the node's access scope to "shared" if it's currently "private" or "workspace".
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: grantTeamAccess
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        description: Team to grant access to
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/grantTeamAccessRequest'
+      responses:
+        '201':
+          description: Successfully granted access to team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/permissionActionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/permissions/teams/{teamId}:
+    delete:
+      summary: Revoke access from a team
+      description: |
+        Revokes access from a specific team for a compute node. Only the owner of the node can revoke access.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: revokeTeamAccess
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+          description: The ID of the team to revoke access from
+      responses:
+        '200':
+          description: Successfully revoked access from team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/permissionActionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '4XX':
