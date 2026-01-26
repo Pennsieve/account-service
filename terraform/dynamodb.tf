@@ -81,9 +81,20 @@ resource "aws_dynamodb_table" "compute_resource_nodes_table" {
     type = "S"
   }
   
+  attribute {
+    name = "accountUuid"
+    type = "S"
+  }
+  
   global_secondary_index {
     name            = "organizationId-index"
     hash_key        = "organizationId"
+    projection_type = "ALL"
+  }
+  
+  global_secondary_index {
+    name            = "accountUuid-index"
+    hash_key        = "accountUuid"
     projection_type = "ALL"
   }
   

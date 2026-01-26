@@ -514,7 +514,7 @@ paths:
       summary: Update account details
       description: |
         Partially update the status, name, and/or description of a specific compute resource account. Setting the status
-        to PAUSED will disable the use of the account for analytic workflows. This does not affect storage functions.
+        to PAUSED will disable the use of the account for analytic workflows and all compute nodes on this account. This does not affect storage functions.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: patchAccount
