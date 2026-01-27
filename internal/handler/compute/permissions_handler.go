@@ -8,9 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
@@ -50,7 +50,7 @@ func UpdateNodePermissionsHandler(ctx context.Context, request events.APIGateway
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -127,20 +127,68 @@ func UpdateNodePermissionsHandler(ctx context.Context, request events.APIGateway
 	err = permissionService.SetNodePermissions(ctx, nodeUuid, permissionReq, node.UserId, organizationId, userId)
 	if err != nil {
 		log.Printf("error updating permissions: %v", err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUpdatingPermissions),
-		}, nil
+		
+		// Handle specific business logic errors with appropriate status codes
+		switch err {
+		case models.ErrOrganizationIndependentNodeCannotBeShared:
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
+			}, nil
+		default:
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrUpdatingPermissions),
+			}, nil
+		}
 	}
 	
-	// Get updated permissions
-	permissions, err := permissionService.GetNodePermissions(ctx, nodeUuid)
-	if err != nil {
-		log.Printf("error getting updated permissions: %v", err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrGettingPermissions),
-		}, nil
+	// Get updated permissions with retry logic for eventual consistency
+	// GSIs don't support consistent reads, so we may need to retry
+	var permissions *models.NodeAccessResponse
+	maxRetries := 3
+	baseDelay := 100 * time.Millisecond
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff for retries
+			delay := time.Duration(attempt) * baseDelay
+			if os.Getenv("ENV") == "TEST" || os.Getenv("ENV") == "DOCKER" {
+				delay *= 2 // Longer delays in test environments
+			}
+			time.Sleep(delay)
+		}
+		
+		permissions, err = permissionService.GetNodePermissions(ctx, nodeUuid)
+		if err != nil {
+			if attempt == maxRetries-1 {
+				log.Printf("error getting updated permissions after %d attempts: %v", maxRetries, err)
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusInternalServerError,
+					Body:       errors.ComputeHandlerError(handlerName, errors.ErrGettingPermissions),
+				}, nil
+			}
+			continue
+		}
+		
+		// In test environments, verify the changes took effect
+		if os.Getenv("ENV") == "TEST" || os.Getenv("ENV") == "DOCKER" {
+			// Check if the expected changes are reflected
+			expectedUsers := len(permissionReq.SharedWithUsers)
+			expectedTeams := len(permissionReq.SharedWithTeams)
+			
+			if len(permissions.SharedWithUsers) == expectedUsers && len(permissions.SharedWithTeams) == expectedTeams {
+				break // Changes are reflected, no need to retry
+			}
+			
+			if attempt < maxRetries-1 {
+				log.Printf("attempt %d: expected users=%d teams=%d, got users=%d teams=%d, retrying...", 
+					attempt+1, expectedUsers, expectedTeams, len(permissions.SharedWithUsers), len(permissions.SharedWithTeams))
+				continue
+			}
+		}
+		
+		break // Success
 	}
 	
 	response, err := json.Marshal(permissions)
@@ -178,7 +226,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

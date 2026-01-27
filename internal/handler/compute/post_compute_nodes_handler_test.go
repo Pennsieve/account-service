@@ -102,16 +102,86 @@ func createTestTables(client *dynamodb.Client, testName string) error {
 		return err
 	}
 
+	// Create node access table with GSIs
+	nodeAccessTableName := "test-node-access-" + testName + "-" + timestamp
+	_, err = client.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+		AttributeDefinitions: []types.AttributeDefinition{
+			{
+				AttributeName: aws.String("entityId"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
+			{
+				AttributeName: aws.String("nodeId"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
+			{
+				AttributeName: aws.String("organizationId"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
+		},
+		KeySchema: []types.KeySchemaElement{
+			{
+				AttributeName: aws.String("entityId"),
+				KeyType:       types.KeyTypeHash,
+			},
+			{
+				AttributeName: aws.String("nodeId"),
+				KeyType:       types.KeyTypeRange,
+			},
+		},
+		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
+			{
+				IndexName: aws.String("nodeId-entityId-index"),
+				KeySchema: []types.KeySchemaElement{
+					{
+						AttributeName: aws.String("nodeId"),
+						KeyType:       types.KeyTypeHash,
+					},
+					{
+						AttributeName: aws.String("entityId"),
+						KeyType:       types.KeyTypeRange,
+					},
+				},
+				Projection: &types.Projection{
+					ProjectionType: types.ProjectionTypeAll,
+				},
+			},
+			{
+				IndexName: aws.String("organizationId-nodeId-index"),
+				KeySchema: []types.KeySchemaElement{
+					{
+						AttributeName: aws.String("organizationId"),
+						KeyType:       types.KeyTypeHash,
+					},
+					{
+						AttributeName: aws.String("nodeId"),
+						KeyType:       types.KeyTypeRange,
+					},
+				},
+				Projection: &types.Projection{
+					ProjectionType: types.ProjectionTypeAll,
+				},
+			},
+		},
+		TableName:   aws.String(nodeAccessTableName),
+		BillingMode: types.BillingModePayPerRequest,
+	})
+	if err != nil {
+		return err
+	}
+
 	// Set environment variables
 	os.Setenv("ACCOUNTS_TABLE", accountsTableName)
 	os.Setenv("COMPUTE_NODES_TABLE", computeNodesTableName)
 	os.Setenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE", workspaceEnablementsTableName)
+	os.Setenv("NODE_ACCESS_TABLE", nodeAccessTableName)
 
 	// Wait for tables to be ready
 	waiter := dynamodb.NewTableExistsWaiter(client)
 	waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{TableName: aws.String(accountsTableName)}, 30*time.Second)
 	waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{TableName: aws.String(computeNodesTableName)}, 30*time.Second)
 	waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{TableName: aws.String(workspaceEnablementsTableName)}, 30*time.Second)
+	waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{TableName: aws.String(nodeAccessTableName)}, 30*time.Second)
 
 	return nil
 }
@@ -206,20 +276,53 @@ func TestPostComputeNodesHandler_MissingAccountUuid(t *testing.T) {
 }
 
 func TestPostComputeNodesHandler_OrganizationIndependentNode_Success(t *testing.T) {
-	t.Skip("Integration test - requires full AWS infrastructure setup")
+	client, err := setupTestClient()
+	require.NoError(t, err)
+
+	err = createTestTables(client, "OrganizationIndependentNode_Success")
+	require.NoError(t, err)
+
+	// Set environment variables
+	os.Setenv("ENV", "TEST")
+
+	defer func() {
+		os.Unsetenv("ENV")
+		os.Unsetenv("ACCOUNTS_TABLE")
+		os.Unsetenv("COMPUTE_NODES_TABLE")
+		os.Unsetenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
+		os.Unsetenv("NODE_ACCESS_TABLE")
+	}()
+
+	// Create test account
+	accountStore := store_dynamodb.NewAccountDatabaseStore(client, os.Getenv("ACCOUNTS_TABLE"))
+	testAccount := store_dynamodb.Account{
+		Uuid:        "account-123",
+		AccountId:   "123456789",
+		AccountType: "aws",
+		UserId:      "user-123",
+		RoleName:    "test-role",
+		ExternalId:  "ext-123",
+		Name:        "Test Account",
+		Status:      "Enabled",
+	}
+	err = accountStore.Insert(context.Background(), testAccount)
+	require.NoError(t, err)
+
+	// Create organization-independent node (no organizationId)
+	node := createTestNodeRequest("account-123", "") // Empty organizationId
+	request := createTestAPIRequest("POST", "user-123", "", node)
 	
-	// This test validates:
-	// - Creating organization-independent nodes (without organizationId)
-	// - Proper account ownership validation
-	// - Node creation with real DynamoDB integration
-	// 
-	// To make this work, we would need to:
-	// 1. Mock AWS credentials properly in the test environment
-	// 2. Set up all required AWS services (ECS, API Gateway, etc.)
-	// 3. Configure the full infrastructure stack
-	//
-	// For now, we have unit tests that verify the validation logic,
-	// and this integration test documents the full workflow.
+	response, err := PostComputeNodesHandler(context.Background(), request)
+	
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, response.StatusCode)
+	
+	var responseNode models.Node
+	err = json.Unmarshal([]byte(response.Body), &responseNode)
+	assert.NoError(t, err)
+	assert.Equal(t, "Test Node", responseNode.Name)
+	assert.Equal(t, "", responseNode.OrganizationId) // Organization-independent
+	assert.Equal(t, "user-123", responseNode.UserId)
 }
 
 func TestPostComputeNodesHandler_PrivateAccount_OnlyOwnerCanCreate(t *testing.T) {

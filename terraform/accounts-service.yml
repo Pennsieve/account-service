@@ -706,13 +706,29 @@ paths:
     get:
       summary: List compute nodes
       description: |
-        Lists all compute nodes accessible to the user. Returns nodes from the current workspace
-        or those owned by the user depending on permissions.
+        Lists compute nodes accessible to the authenticated user based on access control rules:
+        
+        **When account_owner=true:**
+        - Returns ALL compute nodes on accounts owned by the authenticated user
+        - Bypasses individual node permissions and workspace filtering
+        - Only works if the user owns at least one compute resource account
+        - Useful for billing, management, and auditing purposes
+        
+        **When no organization_id is provided (normal mode):**
+        - Returns only compute nodes owned by the user (organization-independent nodes)
+        - These are private nodes created without a workspace context
+        
+        **When organization_id is provided (normal mode):**
+        - Returns nodes accessible to the user within that specific workspace
+        - Includes nodes shared with the user directly, through teams, or workspace-wide access
+        - Only returns nodes that belong to the specified organization
+        
+        All responses (except account owner mode) respect the user's actual permissions and access control settings.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getComputeNodes
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Compute Nodes
       parameters:
@@ -721,7 +737,22 @@ paths:
           schema:
             type: string
           required: false
-          description: Filter by workspace ID
+          description: |
+            Workspace ID to filter nodes by. When provided, returns nodes accessible to the user within that workspace.
+            When omitted, returns only user-owned organization-independent (private) nodes.
+            Ignored when account_owner=true.
+        - in: query
+          name: account_owner
+          schema:
+            type: boolean
+          required: false
+          description: |
+            When set to true, returns ALL compute nodes on accounts owned by the authenticated user,
+            regardless of individual node permissions or workspace context. Only works if the user 
+            is an account owner. Overrides organization_id filtering when true.
+            
+            This is useful for account owners who need to see all infrastructure deployed 
+            on their accounts for billing, management, or auditing purposes.
       responses:
         '200':
           description: List of compute nodes

@@ -10,7 +10,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
@@ -46,13 +45,25 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 	
+	// Validate access scope value
+	switch scopeReq.AccessScope {
+	case models.AccessScopePrivate, models.AccessScopeWorkspace, models.AccessScopeShared:
+		// Valid scope, continue
+	default:
+		log.Printf("invalid access scope: %s", scopeReq.AccessScope)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidAccessScope),
+		}, nil
+	}
+	
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -280,7 +291,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -319,6 +330,14 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
+		}, nil
+	}
+	
+	// Check if organization-independent nodes cannot be shared with teams
+	if node.OrganizationId == "" && entityType == models.EntityTypeTeam {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
 		}, nil
 	}
 	
@@ -384,7 +403,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	userId := claims.UserClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

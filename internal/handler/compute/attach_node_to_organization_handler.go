@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
@@ -41,7 +40,7 @@ func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGate
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
 
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
 		log.Printf("Error loading AWS config: %v", err)
 		return events.APIGatewayV2HTTPResponse{
@@ -72,6 +71,11 @@ func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGate
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusBadRequest,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrCannotAttachNodeWithExistingOrganization),
+			}, nil
+		case errors.ErrForbidden:
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusForbidden,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
 			}, nil
 		default:
 			return events.APIGatewayV2HTTPResponse{
