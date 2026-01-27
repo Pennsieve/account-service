@@ -14,7 +14,7 @@ type Node struct {
 	QueueUrl              string        `json:"queueUrl"`
 	Account               NodeAccount   `json:"account"`
 	CreatedAt             string        `json:"createdAt"`
-	OrganizationId        string        `json:"organizationId"`
+	OrganizationId        string        `json:"organizationId,omitempty"` // Optional - empty string means organization-independent
 	UserId                string        `json:"userId"`
 	Identifier            string        `json:"identifier"`
 	WorkflowManagerTag    string        `json:"workflowManagerTag"`

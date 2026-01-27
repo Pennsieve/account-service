@@ -36,6 +36,13 @@ var ErrCheckingAccess = errors.New("error checking access")
 var ErrGrantingAccess = errors.New("error granting access")
 var ErrRevokingAccess = errors.New("error revoking access")
 var ErrCannotRevokeOwnerAccess = errors.New("cannot revoke access from owner")
+var ErrOrganizationIndependentNodeCannotBeShared = errors.New("organization-independent nodes cannot be shared")
+var ErrCannotAttachNodeWithExistingOrganization = errors.New("cannot attach node that already belongs to an organization")
+var ErrAccountNotEnabledForWorkspace = errors.New("account is not enabled for this workspace")
+var ErrOnlyAccountOwnerCanCreateNodes = errors.New("only the account owner can create nodes on private accounts")
+var ErrOnlyWorkspaceAdminsCanCreateNodes = errors.New("only workspace administrators can create nodes on public accounts")
+var ErrOnlyAccountOwnerCanDetachNodes = errors.New("only the account owner can detach nodes")
+var ErrBadRequest = errors.New("bad request")
 
 // Common errors used across handlers
 var ErrMarshaling = errors.New("error marshaling item")

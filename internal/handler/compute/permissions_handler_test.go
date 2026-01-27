@@ -19,7 +19,18 @@ func createTestRequestContext(method, userId, organizationId string) events.APIG
 		},
 		Authorizer: &events.APIGatewayV2HTTPRequestContextAuthorizerDescription{
 			Lambda: map[string]interface{}{
-				"user_node_id": userId,
+				"user_claim": map[string]interface{}{
+					"Id":           float64(123),
+					"NodeId":       userId,
+					"IsSuperAdmin": false,
+				},
+				"org_claim": map[string]interface{}{
+					"NodeId": organizationId,
+					"IntId":  float64(456),
+					"Role":   float64(16), // Admin role as numeric value
+				},
+				"iat": float64(1640995200),
+				"exp": float64(1640998800),
 				"organization_node_id": organizationId,
 			},
 		},

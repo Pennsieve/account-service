@@ -10,6 +10,8 @@ The Account Service provides REST API endpoints for:
 - Managing account metadata and configurations
 - Querying Pennsieve platform AWS account details
 - Enabling and disabling workspaces for compute resource accounts
+- Managing compute node creation and permissions
+- Controlling access to compute resources through organization-based permissions
 
 ## Architecture
 
@@ -30,6 +32,87 @@ This service is built as a serverless application using:
 | `GET` | `/accounts/{id}` | Retrieve specific account by ID |
 | `POST` | `/accounts/{uuid}/workspaces` | Enable a workspace for an account |
 | `DELETE` | `/accounts/{uuid}/workspaces/{workspaceId}` | Disable a workspace for an account |
+| `POST` | `/compute-nodes` | Create a new compute node |
+| `GET` | `/compute-nodes` | List compute nodes |
+| `GET` | `/compute-nodes/{id}` | Get compute node details |
+| `DELETE` | `/compute-nodes/{id}` | Delete a compute node |
+| `GET` | `/compute-nodes/{id}/permissions` | Get node permissions |
+| `PUT` | `/compute-nodes/{id}/permissions` | Set node access scope |
+| `POST` | `/compute-nodes/{id}/permissions/users` | Grant user access |
+| `DELETE` | `/compute-nodes/{id}/permissions/users/{userId}` | Revoke user access |
+| `POST` | `/compute-nodes/{id}/permissions/teams` | Grant team access |
+| `DELETE` | `/compute-nodes/{id}/permissions/teams/{teamId}` | Revoke team access |
+| `POST` | `/compute-nodes/{id}/organization` | Attach node to organization |
+| `DELETE` | `/compute-nodes/{id}/organization` | Detach node from organization |
+
+## Permission Structure
+
+### Account Permissions
+
+Accounts are owned by individual users and can be enabled for use within workspaces with two permission models:
+
+#### Private Accounts (`isPublic: false`)
+- **Creation**: Only the account owner can create compute nodes
+- **Management**: Account owner has full control
+- **Use Case**: Personal or restricted compute resources
+
+#### Public/Managed Accounts (`isPublic: true`)
+- **Creation**: Workspace administrators (permission_bit >= 16) can create compute nodes
+- **Management**: Account owner maintains full control over the account
+- **Use Case**: Shared team resources where admins can provision compute nodes
+
+### Compute Node Permissions
+
+Compute nodes have a hierarchical permission system with different access levels:
+
+#### Node Ownership
+- **Creator becomes owner**: The user who creates a compute node becomes its owner
+- **Owner privileges**: Only the owner can:
+  - Grant/revoke access to other users and teams
+  - Change the node's access scope
+  - Attach/detach the node from organizations
+  - Delete the node
+
+#### Access Scopes
+Nodes can have three access scopes that determine visibility:
+
+| Scope | Description | Who Can Access |
+|-------|-------------|----------------|
+| **Private** | Node is only accessible to the owner | Owner only |
+| **Workspace** | Node is accessible to all workspace members | Owner + all workspace members |
+| **Shared** | Node is accessible to specific users/teams | Owner + explicitly granted users/teams |
+
+#### Organization Attachment
+- **Organization-Independent Nodes**: Created without an organization, always private, cannot be shared
+- **Organization-Attached Nodes**: Can be shared within the organization based on access scope
+- **Attachment Rules**:
+  - Only the owner can attach/detach nodes from organizations
+  - Nodes already attached to an organization cannot be attached to another
+  - Detaching a node removes all shared access and makes it private
+
+### Permission Hierarchy
+
+```
+Workspace Organization
+├── Administrators (permission_bit >= 16)
+│   ├── Can create nodes on public accounts
+│   └── Can access workspace-scoped nodes
+├── Collaborators (permission_bit >= 8)
+│   └── Can access workspace-scoped nodes
+└── Compute Nodes
+    ├── Owner (creator)
+    │   └── Full control over node
+    ├── Workspace Members
+    │   └── Access if scope = workspace
+    └── Shared Users/Teams
+        └── Access if explicitly granted
+```
+
+### PostgreSQL Permission Bits
+The system uses PostgreSQL `organization_user` table to determine workspace roles:
+- **permission_bit >= 16**: Administrator (can create nodes on public accounts)
+- **permission_bit >= 8**: Collaborator or higher (can access workspace nodes)
+- **permission_bit < 8**: No compute node access
 
 ### Request/Response Models
 
@@ -68,6 +151,45 @@ This service is built as a serverless application using:
   "workspaceId": "string",
   "isPublic": true,  // indicates whether workspace managers can create compute nodes on this account
   "createdAt": "2024-01-01T00:00:00Z"
+}
+```
+
+#### Compute Node Model
+```json
+{
+  "uuid": "string",
+  "name": "string",
+  "description": "string",
+  "account": {
+    "uuid": "string",
+    "accountId": "string",
+    "accountType": "string"
+  },
+  "organizationId": "string",  // Optional - empty for organization-independent nodes
+  "userId": "string",           // Owner of the node
+  "status": "string",
+  "workflowManagerTag": "string"
+}
+```
+
+#### Node Permissions Response
+```json
+{
+  "nodeUuid": "string",
+  "accessScope": "private|workspace|shared",
+  "organizationIndependent": false,
+  "users": [
+    {
+      "userId": "string",
+      "accessType": "owner|shared"
+    }
+  ],
+  "teams": [
+    {
+      "teamId": "string",
+      "accessType": "shared"
+    }
+  ]
 }
 ```
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_postgres"
 	"github.com/stretchr/testify/assert"
@@ -551,5 +552,352 @@ func TestPermissionService_GetNodePermissions_PrivateScope(t *testing.T) {
 	assert.Len(t, permissions.SharedWithUsers, 0)
 	assert.Len(t, permissions.SharedWithTeams, 0)
 
+	mockNodeStore.AssertExpectations(t)
+}
+
+// Tests for organization-independent nodes
+func TestPermissionService_CheckNodeAccess_OrganizationIndependentNode(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	userId := "user-123"
+	nodeUuid := "node-456"
+	organizationId := "" // Organization-independent node
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Mock direct user access - this is the only way to access organization-independent nodes
+	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(true, nil)
+
+	hasAccess, err := service.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
+
+	assert.NoError(t, err)
+	assert.True(t, hasAccess)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_CheckNodeAccess_OrganizationIndependentNode_NoAccess(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	userId := "user-123"
+	nodeUuid := "node-456"
+	organizationId := "" // Organization-independent node
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Mock no direct user access - should stop here for organization-independent nodes
+	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
+
+	hasAccess, err := service.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
+
+	assert.NoError(t, err)
+	assert.False(t, hasAccess)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_SetNodePermissions_OrganizationIndependentValidation(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	ownerId := "owner-456"
+	organizationId := "" // Organization-independent
+	grantedBy := "admin-user"
+
+	// Test that workspace scope is rejected for organization-independent nodes
+	req := models.NodeAccessRequest{
+		NodeUuid:    nodeUuid,
+		AccessScope: models.AccessScopeWorkspace,
+	}
+
+	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
+
+	// Should return validation error
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "organization-independent")
+}
+
+func TestPermissionService_SetNodePermissions_OrganizationIndependentSharedRejected(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	ownerId := "owner-456"
+	organizationId := "" // Organization-independent
+	grantedBy := "admin-user"
+
+	// Test that shared scope is rejected for organization-independent nodes
+	req := models.NodeAccessRequest{
+		NodeUuid:        nodeUuid,
+		AccessScope:     models.AccessScopeShared,
+		SharedWithUsers: []string{"user-1"},
+	}
+
+	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
+
+	// Should return validation error
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "organization-independent")
+}
+
+func TestPermissionService_SetNodePermissions_OrganizationIndependentPrivateAllowed(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	ownerId := "owner-456"
+	organizationId := "" // Organization-independent
+	grantedBy := "admin-user"
+
+	req := models.NodeAccessRequest{
+		NodeUuid:    nodeUuid,
+		AccessScope: models.AccessScopePrivate, // This should be allowed
+	}
+
+	// Mock current access (only owner)
+	currentAccess := []models.NodeAccess{
+		{
+			EntityId:       models.FormatEntityId(models.EntityTypeUser, ownerId),
+			NodeId:         models.FormatNodeId(nodeUuid),
+			AccessType:     models.AccessTypeOwner,
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    ownerId,
+			OrganizationId: "", // Organization-independent
+		},
+	}
+	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
+
+	// No changes needed for private scope with only owner
+
+	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
+
+	assert.NoError(t, err)
+	mockNodeStore.AssertExpectations(t)
+}
+
+// Tests for AttachNodeToOrganization
+func TestPermissionService_AttachNodeToOrganization_Success(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	organizationId := "org-456"
+	userId := "user-789"
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Mock user has access to the node
+	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(true, nil)
+
+	// Mock current access (organization-independent owner)
+	currentAccess := []models.NodeAccess{
+		{
+			EntityId:       userEntityId,
+			NodeId:         nodeId,
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    userId,
+			AccessType:     models.AccessTypeOwner,
+			OrganizationId: "", // Organization-independent
+		},
+	}
+	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
+
+	// Mock removing old access and granting new access
+	mockNodeStore.On("RevokeAccess", ctx, userEntityId, nodeId).Return(nil)
+	mockNodeStore.On("GrantAccess", ctx, mock.MatchedBy(func(access models.NodeAccess) bool {
+		return access.EntityId == userEntityId &&
+			access.OrganizationId == organizationId &&
+			access.AccessType == models.AccessTypeOwner
+	})).Return(nil)
+
+	err := service.AttachNodeToOrganization(ctx, nodeUuid, organizationId, userId)
+
+	assert.NoError(t, err)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_AttachNodeToOrganization_UserNotOwner(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	organizationId := "org-456"
+	userId := "user-789"
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Mock user does not have access to the node
+	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
+
+	err := service.AttachNodeToOrganization(ctx, nodeUuid, organizationId, userId)
+
+	assert.Error(t, err)
+	assert.Equal(t, errors.ErrForbidden, err)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_AttachNodeToOrganization_NodeAlreadyHasOrganization(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	organizationId := "org-456"
+	userId := "user-789"
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Mock user has access to the node
+	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(true, nil)
+
+	// Mock current access (already has organization)
+	currentAccess := []models.NodeAccess{
+		{
+			EntityId:       userEntityId,
+			NodeId:         nodeId,
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    userId,
+			AccessType:     models.AccessTypeOwner,
+			OrganizationId: "existing-org", // Already has organization
+		},
+	}
+	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
+
+	err := service.AttachNodeToOrganization(ctx, nodeUuid, organizationId, userId)
+
+	assert.Error(t, err)
+	assert.Equal(t, models.ErrCannotAttachNodeWithExistingOrganization, err)
+	mockNodeStore.AssertExpectations(t)
+}
+
+// Tests for DetachNodeFromOrganization
+func TestPermissionService_DetachNodeFromOrganization_Success(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	userId := "user-789"
+
+	nodeId := models.FormatNodeId(nodeUuid)
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+
+	// Mock current access (has organization and multiple access entries)
+	currentAccess := []models.NodeAccess{
+		{
+			EntityId:       userEntityId,
+			NodeId:         nodeId,
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    userId,
+			AccessType:     models.AccessTypeOwner,
+			OrganizationId: "org-456",
+		},
+		{
+			EntityId:       models.FormatEntityId(models.EntityTypeWorkspace, "org-456"),
+			NodeId:         nodeId,
+			EntityType:     models.EntityTypeWorkspace,
+			EntityRawId:    "org-456",
+			AccessType:     models.AccessTypeWorkspace,
+			OrganizationId: "org-456",
+		},
+		{
+			EntityId:       models.FormatEntityId(models.EntityTypeUser, "shared-user"),
+			NodeId:         nodeId,
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    "shared-user",
+			AccessType:     models.AccessTypeShared,
+			OrganizationId: "org-456",
+		},
+	}
+	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
+
+	// Mock removing all current access entries
+	for _, access := range currentAccess {
+		mockNodeStore.On("RevokeAccess", ctx, access.EntityId, nodeId).Return(nil)
+	}
+
+	// Mock granting new organization-independent owner access
+	mockNodeStore.On("GrantAccess", ctx, mock.MatchedBy(func(access models.NodeAccess) bool {
+		return access.EntityId == userEntityId &&
+			access.OrganizationId == "" &&
+			access.AccessType == models.AccessTypeOwner &&
+			access.EntityRawId == userId
+	})).Return(nil)
+
+	err := service.DetachNodeFromOrganization(ctx, nodeUuid, userId)
+
+	assert.NoError(t, err)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_DetachNodeFromOrganization_NodeAlreadyIndependent(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	userId := "user-789"
+
+	nodeId := models.FormatNodeId(nodeUuid)
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+
+	// Mock current access (already organization-independent)
+	currentAccess := []models.NodeAccess{
+		{
+			EntityId:       userEntityId,
+			NodeId:         nodeId,
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    userId,
+			AccessType:     models.AccessTypeOwner,
+			OrganizationId: "", // Already organization-independent
+		},
+	}
+	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
+
+	err := service.DetachNodeFromOrganization(ctx, nodeUuid, userId)
+
+	assert.Error(t, err)
+	assert.Equal(t, models.ErrOrganizationIndependentNodeCannotBeShared, err)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_DetachNodeFromOrganization_NoOwnerFound(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+
+	ctx := context.Background()
+	nodeUuid := "node-123"
+	userId := "user-789"
+
+	// Mock current access (no owner found - invalid state)
+	currentAccess := []models.NodeAccess{
+		{
+			EntityId:       models.FormatEntityId(models.EntityTypeUser, "other-user"),
+			NodeId:         models.FormatNodeId(nodeUuid),
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    "other-user",
+			AccessType:     models.AccessTypeShared,
+			OrganizationId: "org-456",
+		},
+	}
+	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
+
+	err := service.DetachNodeFromOrganization(ctx, nodeUuid, userId)
+
+	assert.Error(t, err)
+	assert.Equal(t, errors.ErrNotFound, err)
 	mockNodeStore.AssertExpectations(t)
 }

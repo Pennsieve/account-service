@@ -229,7 +229,7 @@ components:
           description: Creation timestamp
         organizationId:
           type: string
-          description: Organization ID (workspace) this node belongs to
+          description: Organization ID (workspace) this node belongs to. Empty for organization-independent nodes.
         userId:
           type: string
           description: User ID who created this node
@@ -669,11 +669,13 @@ paths:
       description: |
         Creates a new compute node for running analytical workflows. This will provision the necessary
         infrastructure in the specified account including ECS tasks, API Gateway, EFS storage, and SQS queues.
+        If organization_id is provided, the node will be created within that workspace context.
+        If organization_id is omitted, an organization-independent (private) node will be created.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: postComputeNodes
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Compute Nodes
       parameters:
@@ -681,8 +683,8 @@ paths:
           name: organization_id
           schema:
             type: string
-          required: true
-          description: Node Id of the workspace to create the compute node in
+          required: false
+          description: Node Id of the workspace to create the compute node in. If omitted, creates an organization-independent (private) node.
       requestBody:
         description: Compute node configuration
         required: true
@@ -1072,6 +1074,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/permissionActionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/organization:
+    post:
+      summary: Attach node to organization
+      description: |
+        Attaches an organization-independent compute node to an organization. 
+        The user must have Collaborator or higher access to the target organization.
+        Once attached, the node can be shared with other organization members.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: attachNodeToOrganization
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node to attach
+        - in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+          description: The organization ID to attach the node to
+      responses:
+        '200':
+          description: Successfully attached node to organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/permissionActionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Detach node from organization
+      description: |
+        Detaches a compute node from its organization, making it organization-independent 
+        and private again. Only the account owner can detach nodes. All shared access
+        (users, teams, workspace) will be removed, and the node becomes private to the owner.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: detachNodeFromOrganization
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node to detach
+      responses:
+        '200':
+          description: Successfully detached node from organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/permissionActionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':

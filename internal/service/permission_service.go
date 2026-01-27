@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
@@ -23,6 +24,7 @@ func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamSt
 }
 
 // CheckNodeAccess checks if a user has access to a compute node
+// For organization-independent nodes, only direct user access (owner) is checked
 func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUuid, organizationId string) (bool, error) {
 	nodeId := models.FormatNodeId(nodeUuid)
 	
@@ -36,7 +38,12 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 		return true, nil
 	}
 	
-	// 2. Check workspace-wide access
+	// For organization-independent nodes, stop here (only owner access allowed)
+	if organizationId == "" {
+		return false, nil
+	}
+	
+	// 2. Check workspace-wide access (only for organization-bound nodes)
 	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
 	hasAccess, err = s.NodeAccessStore.HasAccess(ctx, workspaceEntityId, nodeId)
 	if err != nil {
@@ -46,7 +53,7 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 		return true, nil
 	}
 	
-	// 3. Check team access (if TeamStore is available)
+	// 3. Check team access (only for organization-bound nodes)
 	if s.TeamStore != nil {
 		userIdInt, err := strconv.ParseInt(userId, 10, 64)
 		if err == nil {
@@ -130,8 +137,16 @@ func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, orga
 }
 
 // SetNodePermissions updates the permissions for a node
+// For organization-independent nodes, only private access is allowed
 func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid string, req models.NodeAccessRequest, ownerId, organizationId, grantedBy string) error {
 	nodeId := models.FormatNodeId(nodeUuid)
+	
+	// Validate request for organization-independent nodes
+	if organizationId == "" {
+		if err := req.ValidateForOrganizationIndependent(); err != nil {
+			return err
+		}
+	}
 	
 	// First, get current access to determine what needs to be removed
 	currentAccess, err := s.NodeAccessStore.GetNodeAccess(ctx, nodeUuid)
@@ -307,5 +322,120 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 		}
 	}
 	
+	// Set organization independent flag
+	response.OrganizationIndependent = response.IsOrganizationIndependent()
+	
 	return response, nil
+}
+
+// AttachNodeToOrganization attaches an organization-independent node to an organization
+// This allows the node to be shared with users and teams within the organization
+func (s *PermissionService) AttachNodeToOrganization(ctx context.Context, nodeUuid, organizationId, userId string) error {
+	// First, check if the user is the owner of the node
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+	
+	hasAccess, err := s.NodeAccessStore.HasAccess(ctx, userEntityId, nodeId)
+	if err != nil {
+		return fmt.Errorf("error checking user access: %w", err)
+	}
+	if !hasAccess {
+		return errors.ErrForbidden
+	}
+	
+	// Get current access to verify node is organization-independent
+	currentAccess, err := s.NodeAccessStore.GetNodeAccess(ctx, nodeUuid)
+	if err != nil {
+		return fmt.Errorf("error getting current access: %w", err)
+	}
+	
+	// Find owner access to check if node is organization-independent
+	var ownerAccess *models.NodeAccess
+	for _, access := range currentAccess {
+		if access.EntityType == models.EntityTypeUser && access.AccessType == models.AccessTypeOwner && access.EntityRawId == userId {
+			ownerAccess = &access
+			break
+		}
+	}
+	
+	if ownerAccess == nil {
+		return errors.ErrForbidden // User is not the owner
+	}
+	
+	if !ownerAccess.IsOrganizationIndependent() {
+		return models.ErrCannotAttachNodeWithExistingOrganization
+	}
+	
+	// Update the owner's access entry to include the organization
+	updatedOwnerAccess := *ownerAccess
+	updatedOwnerAccess.OrganizationId = organizationId
+	
+	// Remove old access and grant new access with organization
+	err = s.NodeAccessStore.RevokeAccess(ctx, ownerAccess.EntityId, nodeId)
+	if err != nil {
+		return fmt.Errorf("error removing old access: %w", err)
+	}
+	
+	err = s.NodeAccessStore.GrantAccess(ctx, updatedOwnerAccess)
+	if err != nil {
+		return fmt.Errorf("error granting new access with organization: %w", err)
+	}
+	
+	return nil
+}
+
+// DetachNodeFromOrganization detaches a compute node from its organization, making it organization-independent (private)
+// Note: The handler should verify the user is the account owner before calling this
+func (s *PermissionService) DetachNodeFromOrganization(ctx context.Context, nodeUuid, userId string) error {
+	nodeId := models.FormatNodeId(nodeUuid)
+	
+	// Get current access to verify node has an organization
+	currentAccess, err := s.NodeAccessStore.GetNodeAccess(ctx, nodeUuid)
+	if err != nil {
+		return fmt.Errorf("error getting current access: %w", err)
+	}
+	
+	// Find the owner access entry to check if node has an organization
+	var ownerAccess *models.NodeAccess
+	for _, access := range currentAccess {
+		if access.EntityType == models.EntityTypeUser && access.AccessType == models.AccessTypeOwner {
+			ownerAccess = &access
+			break
+		}
+	}
+	
+	if ownerAccess == nil {
+		return errors.ErrNotFound // No owner found - invalid state
+	}
+	
+	if ownerAccess.IsOrganizationIndependent() {
+		return models.ErrOrganizationIndependentNodeCannotBeShared // Node is already organization-independent
+	}
+	
+	// Remove all current access entries (they all have organizationId)
+	for _, access := range currentAccess {
+		err = s.NodeAccessStore.RevokeAccess(ctx, access.EntityId, nodeId)
+		if err != nil {
+			return fmt.Errorf("error removing access entry: %w", err)
+		}
+	}
+	
+	// Grant new owner access without organization (making it organization-independent and private)
+	newOwnerAccess := models.NodeAccess{
+		EntityId:       ownerAccess.EntityId,
+		NodeId:         nodeId,
+		EntityType:     models.EntityTypeUser,
+		EntityRawId:    ownerAccess.EntityRawId, // Use the original owner's ID
+		NodeUuid:       nodeUuid,
+		AccessType:     models.AccessTypeOwner,
+		OrganizationId: "", // No organization - this makes it organization-independent
+		GrantedBy:      ownerAccess.EntityRawId, // Owner is granting to themselves
+	}
+	
+	err = s.NodeAccessStore.GrantAccess(ctx, newOwnerAccess)
+	if err != nil {
+		return fmt.Errorf("error granting new organization-independent access: %w", err)
+	}
+	
+	return nil
 }

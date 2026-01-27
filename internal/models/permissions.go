@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"time"
 	
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -33,6 +34,10 @@ const (
 	AccessScopeWorkspace NodeAccessScope = "workspace"
 	AccessScopeShared    NodeAccessScope = "shared"
 )
+
+// Permission-related errors
+var ErrOrganizationIndependentNodeCannotBeShared = errors.New("organization-independent nodes cannot be shared")
+var ErrCannotAttachNodeWithExistingOrganization = errors.New("cannot attach node that already belongs to an organization")
 
 // NodeAccess represents an access permission entry in DynamoDB
 type NodeAccess struct {
