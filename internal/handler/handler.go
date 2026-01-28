@@ -40,6 +40,21 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.GET("/compute-nodes/{id}", computeHandler.GetComputeNodeHandler)
     router.PUT("/compute-nodes/{id}", computeHandler.PutComputeNodeHandler)
     router.DELETE("/compute-nodes/{id}", computeHandler.DeleteComputeNodeHandler)
+    
+    // Compute node permission routes
+    router.GET("/compute-nodes/{id}/permissions", computeHandler.GetNodePermissionsHandler)
+    router.PUT("/compute-nodes/{id}/permissions", computeHandler.SetNodeAccessScopeHandler)
+    router.POST("/compute-nodes/{id}/permissions/users", computeHandler.GrantUserAccessHandler)
+    router.DELETE("/compute-nodes/{id}/permissions/users/{userId}", computeHandler.RevokeUserAccessHandler)
+    router.POST("/compute-nodes/{id}/permissions/teams", computeHandler.GrantTeamAccessHandler)
+    router.DELETE("/compute-nodes/{id}/permissions/teams/{teamId}", computeHandler.RevokeTeamAccessHandler)
+    
+    // Organization attachment/detachment routes
+    router.POST("/compute-nodes/{id}/organization", computeHandler.AttachNodeToOrganizationHandler)
+    router.DELETE("/compute-nodes/{id}/organization", computeHandler.DetachNodeFromOrganizationHandler)
+    
+    // Legacy PATCH endpoint for backwards compatibility (deprecated - use PUT for access scope)
+    router.PATCH("/compute-nodes/{id}/permissions", computeHandler.UpdateNodePermissionsHandler)
 
     return router.Start(ctx, request)
 }

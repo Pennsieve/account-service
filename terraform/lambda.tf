@@ -23,6 +23,7 @@ resource "aws_lambda_function" "service_lambda" {
       ACCOUNTS_TABLE = aws_dynamodb_table.accounts_table.name
       ACCOUNT_WORKSPACE_TABLE = aws_dynamodb_table.account_workspace_table.name
       COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
+      NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
       # ECS Configuration for compute node provisioning
       TASK_DEF_ARN = data.terraform_remote_state.compute_node_service.outputs.task_definition_arn
       CLUSTER_ARN = data.terraform_remote_state.compute_node_service.outputs.ecs_cluster_arn

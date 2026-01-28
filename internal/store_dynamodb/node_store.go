@@ -14,7 +14,9 @@ import (
 type NodeStore interface {
 	GetById(context.Context, string) (models.DynamoDBNode, error)
 	Get(context.Context, string) ([]models.DynamoDBNode, error)
+	GetByAccount(context.Context, string) ([]models.DynamoDBNode, error)
 	Put(context.Context, models.DynamoDBNode) error
+	UpdateStatus(context.Context, string, string) error
 	Delete(context.Context, string) error
 }
 
@@ -87,6 +89,56 @@ func (r *NodeDatabaseStore) Put(ctx context.Context, node models.DynamoDBNode) e
 	})
 	if err != nil {
 		return fmt.Errorf("error putting node: %w", err)
+	}
+
+	return nil
+}
+
+func (r *NodeDatabaseStore) GetByAccount(ctx context.Context, accountUuid string) ([]models.DynamoDBNode, error) {
+	nodes := []models.DynamoDBNode{}
+	keyCond := expression.Key("accountUuid").Equal(expression.Value(accountUuid))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
+	if err != nil {
+		return nodes, fmt.Errorf("error building expression: %w", err)
+	}
+
+	response, err := r.DB.Query(ctx, &dynamodb.QueryInput{
+		IndexName:                 aws.String("accountUuid-index"),
+		KeyConditionExpression:    expr.KeyCondition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ProjectionExpression:      expr.Projection(),
+		TableName:                 aws.String(r.TableName),
+	})
+	if err != nil {
+		return nodes, fmt.Errorf("error getting nodes by account: %w", err)
+	}
+
+	err = attributevalue.UnmarshalListOfMaps(response.Items, &nodes)
+	if err != nil {
+		return nodes, fmt.Errorf("error unmarshaling nodes: %w", err)
+	}
+
+	return nodes, nil
+}
+
+func (r *NodeDatabaseStore) UpdateStatus(ctx context.Context, uuid string, status string) error {
+	node := models.DynamoDBNode{Uuid: uuid}
+	update := expression.Set(expression.Name("status"), expression.Value(status))
+	expr, err := expression.NewBuilder().WithUpdate(update).Build()
+	if err != nil {
+		return fmt.Errorf("error building update expression: %w", err)
+	}
+
+	_, err = r.DB.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		Key:                       node.GetKey(),
+		TableName:                 aws.String(r.TableName),
+		UpdateExpression:          expr.Update(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		return fmt.Errorf("error updating node status: %w", err)
 	}
 
 	return nil

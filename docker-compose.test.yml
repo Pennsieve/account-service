@@ -13,7 +13,14 @@ services:
     env_file:
       - dockertest.env
     depends_on:
-      - dynamodb  
+      - dynamodb
+      - pennsievedb
+    environment:
+      - POSTGRES_HOST=pennsievedb
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=pennsieve
     volumes:
       - $PWD:/go/src/github.com/pennsieve/account-service
     networks:
@@ -28,6 +35,13 @@ services:
       - dockertestCI.env
     depends_on:
       - dynamodb-ci
+      - pennsievedb-ci
+    environment:
+      - POSTGRES_HOST=pennsievedb-ci
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=pennsieve
     volumes:
       - $PWD:/go/src/github.com/pennsieve/account-service
     networks:
@@ -50,5 +64,19 @@ services:
     volumes:
       - ./test-dynamodb-data:/home/dynamodblocal/data
     command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/"
+    networks:
+      - api-tests
+
+  pennsievedb:
+    image: pennsieve/pennsievedb:V20230315145959-seed
+    restart: always
+    ports:
+      - "5432:5432"
+    networks:
+      - api-tests
+
+  pennsievedb-ci:
+    image: pennsieve/pennsievedb:V20230315145959-seed
+    restart: always
     networks:
       - api-tests

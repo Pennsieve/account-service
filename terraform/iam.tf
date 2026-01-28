@@ -45,6 +45,15 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
   }
 
   statement {
+    sid     = "AccountServiceLambdaRDSPermissions"
+    effect  = "Allow"
+    actions = [
+      "rds-db:connect"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid     = "AccountServiceLambdaEC2Permissions"
     effect  = "Allow"
     actions = [
@@ -78,7 +87,9 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       aws_dynamodb_table.account_workspace_table.arn,
       "${aws_dynamodb_table.account_workspace_table.arn}/*",
       aws_dynamodb_table.compute_resource_nodes_table.arn,
-      "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*"
+      "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*",
+      aws_dynamodb_table.compute_node_access_table.arn,
+      "${aws_dynamodb_table.compute_node_access_table.arn}/*"
     ]
 
   }

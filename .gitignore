@@ -25,3 +25,9 @@ test-dynamodb-data
 
 # Migration exports
 migration/exports
+
+# bin
+bin/
+
+# TEST ST
+TEST_STRATEGY.md
