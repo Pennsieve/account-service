@@ -17,6 +17,7 @@ import (
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
@@ -50,7 +51,7 @@ func UpdateNodePermissionsHandler(ctx context.Context, request events.APIGateway
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -226,7 +227,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

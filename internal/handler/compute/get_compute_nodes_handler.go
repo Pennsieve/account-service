@@ -13,6 +13,7 @@ import (
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 )
@@ -20,7 +21,7 @@ import (
 func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetComputesNodesHandler"
 
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

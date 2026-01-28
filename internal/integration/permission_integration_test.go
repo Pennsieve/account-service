@@ -4,6 +4,7 @@ import (
     "context"
     "log"
     "os"
+    "strings"
     "testing"
     "time"
 
@@ -116,6 +117,42 @@ func deleteNodeAccessTable(client *dynamodb.Client, tableName string) error {
     return err
 }
 
+func clearPermissionIntegrationTable(client *dynamodb.Client, tableName string) error {
+    // Scan the table to get all items
+    scanResult, err := client.Scan(context.TODO(), &dynamodb.ScanInput{
+        TableName: aws.String(tableName),
+    })
+    if err != nil {
+        return err
+    }
+
+    // Delete all items
+    for _, item := range scanResult.Items {
+        entityId := item["entityId"]
+        nodeId := item["nodeId"]
+        
+        _, err = client.DeleteItem(context.TODO(), &dynamodb.DeleteItemInput{
+            TableName: aws.String(tableName),
+            Key: map[string]types.AttributeValue{
+                "entityId": entityId,
+                "nodeId":   nodeId,
+            },
+        })
+        if err != nil {
+            return err
+        }
+    }
+    
+    return nil
+}
+
+func isPermissionTableExistsError(err error) bool {
+    return err.Error() != "" && (
+        err.Error() == "ResourceInUseException: Cannot create preexisting table" ||
+        strings.Contains(err.Error(), "ResourceInUseException") ||
+        strings.Contains(err.Error(), "preexisting table"))
+}
+
 func setupPermissionIntegrationTest(t *testing.T) (*service.PermissionService, *store_dynamodb.NodeAccessDatabaseStore) {
     if testing.Short() {
         t.Skip("Skipping integration test")
@@ -138,13 +175,19 @@ func setupPermissionIntegrationTest(t *testing.T) (*service.PermissionService, *
     client := dynamodb.NewFromConfig(cfg)
     tableName := "test-permission-integration-table"
 
-    // Create table
+    // Try to create table (ignore error if it already exists)
     _, err = createNodeAccessTable(client, tableName)
+    if err != nil && !isPermissionTableExistsError(err) {
+        require.NoError(t, err)
+    }
+    
+    // Clear any existing data
+    err = clearPermissionIntegrationTable(client, tableName)
     require.NoError(t, err)
 
     // Register cleanup
     t.Cleanup(func() {
-        _ = deleteNodeAccessTable(client, tableName)
+        _ = clearPermissionIntegrationTable(client, tableName)
     })
 
     nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, tableName)

@@ -16,6 +16,7 @@ import (
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
@@ -63,7 +64,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -291,7 +292,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -403,7 +404,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	userId := claims.UserClaim.NodeId
 	
 	// Load AWS config
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

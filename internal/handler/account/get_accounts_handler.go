@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
@@ -21,7 +21,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	handlerName := "GetAccountsHandler"
 	queryParams := request.QueryStringParameters
 
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

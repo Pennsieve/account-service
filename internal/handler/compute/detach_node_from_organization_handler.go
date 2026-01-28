@@ -12,6 +12,7 @@ import (
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 )
@@ -31,7 +32,7 @@ func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGa
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
 
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Printf("Error loading AWS config: %v", err)
 		return events.APIGatewayV2HTTPResponse{
