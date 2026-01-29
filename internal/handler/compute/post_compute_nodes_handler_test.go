@@ -72,7 +72,7 @@ func setupPostComputeNodesHandlerTest(t *testing.T) (store_dynamodb.DynamoDBStor
 	// Set environment variables for handler
 	os.Setenv("ACCOUNTS_TABLE", test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("NODE_ACCESS_TABLE", TEST_ACCESS_TABLE)
-	os.Setenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE", test.TEST_WORKSPACE_TABLE)
+	os.Setenv("ACCOUNT_WORKSPACE_TABLE", test.TEST_WORKSPACE_TABLE)
 	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	os.Setenv("TASK_DEF_ARN", "arn:aws:ecs:us-east-1:123456789012:task-definition/test-task:1")
 	os.Setenv("SUBNET_IDS", "subnet-12345,subnet-67890")
@@ -400,11 +400,11 @@ func TestPostComputeNodesHandler_MissingEnvironmentVariables(t *testing.T) {
 		},
 	}
 
-	// Test missing ACCOUNT_WORKSPACE_ENABLEMENT_TABLE
-	t.Run("MissingWorkspaceEnablementTable", func(t *testing.T) {
-		originalValue := os.Getenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
-		_ = os.Unsetenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
-		defer func() { _ = os.Setenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE", originalValue) }()
+	// Test missing ACCOUNT_WORKSPACE_TABLE
+	t.Run("MissingWorkspaceTable", func(t *testing.T) {
+		originalValue := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		_ = os.Unsetenv("ACCOUNT_WORKSPACE_TABLE")
+		defer func() { _ = os.Setenv("ACCOUNT_WORKSPACE_TABLE", originalValue) }()
 
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
