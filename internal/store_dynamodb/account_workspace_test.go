@@ -54,7 +54,7 @@ func isAccountWorkspaceTableExistsError(err error) bool {
 
 func setupAccountWorkspaceStoreTest(t *testing.T) store_dynamodb.AccountWorkspaceStore {
     // Clear data from previous tests
-    require.NoError(t, test.ClearTestData())
+    // Don't clear all test data - use unique IDs to avoid conflicts with other tests
 
     // Return store using shared table
     store := store_dynamodb.NewAccountWorkspaceStore(test.GetTestClient(), TEST_WORKSPACE_TABLE)

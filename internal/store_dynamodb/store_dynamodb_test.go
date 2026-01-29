@@ -28,11 +28,8 @@ func TestMain(m *testing.M) {
         log.Fatalf("Failed to setup package tables: %v", err)
     }
 
-    // Run all tests
+    // Run all tests - individual tests clean up their own data with unique IDs
     exitCode := m.Run()
-
-    // Cleanup: Delete tables
-    test.CleanupPackageTables()
 
     os.Exit(exitCode)
 }

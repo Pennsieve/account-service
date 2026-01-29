@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
@@ -22,6 +21,11 @@ type AccountUpdateRequest struct {
 	Description *string `json:"description,omitempty"`
 }
 
+// PatchAccountHandler updates account details (status, name, description)
+// PATCH /accounts/{id}
+//
+// Required Permissions:
+// - Must be the owner of the account (account.UserId == requestingUserId)
 func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PatchAccountHandler"
 	
@@ -60,8 +64,14 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}, nil
 	}
 
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	userId := claims.UserClaim.NodeId
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {

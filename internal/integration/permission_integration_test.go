@@ -4,17 +4,13 @@ import (
     "context"
     "log"
     "os"
-    "strings"
     "testing"
     "time"
 
-    "github.com/aws/aws-sdk-go-v2/aws"
-    "github.com/aws/aws-sdk-go-v2/config"
-    "github.com/aws/aws-sdk-go-v2/service/dynamodb"
-    "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
     "github.com/pennsieve/account-service/internal/models"
     "github.com/pennsieve/account-service/internal/service"
     "github.com/pennsieve/account-service/internal/store_dynamodb"
+    "github.com/pennsieve/account-service/internal/test"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
@@ -22,187 +18,55 @@ import (
 // Integration tests for permission workflows
 // These tests validate the complete permission system end-to-end
 
-func getDynamoDBEndpoint() string {
-    if endpoint := os.Getenv("DYNAMODB_URL"); endpoint != "" {
-        return endpoint
-    }
-    return "http://localhost:8000"
-}
-
-func createNodeAccessTable(client *dynamodb.Client, tableName string) (*types.TableDescription, error) {
-    table, err := client.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
-        AttributeDefinitions: []types.AttributeDefinition{
-            {
-                AttributeName: aws.String("entityId"),
-                AttributeType: types.ScalarAttributeTypeS,
-            },
-            {
-                AttributeName: aws.String("nodeId"),
-                AttributeType: types.ScalarAttributeTypeS,
-            },
-            {
-                AttributeName: aws.String("organizationId"),
-                AttributeType: types.ScalarAttributeTypeS,
-            },
-        },
-        KeySchema: []types.KeySchemaElement{
-            {
-                AttributeName: aws.String("entityId"),
-                KeyType:       types.KeyTypeHash,
-            },
-            {
-                AttributeName: aws.String("nodeId"),
-                KeyType:       types.KeyTypeRange,
-            },
-        },
-        GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
-            {
-                IndexName: aws.String("nodeId-entityId-index"),
-                KeySchema: []types.KeySchemaElement{
-                    {
-                        AttributeName: aws.String("nodeId"),
-                        KeyType:       types.KeyTypeHash,
-                    },
-                    {
-                        AttributeName: aws.String("entityId"),
-                        KeyType:       types.KeyTypeRange,
-                    },
-                },
-                Projection: &types.Projection{
-                    ProjectionType: types.ProjectionTypeAll,
-                },
-            },
-            {
-                IndexName: aws.String("organizationId-nodeId-index"),
-                KeySchema: []types.KeySchemaElement{
-                    {
-                        AttributeName: aws.String("organizationId"),
-                        KeyType:       types.KeyTypeHash,
-                    },
-                    {
-                        AttributeName: aws.String("nodeId"),
-                        KeyType:       types.KeyTypeRange,
-                    },
-                },
-                Projection: &types.Projection{
-                    ProjectionType: types.ProjectionTypeAll,
-                },
-            },
-        },
-        TableName:   aws.String(tableName),
-        BillingMode: types.BillingModePayPerRequest,
-    })
-
-    if err != nil {
-        log.Printf("couldn't create table %v. Here's why: %v\n", tableName, err)
-        return nil, err
-    }
-
-    waiter := dynamodb.NewTableExistsWaiter(client)
-    err = waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{
-        TableName: aws.String(tableName)}, 2*time.Minute)
-    if err != nil {
-        log.Printf("wait for table exists failed. Here's why: %v\n", err)
-    }
-
-    return table.TableDescription, err
-}
-
-func deleteNodeAccessTable(client *dynamodb.Client, tableName string) error {
-    _, err := client.DeleteTable(context.TODO(), &dynamodb.DeleteTableInput{
-        TableName: aws.String(tableName)})
-    if err != nil {
-        log.Printf("couldn't delete table %v. Here's why: %v\n", tableName, err)
-    }
-    return err
-}
-
-func clearPermissionIntegrationTable(client *dynamodb.Client, tableName string) error {
-    // Scan the table to get all items
-    scanResult, err := client.Scan(context.TODO(), &dynamodb.ScanInput{
-        TableName: aws.String(tableName),
-    })
-    if err != nil {
-        return err
-    }
-
-    // Delete all items
-    for _, item := range scanResult.Items {
-        entityId := item["entityId"]
-        nodeId := item["nodeId"]
-        
-        _, err = client.DeleteItem(context.TODO(), &dynamodb.DeleteItemInput{
-            TableName: aws.String(tableName),
-            Key: map[string]types.AttributeValue{
-                "entityId": entityId,
-                "nodeId":   nodeId,
-            },
-        })
-        if err != nil {
-            return err
-        }
-    }
+// TestMain sets up tables once for the entire integration package
+func TestMain(m *testing.M) {
+    // Setup: Create client and tables
+    _ = test.GetClient() // Initialize the global client
     
-    return nil
+    if err := test.SetupPackageTables(); err != nil {
+        log.Fatalf("Failed to setup package tables: %v", err)
+    }
+
+    // Run all tests - individual tests clean up their own data with unique IDs
+    exitCode := m.Run()
+
+    os.Exit(exitCode)
 }
 
-func isPermissionTableExistsError(err error) bool {
-    return err.Error() != "" && (
-        err.Error() == "ResourceInUseException: Cannot create preexisting table" ||
-        strings.Contains(err.Error(), "ResourceInUseException") ||
-        strings.Contains(err.Error(), "preexisting table"))
-}
-
-func setupPermissionIntegrationTest(t *testing.T) (*service.PermissionService, *store_dynamodb.NodeAccessDatabaseStore) {
+func setupPermissionIntegrationTest(t *testing.T) (*service.PermissionService, *store_dynamodb.NodeAccessDatabaseStore, string) {
     if testing.Short() {
         t.Skip("Skipping integration test")
     }
 
-    cfg, err := config.LoadDefaultConfig(context.Background(),
-        config.WithRegion("us-east-1"),
-        config.WithCredentialsProvider(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
-            return aws.Credentials{
-                AccessKeyID:     "test",
-                SecretAccessKey: "test",
-            }, nil
-        })),
-        config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-            func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-                return aws.Endpoint{URL: getDynamoDBEndpoint()}, nil
-            })))
-    require.NoError(t, err)
+    // Use the shared test client and access table
+    client := test.GetClient()
+    tableName := test.TEST_ACCESS_TABLE
 
-    client := dynamodb.NewFromConfig(cfg)
-    tableName := "test-permission-integration-table"
+    // Generate a unique test ID for this test run
+    testId := test.GenerateTestId()
 
-    // Try to create table (ignore error if it already exists)
-    _, err = createNodeAccessTable(client, tableName)
-    if err != nil && !isPermissionTableExistsError(err) {
-        require.NoError(t, err)
-    }
-    
-    // Clear any existing data
-    err = clearPermissionIntegrationTable(client, tableName)
-    require.NoError(t, err)
+    // Don't clear the entire table - tests run in parallel!
+    // Each test uses unique IDs to avoid conflicts
 
-    // Register cleanup
+    // Register cleanup for this specific test's data
     t.Cleanup(func() {
-        _ = clearPermissionIntegrationTable(client, tableName)
+        // Could implement targeted cleanup here if needed
+        // For now, rely on unique IDs to prevent conflicts
     })
 
     nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, tableName)
     permissionService := service.NewPermissionService(nodeAccessStore, nil) // No team store for simplicity
 
-    return permissionService, nodeAccessStore.(*store_dynamodb.NodeAccessDatabaseStore)
+    return permissionService, nodeAccessStore.(*store_dynamodb.NodeAccessDatabaseStore), testId
 }
 
 func TestPermissionWorkflow_PrivateToWorkspaceToShared(t *testing.T) {
-    permissionService, nodeAccessStore := setupPermissionIntegrationTest(t)
+    permissionService, nodeAccessStore, testId := setupPermissionIntegrationTest(t)
 
     ctx := context.Background()
-    nodeUuid := "integration-test-node-1"
-    ownerId := "owner-123"
-    organizationId := "org-456"
+    nodeUuid := "integration-test-node-1-" + testId
+    ownerId := "owner-123-" + testId
+    organizationId := "org-456-" + testId
     grantedBy := ownerId
 
     // Step 1: Create node with private access (owner only)
@@ -283,12 +147,13 @@ func TestPermissionWorkflow_PrivateToWorkspaceToShared(t *testing.T) {
 }
 
 func TestPermissionWorkflow_SharedAccessManagement(t *testing.T) {
-    permissionService, nodeAccessStore := setupPermissionIntegrationTest(t)
+    permissionService, nodeAccessStore, testId := setupPermissionIntegrationTest(t)
 
     ctx := context.Background()
-    nodeUuid := "integration-test-node-2"
-    ownerId := "owner-456"
-    organizationId := "org-789"
+    // Use unique IDs to avoid conflicts with parallel tests
+    nodeUuid := "shared-mgmt-node-" + testId
+    ownerId := "owner-" + testId
+    organizationId := "org-" + testId
     grantedBy := ownerId
 
     // Step 1: Start with shared access to some users
@@ -370,11 +235,12 @@ func TestPermissionWorkflow_SharedAccessManagement(t *testing.T) {
 }
 
 func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
-    permissionService, nodeAccessStore := setupPermissionIntegrationTest(t)
+    permissionService, nodeAccessStore, testId := setupPermissionIntegrationTest(t)
 
     ctx := context.Background()
-    userId := "test-user-123"
-    organizationId := "org-test-456"
+    // Use unique IDs to avoid conflicts with parallel tests
+    userId := "test-user-" + testId
+    organizationId := "org-" + testId
 
     // Create multiple nodes with different access patterns
     nodeConfigs := []struct {
@@ -384,29 +250,29 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
         sharedUsers []string
     }{
         {
-            nodeUuid:    "user-owned-node",
+            nodeUuid:    "user-owned-node-" + testId,
             ownerId:     userId,
             accessScope: models.AccessScopePrivate,
         },
         {
-            nodeUuid:    "user-shared-node",
-            ownerId:     "other-owner",
+            nodeUuid:    "user-shared-node-" + testId,
+            ownerId:     "other-owner-" + testId,
             accessScope: models.AccessScopeShared,
             sharedUsers: []string{userId},
         },
         {
-            nodeUuid:    "workspace-node-1",
-            ownerId:     "other-owner-2",
+            nodeUuid:    "workspace-node-1-" + testId,
+            ownerId:     "other-owner-2-" + testId,
             accessScope: models.AccessScopeWorkspace,
         },
         {
-            nodeUuid:    "workspace-node-2",
-            ownerId:     "other-owner-3",
+            nodeUuid:    "workspace-node-2-" + testId,
+            ownerId:     "other-owner-3-" + testId,
             accessScope: models.AccessScopeWorkspace,
         },
         {
-            nodeUuid:    "no-access-node",
-            ownerId:     "other-owner-4",
+            nodeUuid:    "no-access-node-" + testId,
+            ownerId:     "other-owner-4-" + testId,
             accessScope: models.AccessScopePrivate,
         },
     }
@@ -423,10 +289,34 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
         require.NoError(t, err)
     }
 
-    // Query accessible nodes for the test user
-    accessibleNodes, err := permissionService.GetAccessibleNodes(ctx, userId, organizationId)
-    assert.NoError(t, err)
+    // Query accessible nodes with retry for GSI eventual consistency
+    var accessibleNodes []string
+    var err error
+    
+    // Retry mechanism for DynamoDB GSI eventual consistency under concurrent load
+    maxRetries := 5
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        accessibleNodes, err = permissionService.GetAccessibleNodes(ctx, userId, organizationId)
+        assert.NoError(t, err)
+        
+        // If we get the expected number of nodes, break out of retry loop
+        if len(accessibleNodes) == 4 {
+            break
+        }
+        
+        // Short delay before retry to allow GSI to catch up
+        if attempt < maxRetries-1 {
+            time.Sleep(50 * time.Millisecond)
+        }
+    }
+    
+    // Log if we still don't have the expected results after retries
+    if len(accessibleNodes) != 4 {
+        t.Logf("INFO: After %d attempts, got %d nodes instead of 4: %v", maxRetries, len(accessibleNodes), accessibleNodes)
+        t.Logf("INFO: This may be due to DynamoDB GSI eventual consistency under concurrent test load")
+    }
 
+    // With unique organization IDs, we should only get nodes from this test
     // Convert to map for easier checking
     nodeMap := make(map[string]bool)
     for _, nodeUuid := range accessibleNodes {
@@ -441,13 +331,13 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
     // Should NOT have access to:
     // 5. no-access-node (private, not owned)
 
-    assert.True(t, nodeMap["user-owned-node"], "Should have access to owned node")
-    assert.True(t, nodeMap["user-shared-node"], "Should have access to shared node")
-    assert.True(t, nodeMap["workspace-node-1"], "Should have access to workspace node 1")
-    assert.True(t, nodeMap["workspace-node-2"], "Should have access to workspace node 2")
-    assert.False(t, nodeMap["no-access-node"], "Should NOT have access to private node")
+    assert.True(t, nodeMap["user-owned-node-" + testId], "Should have access to owned node")
+    assert.True(t, nodeMap["user-shared-node-" + testId], "Should have access to shared node")
+    assert.True(t, nodeMap["workspace-node-1-" + testId], "Should have access to workspace node 1")
+    assert.True(t, nodeMap["workspace-node-2-" + testId], "Should have access to workspace node 2")
+    assert.False(t, nodeMap["no-access-node-" + testId], "Should NOT have access to private node")
 
-    assert.Len(t, accessibleNodes, 4, "Should have access to exactly 4 nodes")
+    assert.Len(t, accessibleNodes, 4, "Should have access to exactly 4 nodes from this test")
 
     // Verify individual access checks match the query results
     for _, config := range nodeConfigs {
@@ -466,12 +356,12 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
 }
 
 func TestPermissionWorkflow_NodeDeletion(t *testing.T) {
-    permissionService, nodeAccessStore := setupPermissionIntegrationTest(t)
+    permissionService, nodeAccessStore, testId := setupPermissionIntegrationTest(t)
 
     ctx := context.Background()
-    nodeUuid := "integration-test-node-deletion"
-    ownerId := "owner-delete-test"
-    organizationId := "org-delete-test"
+    nodeUuid := "integration-test-node-deletion-" + testId
+    ownerId := "owner-delete-test-" + testId
+    organizationId := "org-delete-test-" + testId
 
     // Create node with multiple access entries
     req := models.NodeAccessRequest{
@@ -508,12 +398,12 @@ func TestPermissionWorkflow_NodeDeletion(t *testing.T) {
 }
 
 func TestPermissionWorkflow_BatchOperations(t *testing.T) {
-    permissionService, nodeAccessStore := setupPermissionIntegrationTest(t)
+    permissionService, nodeAccessStore, testId := setupPermissionIntegrationTest(t)
 
     ctx := context.Background()
-    nodeUuid := "integration-test-node-batch"
-    ownerId := "owner-batch-test"
-    organizationId := "org-batch-test"
+    nodeUuid := "integration-test-node-batch-" + testId
+    ownerId := "owner-batch-test-" + testId
+    organizationId := "org-batch-test-" + testId
 
     // Create multiple access entries in batch
     accesses := []models.NodeAccess{
@@ -604,12 +494,12 @@ func TestPermissionWorkflow_BatchOperations(t *testing.T) {
 }
 
 func TestPermissionWorkflow_AccessScopeUpdates(t *testing.T) {
-    _, nodeAccessStore := setupPermissionIntegrationTest(t)
+    _, nodeAccessStore, testId := setupPermissionIntegrationTest(t)
 
     ctx := context.Background()
-    nodeUuid := "integration-test-scope-updates"
-    organizationId := "org-scope-test"
-    grantedBy := "admin-user"
+    nodeUuid := "integration-test-scope-updates-" + testId
+    organizationId := "org-scope-test-" + testId
+    grantedBy := "admin-user-" + testId
 
     // Test direct access scope updates (bypassing permission service)
 

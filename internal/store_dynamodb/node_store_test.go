@@ -52,7 +52,7 @@ func isNodeTableExistsError(err error) bool {
 
 func setupNodeStoreTest(t *testing.T) store_dynamodb.NodeStore {
     // Clear data from previous tests
-    require.NoError(t, test.ClearTestData())
+    // Don't clear all test data - use unique IDs to avoid conflicts with other tests
 
     // Return store using shared table
     store := store_dynamodb.NewNodeDatabaseStore(test.GetTestClient(), TEST_NODES_TABLE)
@@ -164,8 +164,9 @@ func TestNodeStore_GetById_NotFound(t *testing.T) {
 
 func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
     store := setupNodeStoreTest(t)
-    orgId := "org-123"
-    otherOrgId := "org-456"
+    testId := test.GenerateTestId()
+    orgId := "org-123-" + testId
+    otherOrgId := "org-456-" + testId
 
     // Insert nodes for the test organization
     node1 := models.DynamoDBNode{
@@ -173,8 +174,9 @@ func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
         Name:           "node-1",
         Description:    "First test node",
         OrganizationId: orgId,
-        UserId:         "user-123",
-        AccountId:      "account-1",
+        UserId:         "user-123-" + testId,
+        AccountUuid:    "account-1-" + testId,
+        AccountId:      "account-1-" + testId,
         AccountType:    "aws",
         CreatedAt:      "2024-01-25T10:00:00Z",
     }
@@ -183,8 +185,9 @@ func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
         Name:           "node-2",
         Description:    "Second test node",
         OrganizationId: orgId,
-        UserId:         "user-123",
-        AccountId:      "account-2",
+        UserId:         "user-123-" + testId,
+        AccountUuid:    "account-2-" + testId,
+        AccountId:      "account-2-" + testId,
         AccountType:    "gcp",
         CreatedAt:      "2024-01-25T11:00:00Z",
     }
@@ -195,8 +198,9 @@ func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
         Name:           "other-node",
         Description:    "Node in different org",
         OrganizationId: otherOrgId,
-        UserId:         "user-456",
-        AccountId:      "account-3",
+        UserId:         "user-456-" + testId,
+        AccountUuid:    "account-3-" + testId,
+        AccountId:      "account-3-" + testId,
         AccountType:    "aws",
         CreatedAt:      "2024-01-25T12:00:00Z",
     }
@@ -231,6 +235,7 @@ func TestNodeStore_Delete(t *testing.T) {
         Description:    "Node that will be deleted",
         OrganizationId: "org-123",
         UserId:         "user-123",
+        AccountUuid:    "account-123",
         AccountId:      "account-123",
         AccountType:    "aws",
         CreatedAt:      "2024-01-25T10:00:00Z",
@@ -276,6 +281,7 @@ func TestNodeStore_Put_Update(t *testing.T) {
         WorkflowManagerTag:    "v1.0.0",
         OrganizationId:        "org-123",
         UserId:                "user-123",
+        AccountUuid:           "account-123",
         AccountId:             "account-123",
         AccountType:           "aws",
         CreatedAt:             "2024-01-25T10:00:00Z",

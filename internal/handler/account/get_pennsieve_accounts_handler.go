@@ -18,6 +18,12 @@ const (
 	AWS = "aws"
 )
 
+// GetPennsieveAccountsHandler retrieves Pennsieve-managed accounts by account type
+// GET /pennsieve-accounts/{accountType}
+//
+// Required Permissions:
+// - Must be an authenticated user
+// - Returns system-level account information (e.g., AWS account details)
 func GetPennsieveAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetPennsieveAccountsHandler"
 	accountType := request.PathParameters["accountType"]

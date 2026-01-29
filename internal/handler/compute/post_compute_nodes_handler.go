@@ -28,6 +28,13 @@ import (
 )
 
 
+// PostComputeNodesHandler creates a new compute node
+// POST /compute-nodes
+//
+// Required Permissions:
+// - For organization-independent nodes: Any authenticated user can create
+// - For organization nodes with isPublic=false: Must be the account owner
+// - For organization nodes with isPublic=true: Must be a workspace admin in the organization
 func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
     handlerName := "PostComputeNodesHandler"
     var node models.Node
@@ -52,8 +59,12 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
     claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
     userId := claims.UserClaim.NodeId
 
-    // Use organizationId from request body - can be empty for organization-independent nodes
+    // Use organizationId from request body - use "INDEPENDENT" for organization-independent nodes
+    // to work around DynamoDB GSI constraint that doesn't allow empty strings
     organizationId := node.OrganizationId
+    if organizationId == "" {
+        organizationId = "INDEPENDENT"
+    }
 
     // Get the account UUID from the request
     accountUuid := node.Account.Uuid
@@ -89,8 +100,17 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
         }, nil
     }
 
-    // If organizationId is provided, check workspace enablement and permissions
-    if organizationId != "" {
+    // Check if account exists (empty struct indicates not found)
+    if (store_dynamodb.Account{}) == account {
+        log.Printf("Account not found: %s", accountUuid)
+        return events.APIGatewayV2HTTPResponse{
+            StatusCode: http.StatusNotFound,
+            Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
+        }, nil
+    }
+
+    // If organizationId is provided and not INDEPENDENT, check workspace enablement and permissions
+    if organizationId != "" && organizationId != "INDEPENDENT" {
         // Check if account has workspace enablement for this organization
         enablementTable := os.Getenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
         if enablementTable == "" {
@@ -329,12 +349,18 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
     // In test environment, return the created node details
     if envValue == "DOCKER" || envValue == "TEST" {
+        // Convert INDEPENDENT back to empty string for API response consistency
+        responseOrganizationId := organizationId
+        if organizationId == "INDEPENDENT" {
+            responseOrganizationId = ""
+        }
+        
         createdNode := models.Node{
             Uuid:               nodeUuid,
             Name:               node.Name,
             Description:        node.Description,
             Account:            node.Account,
-            OrganizationId:     organizationId,
+            OrganizationId:     responseOrganizationId,
             UserId:             userId,
             WorkflowManagerTag: node.WorkflowManagerTag,
             Status:             "Enabled",

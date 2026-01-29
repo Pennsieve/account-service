@@ -22,6 +22,9 @@ import (
 
 // SetNodeAccessScopeHandler sets the access scope for a compute node
 // PUT /compute-nodes/{id}/permissions
+//
+// Required Permissions:
+// - Must be the owner of the compute node
 func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "SetNodeAccessScopeHandler"
 	
@@ -162,6 +165,9 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 
 // GrantUserAccessHandler grants access to a specific user
 // POST /compute-nodes/{id}/permissions/users
+//
+// Required Permissions:
+// - Must be the owner of the compute node
 func GrantUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GrantUserAccessHandler"
 	
@@ -198,6 +204,10 @@ func GrantUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 
 // RevokeUserAccessHandler revokes access from a specific user
 // DELETE /compute-nodes/{id}/permissions/users/{userId}
+//
+// Required Permissions:
+// - Must be the owner of the compute node
+// - Cannot revoke access from the node owner
 func RevokeUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "RevokeUserAccessHandler"
 	
@@ -224,6 +234,10 @@ func RevokeUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 // GrantTeamAccessHandler grants access to a specific team
 // POST /compute-nodes/{id}/permissions/teams
+//
+// Required Permissions:
+// - Must be the owner of the compute node
+// - Organization-independent nodes cannot share with teams
 func GrantTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GrantTeamAccessHandler"
 	
@@ -260,6 +274,9 @@ func GrantTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 
 // RevokeTeamAccessHandler revokes access from a specific team
 // DELETE /compute-nodes/{id}/permissions/teams/{teamId}
+//
+// Required Permissions:
+// - Must be the owner of the compute node
 func RevokeTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "RevokeTeamAccessHandler"
 	

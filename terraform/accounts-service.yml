@@ -542,8 +542,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/postAccountsResponse'
-        '4XX':
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Unprocessable Entity - Account already exists for this user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "PostAccountsHandler: error records exists"
         '5XX':
           $ref: '#/components/responses/Error'
     get:

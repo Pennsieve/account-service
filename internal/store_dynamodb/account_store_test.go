@@ -13,7 +13,7 @@ import (
 
 func setupAccountStoreTest(t *testing.T) *store_dynamodb.AccountDatabaseStore {
     // Clear data from previous tests
-    require.NoError(t, test.ClearTestData())
+    // Don't clear all test data - use unique IDs to avoid conflicts with other tests
 
     // Return store using shared table
     store := store_dynamodb.NewAccountDatabaseStore(test.GetTestClient(), TEST_ACCOUNTS_TABLE).(*store_dynamodb.AccountDatabaseStore)
