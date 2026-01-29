@@ -114,6 +114,10 @@ func createSharedNodesTable() error {
                 AttributeName: aws.String("organizationId"),
                 AttributeType: types.ScalarAttributeTypeS,
             },
+            {
+                AttributeName: aws.String("accountUuid"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
         },
         KeySchema: []types.KeySchemaElement{
             {
@@ -127,6 +131,18 @@ func createSharedNodesTable() error {
                 KeySchema: []types.KeySchemaElement{
                     {
                         AttributeName: aws.String("organizationId"),
+                        KeyType:       types.KeyTypeHash,
+                    },
+                },
+                Projection: &types.Projection{
+                    ProjectionType: types.ProjectionTypeAll,
+                },
+            },
+            {
+                IndexName: aws.String("accountUuid-index"),
+                KeySchema: []types.KeySchemaElement{
+                    {
+                        AttributeName: aws.String("accountUuid"),
                         KeyType:       types.KeyTypeHash,
                     },
                 },

@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
@@ -23,13 +22,19 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if err := json.Unmarshal([]byte(request.Body), &account); err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
+			StatusCode: http.StatusBadRequest,
 			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
 
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	userId := claims.UserClaim.NodeId
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {

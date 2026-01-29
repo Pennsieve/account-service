@@ -11,7 +11,6 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
-	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
 func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -35,8 +34,15 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 		}, nil
 	}
 
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	userId := claims.UserClaim.NodeId
+	// Get userId using test-aware function
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {

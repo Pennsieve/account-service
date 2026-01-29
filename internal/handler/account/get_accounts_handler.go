@@ -13,7 +13,6 @@ import (
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
@@ -33,10 +32,14 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	userId := claims.UserClaim.NodeId
-	// organizationId is only used when filtering by workspace
-	// organizationId := claims.OrgClaim.NodeId
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
 
 	// Get user's accounts
 	accountStore := &store_dynamodb.AccountDatabaseStore{

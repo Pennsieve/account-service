@@ -31,3 +31,7 @@ bin/
 
 # TEST ST
 TEST_STRATEGY.md
+
+# local dynamodb test tables
+compute.test
+store_dynamodb.test
