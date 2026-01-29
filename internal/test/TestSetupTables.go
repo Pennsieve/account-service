@@ -29,26 +29,41 @@ const (
 var globalTestClient *dynamodb.Client
 
 func SetupPackageTables() error {
+    // Initialize client if not already done
+    if globalTestClient == nil {
+        globalTestClient = GetClient()
+    }
+    
     tables := []struct {
         name   string
         create func() error
     }{
-        {TEST_ACCOUNTS_TABLE, func() error { _, err := CreateAccountsTable(globalTestClient, TEST_ACCOUNTS_TABLE); return err }},
-        {TEST_ACCOUNTS_WITH_INDEX_TABLE, func() error { _, err := CreateAccountsTableWithUserIndex(globalTestClient, TEST_ACCOUNTS_WITH_INDEX_TABLE); return err }},
+        {TEST_ACCOUNTS_TABLE, func() error { 
+            _, err := CreateAccountsTable(globalTestClient, TEST_ACCOUNTS_TABLE)
+            // Ignore table exists errors
+            if err != nil && strings.Contains(err.Error(), "ResourceInUseException") {
+                return nil
+            }
+            return err 
+        }},
+        {TEST_ACCOUNTS_WITH_INDEX_TABLE, func() error { 
+            _, err := CreateAccountsTableWithUserIndex(globalTestClient, TEST_ACCOUNTS_WITH_INDEX_TABLE)
+            // Ignore table exists errors  
+            if err != nil && strings.Contains(err.Error(), "ResourceInUseException") {
+                return nil
+            }
+            return err
+        }},
         {TEST_NODES_TABLE, createSharedNodesTable},
         {TEST_ACCESS_TABLE, createSharedAccessTable},
         {TEST_WORKSPACE_TABLE, createSharedWorkspaceTable},
     }
 
     for _, table := range tables {
-        // Delete table if it exists
-        _ = DeleteTable(globalTestClient, table.name)
-
-        // Create table
-        if err := table.create(); err != nil {
+        // Check if table exists and recreate if needed
+        if err := ensureTableFreshState(globalTestClient, table.name, table.create); err != nil {
             return err
         }
-        log.Printf("Created table: %s", table.name)
     }
 
     return nil
@@ -486,4 +501,63 @@ func DeleteTable(dynamoDBClient *dynamodb.Client, tableName string) error {
         log.Printf("couldn't delete table %v. Here's why: %v\n", tableName, err)
     }
     return err
+}
+
+// tableExists checks if a table exists
+func tableExists(client *dynamodb.Client, tableName string) (bool, error) {
+    _, err := client.DescribeTable(context.TODO(), &dynamodb.DescribeTableInput{
+        TableName: aws.String(tableName),
+    })
+    if err != nil {
+        // Check if error is ResourceNotFoundException
+        if strings.Contains(err.Error(), "ResourceNotFoundException") {
+            return false, nil
+        }
+        return false, err
+    }
+    return true, nil
+}
+
+// GenerateTestId generates a unique test ID for test isolation
+func GenerateTestId() string {
+    // Use a short UUID suffix for readability
+    id := uuid.New().String()
+    return id[len(id)-8:]
+}
+
+// ensureTableFreshState ensures table is in clean state - either creates new or clears existing
+func ensureTableFreshState(client *dynamodb.Client, tableName string, createFunc func() error) error {
+    exists, err := tableExists(client, tableName)
+    if err != nil {
+        return err
+    }
+
+    if exists {
+        // Table exists - just clear its data (much faster than delete/recreate)
+        if err := ClearStoreDynamoDBTable(client, tableName); err != nil {
+            // If clearing fails, fall back to delete and recreate
+            log.Printf("Failed to clear table %s, will recreate: %v", tableName, err)
+            _ = DeleteTable(client, tableName)
+            // Wait for deletion to complete
+            waiter := dynamodb.NewTableNotExistsWaiter(client)
+            _ = waiter.Wait(context.TODO(), &dynamodb.DescribeTableInput{
+                TableName: aws.String(tableName),
+            }, 30*time.Second)
+            // Create new table
+            if err := createFunc(); err != nil {
+                return err
+            }
+            log.Printf("Recreated table: %s", tableName)
+        } else {
+            log.Printf("Cleared existing table: %s", tableName)
+        }
+    } else {
+        // Table doesn't exist - create it
+        if err := createFunc(); err != nil {
+            return err
+        }
+        log.Printf("Created table: %s", tableName)
+    }
+
+    return nil
 }

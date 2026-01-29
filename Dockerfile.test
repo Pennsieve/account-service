@@ -8,5 +8,5 @@ apk add --no-cache git
 # Set working directory
 WORKDIR /go/src/github.com/pennsieve/account-service
 
-# Run tests
-CMD CGO_ENABLED=0 go test -v ./internal/...
+# Run tests with no parallelism to avoid DynamoDB GSI consistency issues  
+CMD CGO_ENABLED=0 go test -v -p 1 -parallel 1 ./internal/...

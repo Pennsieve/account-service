@@ -12,9 +12,7 @@ import (
 )
 
 func setupNodeAccessStoreTest(t *testing.T) store_dynamodb.NodeAccessStore {
-    // Clear data from previous tests
-    require.NoError(t, test.ClearTestData())
-
+    // Don't clear all test data - use unique IDs instead to avoid conflicts with other tests
     // Return store using shared table
     store := store_dynamodb.NewNodeAccessDatabaseStore(test.GetTestClient(), TEST_ACCESS_TABLE)
     return store
