@@ -14,13 +14,20 @@ import (
 type PermissionService struct {
 	NodeAccessStore store_dynamodb.NodeAccessStore
 	TeamStore       store_postgres.TeamStore
+	NodeStore       store_dynamodb.NodeStore
 }
 
 func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore) *PermissionService {
 	return &PermissionService{
 		NodeAccessStore: nodeAccessStore,
 		TeamStore:       teamStore,
+		NodeStore:       nil, // Optional - set via SetNodeStore if needed
 	}
+}
+
+// SetNodeStore allows setting the node store for auto-healing functionality
+func (s *PermissionService) SetNodeStore(nodeStore store_dynamodb.NodeStore) {
+	s.NodeStore = nodeStore
 }
 
 // CheckNodeAccess checks if a user has access to a compute node
@@ -319,6 +326,43 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 	if response.AccessScope != models.AccessScopeWorkspace {
 		if len(response.SharedWithUsers) > 0 || len(response.SharedWithTeams) > 0 {
 			response.AccessScope = models.AccessScopeShared
+		}
+	}
+	
+	// Auto-healing: If no owner found in access entries, look up actual node owner and restore access
+	if response.Owner == "" && s.NodeStore != nil {
+		// Look up the actual node to get the real owner
+		node, err := s.NodeStore.GetById(ctx, nodeUuid)
+		if err == nil && node.UserId != "" {
+			// Node exists and has an owner, but no access entry - this is an inconsistent state
+			// Create the missing owner access entry
+			nodeId := models.FormatNodeId(nodeUuid)
+			ownerEntityId := models.FormatEntityId(models.EntityTypeUser, node.UserId)
+			
+			ownerAccess := models.NodeAccess{
+				EntityId:       ownerEntityId,
+				NodeId:         nodeId,
+				EntityType:     models.EntityTypeUser,
+				EntityRawId:    node.UserId,
+				NodeUuid:       nodeUuid,
+				AccessType:     models.AccessTypeOwner,
+				OrganizationId: node.OrganizationId,
+				GrantedBy:      node.UserId, // Self-granted for auto-healing
+			}
+			
+			// Grant the missing owner access
+			err = s.NodeAccessStore.GrantAccess(ctx, ownerAccess)
+			if err != nil {
+				// Log but don't fail - return current state
+				// In production, you'd want proper logging here
+				fmt.Printf("Warning: Failed to auto-restore owner access for node %s: %v\n", nodeUuid, err)
+			} else {
+				// Successfully restored owner access - update response
+				response.Owner = node.UserId
+				if response.OrganizationId == "" {
+					response.OrganizationId = node.OrganizationId
+				}
+			}
 		}
 	}
 	
