@@ -112,9 +112,9 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
     // If organizationId is provided and not INDEPENDENT, check workspace enablement and permissions
     if organizationId != "" && organizationId != "INDEPENDENT" {
         // Check if account has workspace enablement for this organization
-        enablementTable := os.Getenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE")
+        enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
         if enablementTable == "" {
-            log.Printf("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE not configured")
+            log.Printf("ACCOUNT_WORKSPACE_TABLE not configured")
             return events.APIGatewayV2HTTPResponse{
                 StatusCode: http.StatusInternalServerError,
                 Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),

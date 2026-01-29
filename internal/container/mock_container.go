@@ -105,7 +105,7 @@ func NewIntegrationTestContainer() (*IntegrationTestContainer, error) {
 		os.Getenv("ACCOUNTS_TABLE"),
 		os.Getenv("COMPUTE_NODES_TABLE"),
 		os.Getenv("NODE_ACCESS_TABLE"),
-		os.Getenv("ACCOUNT_WORKSPACE_ENABLEMENT_TABLE"),
+		os.Getenv("ACCOUNT_WORKSPACE_TABLE"),
 		os.Getenv("POSTGRES_URL"),
 	)
 
