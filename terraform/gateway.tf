@@ -4,7 +4,7 @@ resource "aws_apigatewayv2_api" "accounts_service_api" {
   description   = "API for the lambda-based Accounts API"
   cors_configuration {
     allow_origins     = local.cors_allowed_origins
-    allow_methods = ["OPTIONS", "GET", "POST", "PATCH", "DELETE"]
+    allow_methods = ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"]
     allow_headers = ["*"]
     allow_credentials = true
     expose_headers = ["*"]

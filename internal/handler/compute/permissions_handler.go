@@ -55,7 +55,9 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	// Initialize stores
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	
 	// Initialize PostgreSQL if available
 	var teamStore store_postgres.TeamStore
@@ -75,6 +77,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	}
 	
 	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
+	permissionService.SetNodeStore(nodeStore)
 	
 	// Check if user has access to the node
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)

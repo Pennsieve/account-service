@@ -64,7 +64,6 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	organizationId := claims.OrgClaim.NodeId
 	
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
@@ -102,6 +101,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	}
 	
 	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
+	permissionService.SetNodeStore(nodesStore)
 	
 	// Check if the node exists and user owns it
 	node, err := nodesStore.GetById(ctx, nodeUuid)
@@ -128,8 +128,16 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 	
-	// Update access scope using the node access store method
-	err = nodeAccessStore.UpdateNodeAccessScope(ctx, nodeUuid, scopeReq.AccessScope, organizationId, userId)
+	// Create NodeAccessRequest for the new access scope
+	accessRequest := models.NodeAccessRequest{
+		NodeUuid:        nodeUuid,
+		AccessScope:     scopeReq.AccessScope,
+		SharedWithUsers: []string{}, // Empty when just setting scope
+		SharedWithTeams: []string{}, // Empty when just setting scope
+	}
+	
+	// Update access scope using the permission service to ensure owner access is preserved
+	err = permissionService.SetNodePermissions(ctx, nodeUuid, accessRequest, node.UserId, node.OrganizationId, userId)
 	if err != nil {
 		log.Printf("error updating access scope: %v", err)
 		return events.APIGatewayV2HTTPResponse{
