@@ -21,6 +21,11 @@ type AccountUpdateRequest struct {
 	Description *string `json:"description,omitempty"`
 }
 
+// PatchAccountHandler updates account details (status, name, description)
+// PATCH /accounts/{id}
+//
+// Required Permissions:
+// - Must be the owner of the account (account.UserId == requestingUserId)
 func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PatchAccountHandler"
 	

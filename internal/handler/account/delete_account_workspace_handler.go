@@ -13,6 +13,12 @@ import (
 	"github.com/pennsieve/account-service/internal/utils"
 )
 
+// DeleteAccountWorkspaceEnablementHandler disables workspace access for an account
+// DELETE /accounts/{uuid}/workspace
+//
+// Required Permissions:
+// - Must be the owner of the account (account.UserId == requestingUserId)
+// - Removes workspace access configuration for the account
 func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "DeleteAccountWorkspaceEnablementHandler"
 

@@ -18,6 +18,13 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// GetComputesNodesHandler retrieves a list of compute nodes
+// GET /compute-nodes
+//
+// Required Permissions:
+// - Returns only nodes that the user has access to (owner, shared, workspace, or team)
+// - When account_owner=true: Returns all nodes for accounts owned by the user
+// - When organization_id specified: Returns nodes within that organization the user has access to
 func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetComputesNodesHandler"
 

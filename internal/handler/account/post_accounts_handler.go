@@ -16,6 +16,13 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// PostAccountsHandler creates a new account
+// POST /accounts
+//
+// Required Permissions:
+// - Must be an authenticated user
+// - Account will be associated with the requesting user (userId)
+// - Prevents duplicate account registration per user
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account

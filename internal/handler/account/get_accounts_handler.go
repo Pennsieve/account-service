@@ -16,6 +16,12 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// GetAccountsHandler retrieves all accounts owned by the current user
+// GET /accounts
+//
+// Required Permissions:
+// - Must be an authenticated user
+// - Returns only accounts owned by the requesting user (filtered by userId)
 func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetAccountsHandler"
 	queryParams := request.QueryStringParameters

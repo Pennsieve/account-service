@@ -17,6 +17,12 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// DetachNodeFromOrganizationHandler detaches a compute node from an organization
+// POST /compute-nodes/{id}/detach
+//
+// Required Permissions:
+// - Must be the owner of the account associated with the compute node
+// - Node becomes organization-independent after detachment
 func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "DetachNodeFromOrganizationHandler"
 	

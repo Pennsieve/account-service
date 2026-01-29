@@ -24,7 +24,7 @@ func setupPatchAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabase
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(client, TEST_NODES_TABLE)
 	
-	// Set environment variables for handler to use test client and test authorization
+	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("NODES_TABLE", TEST_NODES_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
@@ -35,15 +35,6 @@ func setupPatchAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabase
 	if os.Getenv("DYNAMODB_URL") == "" {
 		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
 	}
-	os.Setenv("TEST_USER_ID", testId)  // Set unique test user ID for authorization
-	
-	// Register cleanup for this test's specific data
-	t.Cleanup(func() {
-		// Clean up only this test's data using unique IDs
-		// Note: In a real cleanup, you'd want to remove specific records
-		// For now, rely on unique IDs to prevent conflicts
-		os.Unsetenv("TEST_USER_ID")
-	})
 
 	return accountStore, nodeStore, testId
 }
@@ -77,6 +68,9 @@ func TestPatchAccountHandler_Success_UpdateStatus(t *testing.T) {
 	// Create PATCH request to update status
 	requestBody := `{"status": "Paused"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -116,6 +110,9 @@ func TestPatchAccountHandler_Success_UpdateName(t *testing.T) {
 	// Create PATCH request to update name
 	requestBody := `{"name": "Updated Account Name"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -155,6 +152,9 @@ func TestPatchAccountHandler_Success_UpdateDescription(t *testing.T) {
 	// Create PATCH request to update description
 	requestBody := `{"description": "Updated account description"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -194,6 +194,9 @@ func TestPatchAccountHandler_Success_UpdateMultipleFields(t *testing.T) {
 	// Create PATCH request to update multiple fields
 	requestBody := `{"status": "Paused", "name": "Multi-Updated Name", "description": "Multi-updated description"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -258,6 +261,9 @@ func TestPatchAccountHandler_Success_PauseWithComputeNodes(t *testing.T) {
 	// Create PATCH request to pause account (should pause all nodes)
 	requestBody := `{"status": "Paused"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -286,12 +292,15 @@ func TestPatchAccountHandler_Success_PauseWithComputeNodes(t *testing.T) {
 }
 
 func TestPatchAccountHandler_Error_MissingAccountId(t *testing.T) {
-	_, _, _ = setupPatchAccountHandlerTest(t)
+	_, _, testId := setupPatchAccountHandlerTest(t)
 	ctx := context.Background()
 
 	// Create PATCH request without account ID in path
 	requestBody := `{"status": "Paused"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		// PathParameters intentionally omitted
 	}
@@ -319,6 +328,9 @@ func TestPatchAccountHandler_Error_InvalidJSON(t *testing.T) {
 	// Create PATCH request with invalid JSON
 	requestBody := `{"status": "Paused", invalid json}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -348,6 +360,9 @@ func TestPatchAccountHandler_Error_InvalidStatus(t *testing.T) {
 	// Create PATCH request with invalid status value
 	requestBody := `{"status": "InvalidStatus"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -377,6 +392,9 @@ func TestPatchAccountHandler_Error_NoFieldsProvided(t *testing.T) {
 	// Create PATCH request with empty JSON (no fields to update)
 	requestBody := `{}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -399,6 +417,9 @@ func TestPatchAccountHandler_Error_AccountNotFound(t *testing.T) {
 	// Create PATCH request for non-existent account
 	requestBody := `{"status": "Paused"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": "non-existent-account-" + testId,
@@ -426,6 +447,9 @@ func TestPatchAccountHandler_Error_NotAccountOwner(t *testing.T) {
 	// Create PATCH request (user ID will be testId, but account is owned by different-user)
 	requestBody := `{"status": "Paused"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,
@@ -468,6 +492,9 @@ func TestPatchAccountHandler_Success_EnableAccount_DoesNotEnableNodes(t *testing
 	// Create PATCH request to enable account
 	requestBody := `{"status": "Enabled"}`
 	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"id": account.Uuid,

@@ -99,6 +99,9 @@ func TestGetAccountHandler_Success(t *testing.T) {
 		PathParameters: map[string]string{
 			"id": accountUuid,
 		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, ""),
+		},
 	}
 
 	// Call the handler
@@ -139,6 +142,9 @@ func TestGetAccountHandler_NotFound(t *testing.T) {
 		PathParameters: map[string]string{
 			"id": nonExistentUuid,
 		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 	}
 
 	// Call the handler
@@ -151,13 +157,16 @@ func TestGetAccountHandler_NotFound(t *testing.T) {
 }
 
 func TestGetAccountHandler_InvalidUuid(t *testing.T) {
-	_, _ = setupAccountHandlerTest(t)
+	_, testId := setupAccountHandlerTest(t)
 	ctx := context.Background()
 
 	// Use non-existent UUID (this should result in 404, not validation error)
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"id": "invalid-uuid-format",
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
 		},
 	}
 
@@ -167,4 +176,48 @@ func TestGetAccountHandler_InvalidUuid(t *testing.T) {
 
 	// Verify 404 response for non-existent UUID
 	assert.Equal(t, 404, response.StatusCode)
+}
+
+func TestGetAccountHandler_Forbidden(t *testing.T) {
+	store, testId := setupAccountHandlerTest(t)
+	ctx := context.Background()
+
+	// Create test account owned by one user
+	accountUuid := "account-uuid-" + testId
+	ownerUserId := "owner-user-" + testId
+	differentUserId := "different-user-" + testId
+
+	testAccount := store_dynamodb.Account{
+		Uuid:        accountUuid,
+		AccountId:   "account-123-" + testId,
+		AccountType: "aws",
+		RoleName:    "test-role-" + testId,
+		ExternalId:  "ext-123-" + testId,
+		UserId:      ownerUserId,  // Account owned by this user
+		Name:        "Test Account " + testId,
+		Description: "Test account for permission testing",
+		Status:      "active",
+	}
+
+	// Insert test account
+	err := store.Insert(ctx, testAccount)
+	require.NoError(t, err)
+
+	// Try to access account as different user
+	request := events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{
+			"id": accountUuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(differentUserId, ""), // Different user
+		},
+	}
+
+	// Call the handler
+	response, err := account.GetAccountHandler(ctx, request)
+	assert.NoError(t, err)
+
+	// Verify 403 Forbidden response
+	assert.Equal(t, 403, response.StatusCode)
+	assert.Contains(t, response.Body, "account does not belong to user")
 }

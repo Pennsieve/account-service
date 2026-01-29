@@ -17,6 +17,12 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// AttachNodeToOrganizationHandler attaches a compute node to an organization
+// POST /compute-nodes/{id}/attach?organization_id={org_id}
+//
+// Required Permissions:
+// - Must be the owner of the compute node
+// - Node must be organization-independent (not already attached to an organization)
 func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "AttachNodeToOrganizationHandler"
 	

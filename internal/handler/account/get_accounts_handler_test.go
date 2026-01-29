@@ -25,7 +25,7 @@ func setupGetAccountsHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseS
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, TEST_WORKSPACE_TABLE).(*store_dynamodb.AccountWorkspaceStoreImpl)
 	
-	// Set environment variables for handler to use test client and test authorization
+	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ACCOUNT_WORKSPACE_TABLE", TEST_WORKSPACE_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
@@ -36,25 +36,20 @@ func setupGetAccountsHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseS
 	if os.Getenv("DYNAMODB_URL") == "" {
 		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
 	}
-	os.Setenv("TEST_USER_ID", testId)  // Set unique test user ID for authorization
-	
-	// Register cleanup for this test's specific data
-	t.Cleanup(func() {
-		// Clean up only this test's data using unique IDs
-		// Note: In a real cleanup, you'd want to remove specific records
-		// For now, rely on unique IDs to prevent conflicts
-		os.Unsetenv("TEST_USER_ID")
-	})
 
 	return accountStore, workspaceStore, testId
 }
 
 func TestGetAccountsHandler_Success_NoAccounts(t *testing.T) {
-	_, _, _ = setupGetAccountsHandlerTest(t)
+	_, _, testId := setupGetAccountsHandlerTest(t)
 	ctx := context.Background()
 
-	// Create simple request (no query parameters)
-	request := events.APIGatewayV2HTTPRequest{}
+	// Create simple request with test authorizer (no query parameters)
+	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
+	}
 
 	// Call the handler
 	response, err := account.GetAccountsHandler(ctx, request)
@@ -107,8 +102,12 @@ func TestGetAccountsHandler_Success_WithAccounts(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Create simple request (no query parameters)
-	request := events.APIGatewayV2HTTPRequest{}
+	// Create simple request with test authorizer (no query parameters)
+	request := events.APIGatewayV2HTTPRequest{
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
+	}
 
 	// Call the handler
 	response, err := account.GetAccountsHandler(ctx, request)
@@ -194,10 +193,13 @@ func TestGetAccountsHandler_Success_WorkspaceFilter(t *testing.T) {
 	err := workspaceStore.Insert(ctx, enablement)
 	require.NoError(t, err)
 
-	// Create request with workspace filter
+	// Create request with workspace filter and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
 			"workspace": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
 		},
 	}
 
@@ -266,10 +268,13 @@ func TestGetAccountsHandler_Success_IncludeWorkspaces(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Create request with includeWorkspaces=true
+	// Create request with includeWorkspaces=true and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
 			"includeWorkspaces": "true",
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
 		},
 	}
 
@@ -341,11 +346,14 @@ func TestGetAccountsHandler_Success_CombinedFilters(t *testing.T) {
 	err = workspaceStore.Insert(ctx, enablement)
 	require.NoError(t, err)
 
-	// Create request with both workspace filter and includeWorkspaces
+	// Create request with both workspace filter and includeWorkspaces and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
 			"workspace":         workspaceId,
 			"includeWorkspaces": "true",
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
 		},
 	}
 
@@ -395,10 +403,13 @@ func TestGetAccountsHandler_Success_EmptyWorkspaceFilter(t *testing.T) {
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
 
-	// Create request with workspace filter for non-existent workspace
+	// Create request with workspace filter for non-existent workspace and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
 			"workspace": "non-existent-workspace",
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
 		},
 	}
 
@@ -438,10 +449,13 @@ func TestGetAccountsHandler_Success_IncludeWorkspaces_NoEnablements(t *testing.T
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
 
-	// Create request with includeWorkspaces=true
+	// Create request with includeWorkspaces=true and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
 			"includeWorkspaces": "true",
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
 		},
 	}
 

@@ -15,9 +15,24 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// GetAccountHandler retrieves a specific account by ID
+// GET /accounts/{id}
+//
+// Required Permissions:
+// - Must be the owner of the account (account.UserId == requestingUserId)
 func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetAccountHandler"
 	uuid := request.PathParameters["id"]
+
+	// Get user ID from request
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -44,6 +59,14 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       errors.HandlerError(handlerName, errors.ErrNoRecordsFound),
+		}, nil
+	}
+
+	// Check if user owns this account
+	if account.UserId != userId {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       errors.HandlerError(handlerName, errors.ErrAccountDoesNotBelongToUser),
 		}, nil
 	}
 

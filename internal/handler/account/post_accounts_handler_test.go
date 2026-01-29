@@ -23,7 +23,7 @@ func setupPostAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseS
 	client := test.GetClient()
 	store := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	
-	// Set environment variables for handler to use test client and test authorization
+	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
@@ -33,15 +33,8 @@ func setupPostAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseS
 	if os.Getenv("DYNAMODB_URL") == "" {
 		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
 	}
-	os.Setenv("TEST_USER_ID", testId)  // Set unique test user ID for authorization
 	
-	// Register cleanup for this test's specific data
-	t.Cleanup(func() {
-		// Clean up only this test's data using unique IDs
-		// Note: In a real cleanup, you'd want to remove specific records
-		// For now, rely on unique IDs to prevent conflicts
-		os.Unsetenv("TEST_USER_ID")
-	})
+	// No cleanup needed for environment variables
 
 	return store, testId
 }
@@ -67,9 +60,12 @@ func TestPostAccountsHandler_Success(t *testing.T) {
 	requestBody, err := json.Marshal(accountData)
 	require.NoError(t, err)
 
-	// Create simple request event (authorization handled via ENV=TEST)
+	// Create request with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(requestBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, ""),
+		},
 	}
 
 	// Call the handler
@@ -141,9 +137,12 @@ func TestPostAccountsHandler_DuplicateAccount(t *testing.T) {
 	requestBody, err := json.Marshal(duplicateAccountData)
 	require.NoError(t, err)
 
-	// Create simple request event (authorization handled via ENV=TEST)
+	// Create request with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(requestBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, ""),
+		},
 	}
 
 	// Call the handler
@@ -156,12 +155,15 @@ func TestPostAccountsHandler_DuplicateAccount(t *testing.T) {
 }
 
 func TestPostAccountsHandler_InvalidJSON(t *testing.T) {
-	_, _ = setupPostAccountHandlerTest(t)
+	_, testId := setupPostAccountHandlerTest(t)
 	ctx := context.Background()
 
-	// Create request with invalid JSON (authorization handled via ENV=TEST)
+	// Create request with invalid JSON but valid authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		Body: "{ invalid json }",
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, ""),
+		},
 	}
 
 	// Call the handler

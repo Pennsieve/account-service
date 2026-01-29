@@ -25,6 +25,12 @@ type WorkspaceEnablementRequest struct {
 	IsPublic bool `json:"isPublic"`
 }
 
+// PostAccountWorkspaceEnablementHandler enables workspace access for an account
+// POST /accounts/{id}/workspace
+//
+// Required Permissions:
+// - Must be the owner of the account (account.UserId == requestingUserId)
+// - Sets workspace access permissions (public/private) for the account
 func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountWorkspaceEnablementHandler"
 
@@ -46,7 +52,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		}, nil
 	}
 
-	// Get userId using test-aware function
+	// Get userId using helper function
 	userId, err := utils.GetUserIdFromRequest(request)
 	if err != nil {
 		log.Println(err.Error())
@@ -56,20 +62,9 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		}, nil
 	}
 
-	// Get organizationId from request
-	var organizationId string
-	envValue := os.Getenv("ENV")
-	if envValue == "DOCKER" || envValue == "TEST" {
-		// In test mode, get organizationId from environment variable
-		organizationId = os.Getenv("TEST_ORGANIZATION_ID")
-		if organizationId == "" {
-			organizationId = "test-org-default"
-		}
-	} else {
-		// Production mode: parse authorization claims
-		claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-		organizationId = claims.OrgClaim.NodeId
-	}
+	// Get organizationId from authorization claims
+	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
+	organizationId := claims.OrgClaim.NodeId
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {

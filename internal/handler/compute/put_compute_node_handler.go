@@ -22,6 +22,12 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 )
 
+// PutComputeNodeHandler updates a compute node
+// PUT /compute-nodes/{id}
+//
+// Required Permissions:
+// - Must be the owner of the compute node OR
+// - Must be the owner of the account associated with the compute node
 func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PutComputeNodeHandler"
 	uuid := request.PathParameters["id"]
@@ -64,8 +70,55 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}, nil
+	}
+	if (models.DynamoDBNode{}) == computeNode {
+		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNoRecordsFound),
+		}, nil
+	}
+
+	// Check update permissions: only node owner or account owner can update
+	canUpdate := false
+	
+	// Check if user is the node owner
+	if computeNode.UserId == userId {
+		canUpdate = true
+	} else {
+		// Check if user is the account owner
+		accountsTable := os.Getenv("ACCOUNTS_TABLE")
+		if accountsTable == "" {
+			log.Println("ACCOUNTS_TABLE environment variable not set")
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+			}, nil
+		}
+		
+		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+		account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
+		if err != nil {
+			log.Printf("Error fetching account %s: %v", computeNode.AccountUuid, err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+		
+		// Check if account exists and user is the account owner
+		if (store_dynamodb.Account{}) != account && account.UserId == userId {
+			canUpdate = true
+		}
+	}
+	
+	if !canUpdate {
+		log.Printf("User %s does not have permission to update node %s (node owner: %s)", userId, uuid, computeNode.UserId)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
 		}, nil
 	}
 
@@ -188,8 +241,29 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		LaunchType: types.LaunchTypeFargate,
 	}
 
-	runner := runner.NewECSTaskRunner(client, runTaskIn)
-	if err := runner.Run(ctx); err != nil {
+	// In test environment, skip ECS task execution and return mock response
+	if envValue == "DOCKER" || envValue == "TEST" {
+		log.Println("Test environment detected, skipping ECS task execution")
+		
+		m, err := json.Marshal(models.NodeResponse{
+			Message: "Compute node update initiated",
+		})
+		if err != nil {
+			log.Println(err.Error())
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: 500,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
+			}, nil
+		}
+
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusAccepted,
+			Body:       string(m),
+		}, nil
+	}
+
+	taskRunner := runner.NewECSTaskRunner(client, runTaskIn)
+	if err := taskRunner.Run(ctx); err != nil {
 		log.Println(err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 500,

@@ -26,7 +26,7 @@ func setupPostAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.Account
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, TEST_WORKSPACE_TABLE).(*store_dynamodb.AccountWorkspaceStoreImpl)
 	
-	// Set environment variables for handler to use test client and test authorization
+	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ACCOUNT_WORKSPACE_TABLE", TEST_WORKSPACE_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
@@ -37,15 +37,6 @@ func setupPostAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.Account
 	if os.Getenv("DYNAMODB_URL") == "" {
 		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
 	}
-	os.Setenv("TEST_USER_ID", testId)  // Set unique test user ID for authorization
-	os.Setenv("TEST_ORGANIZATION_ID", organizationId)  // Set unique test organization ID
-	
-	// Register cleanup for this test's specific data
-	t.Cleanup(func() {
-		// Clean up only this test's data using unique IDs
-		os.Unsetenv("TEST_USER_ID")
-		os.Unsetenv("TEST_ORGANIZATION_ID")
-	})
 
 	return accountStore, workspaceStore, testId, organizationId
 }
@@ -82,6 +73,9 @@ func TestPostAccountWorkspaceHandler_Success_PublicEnablement(t *testing.T) {
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, organizationId),
 		},
 	}
 
@@ -130,6 +124,9 @@ func TestPostAccountWorkspaceHandler_Success_PrivateEnablement(t *testing.T) {
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
 		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, organizationId),
+		},
 	}
 
 	// Call the handler
@@ -157,7 +154,7 @@ func TestPostAccountWorkspaceHandler_Success_PrivateEnablement(t *testing.T) {
 }
 
 func TestPostAccountWorkspaceHandler_Error_MissingAccountUuid(t *testing.T) {
-	_, _, _, _ = setupPostAccountWorkspaceHandlerTest(t)
+	_, _, testId, organizationId := setupPostAccountWorkspaceHandlerTest(t)
 	ctx := context.Background()
 
 	// Create POST request without account UUID in path
@@ -165,6 +162,9 @@ func TestPostAccountWorkspaceHandler_Error_MissingAccountUuid(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: requestBody,
 		// PathParameters intentionally omitted
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, organizationId),
+		},
 	}
 
 	// Call the handler
@@ -194,6 +194,9 @@ func TestPostAccountWorkspaceHandler_Error_InvalidJSON(t *testing.T) {
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
 		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, "test-org"),
+		},
 	}
 
 	// Call the handler
@@ -206,7 +209,7 @@ func TestPostAccountWorkspaceHandler_Error_InvalidJSON(t *testing.T) {
 }
 
 func TestPostAccountWorkspaceHandler_Error_AccountNotFound(t *testing.T) {
-	_, _, testId, _ := setupPostAccountWorkspaceHandlerTest(t)
+	_, _, testId, organizationId := setupPostAccountWorkspaceHandlerTest(t)
 	ctx := context.Background()
 
 	// Create POST request for non-existent account
@@ -215,6 +218,9 @@ func TestPostAccountWorkspaceHandler_Error_AccountNotFound(t *testing.T) {
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"uuid": "non-existent-account-" + testId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, organizationId),
 		},
 	}
 
@@ -228,7 +234,7 @@ func TestPostAccountWorkspaceHandler_Error_AccountNotFound(t *testing.T) {
 }
 
 func TestPostAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
-	accountStore, _, testId, _ := setupPostAccountWorkspaceHandlerTest(t)
+	accountStore, _, testId, organizationId := setupPostAccountWorkspaceHandlerTest(t)
 	ctx := context.Background()
 
 	// Create account owned by a different user
@@ -242,6 +248,9 @@ func TestPostAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, organizationId),
 		},
 	}
 
@@ -282,6 +291,9 @@ func TestPostAccountWorkspaceHandler_Error_DuplicateEnablement(t *testing.T) {
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, organizationId),
 		},
 	}
 
@@ -336,6 +348,9 @@ func TestPostAccountWorkspaceHandler_Success_MultipleAccountsSameWorkspace(t *te
 		PathParameters: map[string]string{
 			"uuid": account1.Uuid,
 		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, organizationId),
+		},
 	}
 	response1, err := account_handler.PostAccountWorkspaceEnablementHandler(ctx, request1)
 	assert.NoError(t, err)
@@ -347,6 +362,9 @@ func TestPostAccountWorkspaceHandler_Success_MultipleAccountsSameWorkspace(t *te
 		Body: requestBody2,
 		PathParameters: map[string]string{
 			"uuid": account2.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, organizationId),
 		},
 	}
 	response2, err := account_handler.PostAccountWorkspaceEnablementHandler(ctx, request2)
@@ -364,7 +382,7 @@ func TestPostAccountWorkspaceHandler_Success_MultipleAccountsSameWorkspace(t *te
 }
 
 func TestPostAccountWorkspaceHandler_Success_EnabledAtTimestamp(t *testing.T) {
-	accountStore, _, testId, _ := setupPostAccountWorkspaceHandlerTest(t)
+	accountStore, _, testId, organizationId := setupPostAccountWorkspaceHandlerTest(t)
 	ctx := context.Background()
 
 	userId := testId
@@ -383,6 +401,9 @@ func TestPostAccountWorkspaceHandler_Success_EnabledAtTimestamp(t *testing.T) {
 		Body: requestBody,
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, organizationId),
 		},
 	}
 

@@ -27,22 +27,8 @@ func GetDynamoDBEndpoint() string {
     return ""
 }
 
-// GetUserIdFromRequest extracts userId from request with test-aware logic
-// In test mode, uses TEST_USER_ID environment variable
-// In production mode, parses authorization claims
+// GetUserIdFromRequest extracts userId from request authorization claims
 func GetUserIdFromRequest(request events.APIGatewayV2HTTPRequest) (string, error) {
-    envValue := os.Getenv("ENV")
-
-    // Test mode: use environment variable
-    if envValue == "DOCKER" || envValue == "TEST" {
-        userId := os.Getenv("TEST_USER_ID")
-        if userId == "" {
-            userId = "test-user-default"
-        }
-        return userId, nil
-    }
-
-    // Production mode: parse authorization claims
     if request.RequestContext.Authorizer == nil || request.RequestContext.Authorizer.Lambda == nil {
         return "", fmt.Errorf("no authorization context provided")
     }

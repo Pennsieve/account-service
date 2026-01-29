@@ -52,9 +52,6 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     // Organization attachment/detachment routes
     router.POST("/compute-nodes/{id}/organization", computeHandler.AttachNodeToOrganizationHandler)
     router.DELETE("/compute-nodes/{id}/organization", computeHandler.DetachNodeFromOrganizationHandler)
-    
-    // Legacy PATCH endpoint for backwards compatibility (deprecated - use PUT for access scope)
-    router.PATCH("/compute-nodes/{id}/permissions", computeHandler.UpdateNodePermissionsHandler)
 
     return router.Start(ctx, request)
 }

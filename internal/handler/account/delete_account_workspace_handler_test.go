@@ -24,7 +24,7 @@ func setupDeleteAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.Accou
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, TEST_WORKSPACE_TABLE).(*store_dynamodb.AccountWorkspaceStoreImpl)
 	
-	// Set environment variables for handler to use test client and test authorization
+	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ACCOUNT_WORKSPACE_TABLE", TEST_WORKSPACE_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
@@ -35,13 +35,6 @@ func setupDeleteAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.Accou
 	if os.Getenv("DYNAMODB_URL") == "" {
 		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
 	}
-	os.Setenv("TEST_USER_ID", testId)  // Set unique test user ID for authorization
-	
-	// Register cleanup for this test's specific data
-	t.Cleanup(func() {
-		// Clean up only this test's data using unique IDs
-		os.Unsetenv("TEST_USER_ID")
-	})
 
 	return accountStore, workspaceStore, testId, workspaceId
 }
@@ -88,11 +81,14 @@ func TestDeleteAccountWorkspaceHandler_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, account.Uuid, existingEnablement.AccountUuid)
 
-	// Create DELETE request
+	// Create DELETE request with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid":        account.Uuid,
 			"workspaceId": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, workspaceId),
 		},
 	}
 
@@ -114,10 +110,13 @@ func TestDeleteAccountWorkspaceHandler_Error_MissingAccountUuid(t *testing.T) {
 	_, _, _, workspaceId := setupDeleteAccountWorkspaceHandlerTest(t)
 	ctx := context.Background()
 
-	// Create DELETE request without account UUID
+	// Create DELETE request without account UUID but with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"workspaceId": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer("test-user", workspaceId),
 		},
 	}
 
@@ -151,10 +150,13 @@ func TestDeleteAccountWorkspaceHandler_Error_MissingWorkspaceId(t *testing.T) {
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
 
-	// Create DELETE request without workspace ID
+	// Create DELETE request without workspace ID but with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid": account.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, "test-workspace"),
 		},
 	}
 
@@ -171,11 +173,14 @@ func TestDeleteAccountWorkspaceHandler_Error_AccountNotFound(t *testing.T) {
 	_, _, testId, workspaceId := setupDeleteAccountWorkspaceHandlerTest(t)
 	ctx := context.Background()
 
-	// Create DELETE request for non-existent account
+	// Create DELETE request for non-existent account with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid":        "non-existent-account-" + testId,
 			"workspaceId": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, workspaceId),
 		},
 	}
 
@@ -200,11 +205,14 @@ func TestDeleteAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
 	err = workspaceStore.Insert(ctx, enablement)
 	require.NoError(t, err)
 
-	// Create DELETE request (user ID will be testId, but account is owned by different-user)
+	// Create DELETE request with test authorizer (user ID will be testId, but account is owned by different-user)
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid":        account.Uuid,
 			"workspaceId": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testId, workspaceId),
 		},
 	}
 
@@ -243,11 +251,14 @@ func TestDeleteAccountWorkspaceHandler_Error_EnablementNotFound(t *testing.T) {
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
 
-	// Create DELETE request for non-existent enablement
+	// Create DELETE request for non-existent enablement with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid":        account.Uuid,
 			"workspaceId": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, workspaceId),
 		},
 	}
 
@@ -304,11 +315,14 @@ func TestDeleteAccountWorkspaceHandler_Success_DeleteSpecificWorkspace(t *testin
 	err = workspaceStore.Insert(ctx, enablement2)
 	require.NoError(t, err)
 
-	// Delete only workspace1
+	// Delete only workspace1 with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid":        account.Uuid,
 			"workspaceId": workspace1,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, workspace1),
 		},
 	}
 
@@ -341,11 +355,14 @@ func TestDeleteAccountWorkspaceHandler_Success_IdempotentDelete(t *testing.T) {
 	err = workspaceStore.Insert(ctx, enablement)
 	require.NoError(t, err)
 
-	// Create DELETE request
+	// Create DELETE request with test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"uuid":        account.Uuid,
 			"workspaceId": workspaceId,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, workspaceId),
 		},
 	}
 
