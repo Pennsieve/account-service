@@ -84,6 +84,40 @@ func (m *MockTeamStore) GetTeamMembers(ctx context.Context, teamId int64) ([]int
 	return args.Get(0).([]int64), args.Error(1)
 }
 
+type MockNodeStore struct {
+	mock.Mock
+}
+
+func (m *MockNodeStore) GetById(ctx context.Context, uuid string) (models.DynamoDBNode, error) {
+	args := m.Called(ctx, uuid)
+	return args.Get(0).(models.DynamoDBNode), args.Error(1)
+}
+
+func (m *MockNodeStore) Get(ctx context.Context, userId string) ([]models.DynamoDBNode, error) {
+	args := m.Called(ctx, userId)
+	return args.Get(0).([]models.DynamoDBNode), args.Error(1)
+}
+
+func (m *MockNodeStore) GetByAccount(ctx context.Context, accountUuid string) ([]models.DynamoDBNode, error) {
+	args := m.Called(ctx, accountUuid)
+	return args.Get(0).([]models.DynamoDBNode), args.Error(1)
+}
+
+func (m *MockNodeStore) Put(ctx context.Context, node models.DynamoDBNode) error {
+	args := m.Called(ctx, node)
+	return args.Error(0)
+}
+
+func (m *MockNodeStore) UpdateStatus(ctx context.Context, uuid, status string) error {
+	args := m.Called(ctx, uuid, status)
+	return args.Error(0)
+}
+
+func (m *MockNodeStore) Delete(ctx context.Context, uuid string) error {
+	args := m.Called(ctx, uuid)
+	return args.Error(0)
+}
+
 func TestPermissionService_CheckNodeAccess_DirectUserAccess(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)
 	service := NewPermissionService(mockNodeStore, nil)
@@ -900,4 +934,206 @@ func TestPermissionService_DetachNodeFromOrganization_NoOwnerFound(t *testing.T)
 	assert.Error(t, err)
 	assert.Equal(t, errors.ErrNotFound, err)
 	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_GetNodePermissions_AutoRepair_Success(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockNodeStore := new(MockNodeStore)
+	service := NewPermissionService(mockNodeAccessStore, nil)
+	service.SetNodeStore(mockNodeStore)
+
+	ctx := context.Background()
+	nodeUuid := "node-456"
+	ownerId := "user-123"
+	organizationId := "org-789"
+
+	// Mock: GetNodeAccess returns empty list (no access entries - this triggers auto-repair)
+	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return([]models.NodeAccess{}, nil)
+
+	// Mock: GetById returns the actual node with owner information
+	node := models.DynamoDBNode{
+		Uuid:           nodeUuid,
+		UserId:         ownerId,
+		OrganizationId: organizationId,
+		Name:           "Test Node",
+		Status:         "Enabled",
+	}
+	mockNodeStore.On("GetById", ctx, nodeUuid).Return(node, nil)
+
+	// Mock: GrantAccess will be called to restore owner access
+	expectedOwnerAccess := models.NodeAccess{
+		EntityId:       models.FormatEntityId(models.EntityTypeUser, ownerId),
+		NodeId:         models.FormatNodeId(nodeUuid),
+		EntityType:     models.EntityTypeUser,
+		EntityRawId:    ownerId,
+		NodeUuid:       nodeUuid,
+		AccessType:     models.AccessTypeOwner,
+		OrganizationId: organizationId,
+		GrantedBy:      ownerId,
+	}
+	mockNodeAccessStore.On("GrantAccess", ctx, expectedOwnerAccess).Return(nil)
+
+	// Call GetNodePermissions - should trigger auto-repair
+	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
+
+	// Verify results
+	assert.NoError(t, err)
+	assert.NotNil(t, permissions)
+	assert.Equal(t, nodeUuid, permissions.NodeUuid)
+	assert.Equal(t, ownerId, permissions.Owner)
+	assert.Equal(t, models.AccessScopePrivate, permissions.AccessScope)
+	assert.Equal(t, organizationId, permissions.OrganizationId)
+	assert.Empty(t, permissions.SharedWithUsers)
+	assert.Empty(t, permissions.SharedWithTeams)
+
+	// Verify all mocks were called as expected
+	mockNodeAccessStore.AssertExpectations(t)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_GetNodePermissions_AutoRepair_NodeNotFound(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockNodeStore := new(MockNodeStore)
+	service := NewPermissionService(mockNodeAccessStore, nil)
+	service.SetNodeStore(mockNodeStore)
+
+	ctx := context.Background()
+	nodeUuid := "node-456"
+
+	// Mock: GetNodeAccess returns empty list (no access entries)
+	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return([]models.NodeAccess{}, nil)
+
+	// Mock: GetById returns error (node not found)
+	mockNodeStore.On("GetById", ctx, nodeUuid).Return(models.DynamoDBNode{}, errors.ErrNotFound)
+
+	// Call GetNodePermissions - should not attempt repair
+	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
+
+	// Verify results - should return empty permissions without error
+	assert.NoError(t, err)
+	assert.NotNil(t, permissions)
+	assert.Equal(t, nodeUuid, permissions.NodeUuid)
+	assert.Empty(t, permissions.Owner) // No owner found, no repair performed
+	assert.Equal(t, models.AccessScopePrivate, permissions.AccessScope)
+
+	// Verify mocks were called as expected (GrantAccess should NOT be called)
+	mockNodeAccessStore.AssertExpectations(t)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_GetNodePermissions_AutoRepair_GrantAccessFails(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockNodeStore := new(MockNodeStore)
+	service := NewPermissionService(mockNodeAccessStore, nil)
+	service.SetNodeStore(mockNodeStore)
+
+	ctx := context.Background()
+	nodeUuid := "node-456"
+	ownerId := "user-123"
+	organizationId := "org-789"
+
+	// Mock: GetNodeAccess returns empty list (no access entries)
+	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return([]models.NodeAccess{}, nil)
+
+	// Mock: GetById returns the actual node
+	node := models.DynamoDBNode{
+		Uuid:           nodeUuid,
+		UserId:         ownerId,
+		OrganizationId: organizationId,
+		Name:           "Test Node",
+		Status:         "Enabled",
+	}
+	mockNodeStore.On("GetById", ctx, nodeUuid).Return(node, nil)
+
+	// Mock: GrantAccess fails
+	expectedOwnerAccess := models.NodeAccess{
+		EntityId:       models.FormatEntityId(models.EntityTypeUser, ownerId),
+		NodeId:         models.FormatNodeId(nodeUuid),
+		EntityType:     models.EntityTypeUser,
+		EntityRawId:    ownerId,
+		NodeUuid:       nodeUuid,
+		AccessType:     models.AccessTypeOwner,
+		OrganizationId: organizationId,
+		GrantedBy:      ownerId,
+	}
+	mockNodeAccessStore.On("GrantAccess", ctx, expectedOwnerAccess).Return(errors.ErrDynamoDB)
+
+	// Call GetNodePermissions - should attempt repair but gracefully handle failure
+	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
+
+	// Verify results - should not fail even if repair fails
+	assert.NoError(t, err)
+	assert.NotNil(t, permissions)
+	assert.Equal(t, nodeUuid, permissions.NodeUuid)
+	assert.Empty(t, permissions.Owner) // Repair failed, so owner is still empty
+	assert.Equal(t, models.AccessScopePrivate, permissions.AccessScope)
+
+	// Verify all mocks were called
+	mockNodeAccessStore.AssertExpectations(t)
+	mockNodeStore.AssertExpectations(t)
+}
+
+func TestPermissionService_GetNodePermissions_AutoRepair_NoNodeStore(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeAccessStore, nil)
+	// Note: NodeStore is nil, so auto-repair should be skipped
+
+	ctx := context.Background()
+	nodeUuid := "node-456"
+
+	// Mock: GetNodeAccess returns empty list (no access entries)
+	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return([]models.NodeAccess{}, nil)
+
+	// Call GetNodePermissions - should NOT trigger auto-repair (no NodeStore)
+	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
+
+	// Verify results
+	assert.NoError(t, err)
+	assert.NotNil(t, permissions)
+	assert.Equal(t, nodeUuid, permissions.NodeUuid)
+	assert.Empty(t, permissions.Owner) // No repair attempted
+	assert.Equal(t, models.AccessScopePrivate, permissions.AccessScope)
+
+	// Verify mocks - NodeStore methods should NOT be called
+	mockNodeAccessStore.AssertExpectations(t)
+}
+
+func TestPermissionService_GetNodePermissions_AutoRepair_OwnerAlreadyExists(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockNodeStore := new(MockNodeStore)
+	service := NewPermissionService(mockNodeAccessStore, nil)
+	service.SetNodeStore(mockNodeStore)
+
+	ctx := context.Background()
+	nodeUuid := "node-456"
+	ownerId := "user-123"
+	organizationId := "org-789"
+
+	// Mock: GetNodeAccess returns existing owner access (no repair needed)
+	existingAccess := []models.NodeAccess{
+		{
+			EntityId:       models.FormatEntityId(models.EntityTypeUser, ownerId),
+			NodeId:         models.FormatNodeId(nodeUuid),
+			EntityType:     models.EntityTypeUser,
+			EntityRawId:    ownerId,
+			NodeUuid:       nodeUuid,
+			AccessType:     models.AccessTypeOwner,
+			OrganizationId: organizationId,
+		},
+	}
+	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(existingAccess, nil)
+
+	// Call GetNodePermissions - should NOT trigger auto-repair (owner already exists)
+	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
+
+	// Verify results
+	assert.NoError(t, err)
+	assert.NotNil(t, permissions)
+	assert.Equal(t, nodeUuid, permissions.NodeUuid)
+	assert.Equal(t, ownerId, permissions.Owner)
+	assert.Equal(t, models.AccessScopePrivate, permissions.AccessScope)
+
+	// Verify mocks - NodeStore methods should NOT be called
+	mockNodeAccessStore.AssertExpectations(t)
+	// mockNodeStore should not be called at all since owner already exists
 }
