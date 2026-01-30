@@ -144,7 +144,7 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 	assert.Equal(t, "Test Description", createdNode.Description)
 	assert.Equal(t, "", createdNode.OrganizationId) // Should be empty (converted from INDEPENDENT)
 	assert.Equal(t, testAccount.UserId, createdNode.UserId)
-	assert.Equal(t, "Enabled", createdNode.Status)
+	assert.Equal(t, "Pending", createdNode.Status)
 	assert.NotEmpty(t, createdNode.Uuid)
 }
 
