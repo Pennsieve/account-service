@@ -25,11 +25,11 @@ resource "aws_lambda_function" "service_lambda" {
       COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
       NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
       # ECS Configuration for compute node provisioning
-      TASK_DEF_ARN = data.terraform_remote_state.compute_node_service.outputs.task_definition_arn
-      CLUSTER_ARN = data.terraform_remote_state.compute_node_service.outputs.ecs_cluster_arn
+      TASK_DEF_ARN = aws_ecs_task_definition.provisioner_ecs_task_definition.arn
+      CLUSTER_ARN = data.terraform_remote_state.fargate.outputs.ecs_cluster_arn
       SUBNET_IDS = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
-      SECURITY_GROUP = data.terraform_remote_state.compute_node_service.outputs.fargate_security_group_id
-      TASK_DEF_CONTAINER_NAME = data.terraform_remote_state.compute_node_service.outputs.task_container_name
+      SECURITY_GROUP = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
+      TASK_DEF_CONTAINER_NAME = var.tier
     }
   }
 }

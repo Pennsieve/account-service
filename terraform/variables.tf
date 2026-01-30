@@ -18,6 +18,33 @@ variable "lambda_bucket" {
   default = "pennsieve-cc-lambda-functions-use1"
 }
 
+# PROVISIONER RUNNER
+
+// Fargate Task Image
+variable "image_url" {
+  default = "pennsieve/compute-node-aws-provisioner"
+}
+
+variable "container_memory" {
+  default = "2048"
+}
+
+variable "container_cpu" {
+  default = "0"
+}
+
+variable "task_memory" {
+  default = "2048"
+}
+
+variable "task_cpu" {
+  default = "512"
+}
+
+variable "tier" {
+  default = "provisioner"
+}
+
 locals {
   
   common_tags = {
