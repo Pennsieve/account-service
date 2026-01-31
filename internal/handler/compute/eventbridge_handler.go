@@ -59,14 +59,18 @@ func ComputeNodeEventBridgeHandler(ctx context.Context, event events.CloudWatchE
 
 	// Handle different event types based on DetailType
 	switch event.DetailType {
-	case "ComputeNodeProvisioningComplete":
+	case "ComputeNodeCREATE":
 		return handleProvisioningComplete(ctx, nodeStore, event.Detail)
-	case "ComputeNodeProvisioningError":
+	case "ComputeNodeCREATEError":
 		return handleProvisioningError(ctx, nodeStore, event.Detail)
-	case "ComputeNodeUpdateComplete":
+	case "ComputeNodeUPDATE":
 		return handleUpdateComplete(ctx, nodeStore, event.Detail)
-	case "ComputeNodeDeleteComplete":
+	case "ComputeNodeUPDATEError":
+		return handleProvisioningError(ctx, nodeStore, event.Detail)
+	case "ComputeNodeDELETE":
 		return handleDeleteComplete(ctx, nodeStore, event.Detail)
+	case "ComputeNodeDELETEError":
+		return handleProvisioningError(ctx, nodeStore, event.Detail)
 	default:
 		log.Printf("Unknown event type: %s", event.DetailType)
 		return nil // Don't error on unknown events

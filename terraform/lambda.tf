@@ -69,10 +69,12 @@ resource "aws_cloudwatch_event_rule" "compute_node_provisioning" {
   event_pattern = jsonencode({
     source      = ["compute-node-provisioner"]
     detail-type = [
-      "ComputeNodeProvisioningComplete",
-      "ComputeNodeProvisioningError",
-      "ComputeNodeUpdateComplete",
-      "ComputeNodeDeleteComplete"
+      "ComputeNodeCREATE",
+      "ComputeNodeCREATEError",
+      "ComputeNodeUPDATE", 
+      "ComputeNodeUPDATEError",
+      "ComputeNodeDELETE",
+      "ComputeNodeDELETEError"
     ]
   })
 }
