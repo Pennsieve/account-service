@@ -1,9 +1,10 @@
-.PHONY: help clean test test-ci package publish
+.PHONY: help clean test test-ci package publish package-eventbridge publish-eventbridge
 
 LAMBDA_BUCKET ?= "pennsieve-cc-lambda-functions-use1"
 WORKING_DIR   ?= "$(shell pwd)"
 SERVICE_NAME  ?= "account-service"
 PACKAGE_NAME  ?= "${SERVICE_NAME}-${IMAGE_TAG}.zip"
+EVENTBRIDGE_PACKAGE_NAME ?= "${SERVICE_NAME}-eventbridge-handler-${IMAGE_TAG}.zip"
 
 .DEFAULT: help
 
@@ -45,23 +46,32 @@ docker-clean:
 package:
 	@echo ""
 	@echo "***********************"
-	@echo "*   Building lambda   *"
+	@echo "*   Building lambdas  *"
 	@echo "***********************"
 	@echo ""
+	@echo "Building API Lambda..."
 	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/api/bootstrap $(WORKING_DIR)/cmd/api; \
 	cd $(WORKING_DIR)/bin/api/; \
 		zip -r $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) .
+	@echo "Building EventBridge Handler Lambda..."
+	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/eventbridge/bootstrap $(WORKING_DIR)/cmd/eventbridge-handler; \
+	cd $(WORKING_DIR)/bin/eventbridge/; \
+		zip -r $(WORKING_DIR)/bin/eventbridge/$(EVENTBRIDGE_PACKAGE_NAME) .
 
-# Copy Service lambda to S3 location
+# Copy Service lambdas to S3 location
 publish:
 	@make package
 	@echo ""
 	@echo "*************************"
-	@echo "*   Publishing lambda   *"
+	@echo "*   Publishing lambdas  *"
 	@echo "*************************"
 	@echo ""
+	@echo "Publishing API Lambda..."
 	aws s3 cp $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
+	@echo "Publishing EventBridge Handler Lambda..."
+	aws s3 cp $(WORKING_DIR)/bin/eventbridge/$(EVENTBRIDGE_PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
 	rm -rf $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) $(WORKING_DIR)/bin/api/bootstrap
+	rm -rf $(WORKING_DIR)/bin/eventbridge/$(EVENTBRIDGE_PACKAGE_NAME) $(WORKING_DIR)/bin/eventbridge/bootstrap
 
 # Run go mod tidy on modules
 tidy:

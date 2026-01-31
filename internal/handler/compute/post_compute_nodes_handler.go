@@ -4,11 +4,14 @@ import (
     "context"
     "database/sql"
     "encoding/json"
+    "fmt"
+    "hash/fnv"
     "log"
     "net/http"
     "os"
     "strconv"
     "strings"
+    "time"
 
     "github.com/aws/aws-lambda-go/events"
     "github.com/aws/aws-sdk-go-v2/aws"
@@ -26,7 +29,6 @@ import (
     "github.com/pennsieve/account-service/internal/utils"
     "github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
-
 
 // PostComputeNodesHandler creates a new compute node
 // POST /compute-nodes
@@ -210,6 +212,48 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
     // Generate a UUID for the new node
     nodeUuid := uuid.New().String()
 
+    // Generate node identifier hash.
+    // Node identifier is used in Terraform for Id of the node instead of the nodeID.
+    h := fnv.New32a()
+    h.Write([]byte(fmt.Sprintf("%s-%s-%s", organizationId, accountUuid, nodeUuid)))
+    nodeIdentifier := fmt.Sprint(h.Sum32())
+
+    // Create the node in DynamoDB with PENDING status before starting the task
+    computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
+    if computeNodesTable != "" {
+        nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable)
+
+        // Create node with PENDING status
+        pendingNode := models.DynamoDBNode{
+            Uuid:                  nodeUuid,
+            Name:                  node.Name,
+            Description:           node.Description,
+            ComputeNodeGatewayUrl: "", // Will be filled when provisioning completes
+            EfsId:                 "", // Will be filled when provisioning completes
+            QueueUrl:              "", // Will be filled when provisioning completes
+            Env:                   envValue,
+            AccountUuid:           accountUuid,
+            AccountId:             node.Account.AccountId,
+            AccountType:           node.Account.AccountType,
+            CreatedAt:             time.Now().UTC().String(),
+            OrganizationId:        organizationId,
+            UserId:                userId,
+            Identifier:            nodeIdentifier,
+            WorkflowManagerTag:    node.WorkflowManagerTag,
+            Status:                "Pending", // New Pending status
+        }
+
+        err = nodeStore.Put(ctx, pendingNode)
+        if err != nil {
+            log.Printf("Error creating pending node in DynamoDB: %v", err)
+            return events.APIGatewayV2HTTPResponse{
+                StatusCode: http.StatusInternalServerError,
+                Body:       errors.ComputeHandlerError(handlerName, errors.ErrCreatingNode),
+            }, nil
+        }
+        log.Printf("Created pending node %s in DynamoDB", nodeUuid)
+    }
+
     // Skip AWS ECS task creation in test environments
     if envValue != "DOCKER" && envValue != "TEST" {
         client := ecs.NewFromConfig(cfg)
@@ -235,11 +279,11 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
         descriptionValue := node.Description
         wmTagKey := "WM_TAG"
         wmTagValue := node.WorkflowManagerTag
-        statusKey := "STATUS"
-        statusValue := "Enabled" // Default status for new compute nodes
 
-        nodeUuidKey := "NODE_UUID"
-        nodeUuidValue := nodeUuid
+        computeNodeIdKey := "COMPUTE_NODE_ID"
+        computeNodeIdValue := nodeUuid
+        nodeIdentifierKey := "NODE_IDENTIFIER"
+        nodeIdentifierValue := nodeIdentifier
 
         runTaskIn := &ecs.RunTaskInput{
             TaskDefinition: aws.String(TaskDefinitionArn),
@@ -301,12 +345,12 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
                                 Value: &wmTagValue,
                             },
                             {
-                                Name:  &statusKey,
-                                Value: &statusValue,
+                                Name:  &computeNodeIdKey,
+                                Value: &computeNodeIdValue,
                             },
                             {
-                                Name:  &nodeUuidKey,
-                                Value: &nodeUuidValue,
+                                Name:  &nodeIdentifierKey,
+                                Value: &nodeIdentifierValue,
                             },
                         },
                     },
@@ -354,7 +398,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
         if organizationId == "INDEPENDENT" {
             responseOrganizationId = ""
         }
-        
+
         createdNode := models.Node{
             Uuid:               nodeUuid,
             Name:               node.Name,
@@ -363,7 +407,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
             OrganizationId:     responseOrganizationId,
             UserId:             userId,
             WorkflowManagerTag: node.WorkflowManagerTag,
-            Status:             "Enabled",
+            Status:             "Pending",
         }
 
         m, err := json.Marshal(createdNode)
