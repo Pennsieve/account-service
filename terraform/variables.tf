@@ -12,7 +12,9 @@ variable "domain_name" {}
 
 variable "api_domain_name" {}
 
-variable "image_tag" {}
+variable "image_tag" {
+  description = "Image tag for Lambda function packages"
+}
 
 variable "lambda_bucket" {
   default = "pennsieve-cc-lambda-functions-use1"
@@ -23,6 +25,11 @@ variable "lambda_bucket" {
 // Fargate Task Image
 variable "image_url" {
   default = "pennsieve/compute-node-aws-provisioner"
+}
+
+variable "provisioner_image_tag" {
+  description = "Docker image tag for the compute node provisioner Fargate task"
+  default     = "latest"
 }
 
 variable "container_memory" {

@@ -9,7 +9,7 @@ data "template_file" "provisioner_ecs_task_definition" {
     container_memory          = var.container_memory
     environment_name          = var.environment_name
     docker_hub_credentials    = data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn
-    image_tag                 = var.image_tag
+    provisioner_image_tag     = var.provisioner_image_tag
     image_url                 = var.image_url
     service_name              = var.service_name
     tier                      = var.tier
