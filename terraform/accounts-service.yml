@@ -245,7 +245,7 @@ components:
           description: Current access scope level of the compute node
         status:
           type: string
-          enum: ["Enabled", "Paused"]
+          enum: ["Enabled", "Paused", "Pending"]
           description: Current status of the compute node
     computeNodeUpdateRequest:
       type: object
@@ -836,6 +836,56 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/computeNodeUpdateRequest'
+      responses:
+        '200':
+          description: Successfully updated compute node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/computeNodeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: Update compute node details
+      description: |
+        Partially update the status, name, and/or description of a specific compute node. 
+        Setting the status to PAUSED will disable the compute node for analytic workflows.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: patchComputeNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        description: Compute node update payload
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: ["Enabled", "Paused"]
+                  description: The new status for the compute node
+                name:
+                  type: string
+                  description: The new name for the compute node
+                description:
+                  type: string
+                  description: The new description for the compute node
       responses:
         '200':
           description: Successfully updated compute node

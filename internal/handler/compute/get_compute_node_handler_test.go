@@ -468,3 +468,139 @@ func TestGetComputeNodeHandler_UserOwnedNode_NoOrgClaim(t *testing.T) {
 	assert.Equal(t, testNode.Uuid, node.Uuid)
 	assert.Equal(t, "", node.OrganizationId) // Should be empty
 }
+
+func TestGetComputeNodeHandler_AccountPausedOverridesNodeStatus(t *testing.T) {
+	nodeStore, accessStore := setupGetComputeNodeHandlerTest(t)
+	ctx := context.Background()
+	testId := test.GenerateTestId()
+
+	// Set up ACCOUNTS_TABLE environment variable for account status check
+	os.Setenv("ACCOUNTS_TABLE", test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
+
+	// Create and insert test node with Enabled status
+	testNode := createTestNode(testId)
+	testNode.Status = "Enabled"
+	err := nodeStore.Put(ctx, testNode)
+	require.NoError(t, err)
+
+	// Create and insert a paused account
+	client := test.GetClient()
+	accountStore := store_dynamodb.NewAccountDatabaseStore(client, test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
+	testAccount := store_dynamodb.Account{
+		Uuid:        testNode.AccountUuid,
+		AccountId:   testNode.AccountId,
+		AccountType: testNode.AccountType,
+		UserId:      testNode.UserId,
+		Name:        "Test Account",
+		Description: "Test account description",
+		Status:      "Paused",
+	}
+	accountStoreImpl, ok := accountStore.(*store_dynamodb.AccountDatabaseStore)
+	require.True(t, ok)
+	err = accountStoreImpl.Insert(ctx, testAccount)
+	require.NoError(t, err)
+
+	// Grant user access to the node
+	accessRecord := models.NodeAccess{
+		NodeId:         models.FormatNodeId(testNode.Uuid),
+		NodeUuid:       testNode.Uuid,
+		EntityId:       models.FormatEntityId(models.EntityTypeUser, testNode.UserId),
+		EntityType:     models.EntityTypeUser,
+		EntityRawId:    testNode.UserId,
+		AccessType:     models.AccessTypeOwner,
+		OrganizationId: testNode.OrganizationId,
+		GrantedAt:      time.Now(),
+		GrantedBy:      testNode.UserId,
+	}
+	err = accessStore.GrantAccess(ctx, accessRecord)
+	require.NoError(t, err)
+
+	// Create request with test authorizer
+	request := events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{
+			"id": testNode.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, testNode.OrganizationId),
+		},
+	}
+
+	// Call the handler
+	response, err := compute.GetComputeNodeHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, response.StatusCode)
+
+	// Parse response and verify node status is overridden to Paused
+	var nodeResponse models.Node
+	err = json.Unmarshal([]byte(response.Body), &nodeResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "Paused", nodeResponse.Status) // Should be Paused due to account status
+}
+
+func TestGetComputeNodeHandler_PendingNodeIgnoresAccountStatus(t *testing.T) {
+	nodeStore, accessStore := setupGetComputeNodeHandlerTest(t)
+	ctx := context.Background()
+	testId := test.GenerateTestId()
+
+	// Set up ACCOUNTS_TABLE environment variable for account status check
+	os.Setenv("ACCOUNTS_TABLE", test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
+
+	// Create and insert test node with Pending status
+	testNode := createTestNode(testId)
+	testNode.Status = "Pending"
+	err := nodeStore.Put(ctx, testNode)
+	require.NoError(t, err)
+
+	// Create and insert a paused account
+	client := test.GetClient()
+	accountStore := store_dynamodb.NewAccountDatabaseStore(client, test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
+	testAccount := store_dynamodb.Account{
+		Uuid:        testNode.AccountUuid,
+		AccountId:   testNode.AccountId,
+		AccountType: testNode.AccountType,
+		UserId:      testNode.UserId,
+		Name:        "Test Account",
+		Description: "Test account description",
+		Status:      "Paused",
+	}
+	accountStoreImpl, ok := accountStore.(*store_dynamodb.AccountDatabaseStore)
+	require.True(t, ok)
+	err = accountStoreImpl.Insert(ctx, testAccount)
+	require.NoError(t, err)
+
+	// Grant user access to the node
+	accessRecord := models.NodeAccess{
+		NodeId:         models.FormatNodeId(testNode.Uuid),
+		NodeUuid:       testNode.Uuid,
+		EntityId:       models.FormatEntityId(models.EntityTypeUser, testNode.UserId),
+		EntityType:     models.EntityTypeUser,
+		EntityRawId:    testNode.UserId,
+		AccessType:     models.AccessTypeOwner,
+		OrganizationId: testNode.OrganizationId,
+		GrantedAt:      time.Now(),
+		GrantedBy:      testNode.UserId,
+	}
+	err = accessStore.GrantAccess(ctx, accessRecord)
+	require.NoError(t, err)
+
+	// Create request with test authorizer
+	request := events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{
+			"id": testNode.Uuid,
+		},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, testNode.OrganizationId),
+		},
+	}
+
+	// Call the handler
+	response, err := compute.GetComputeNodeHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, response.StatusCode)
+
+	// Parse response and verify node status remains Pending
+	var nodeResponse models.Node
+	err = json.Unmarshal([]byte(response.Body), &nodeResponse)
+	assert.NoError(t, err)
+	assert.Equal(t, "Pending", nodeResponse.Status) // Should remain Pending despite account being Paused
+}

@@ -117,6 +117,24 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
+	// Check account status if node is not Pending
+	// If account is Paused, override node status to Paused
+	nodeStatus := computeNode.Status
+	if computeNode.Status != "Pending" {
+		accountsTable := os.Getenv("ACCOUNTS_TABLE")
+		if accountsTable != "" {
+			accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+			account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
+			if err != nil {
+				log.Printf("Warning: could not fetch account %s for status check: %v", computeNode.AccountUuid, err)
+				// Continue with original node status if account fetch fails
+			} else if account.Status == "Paused" {
+				// Override node status to Paused if account is Paused
+				nodeStatus = "Paused"
+			}
+		}
+	}
+
 	// Convert INDEPENDENT back to empty string for API response consistency
 	responseOrganizationId := computeNode.OrganizationId
 	if computeNode.OrganizationId == "INDEPENDENT" {
@@ -140,7 +158,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		UserId:             computeNode.UserId,
 		Identifier:         computeNode.Identifier,
 		WorkflowManagerTag: computeNode.WorkflowManagerTag,
-		Status:             computeNode.Status,
+		Status:             nodeStatus,
 	})
 	if err != nil {
 		log.Println(err.Error())
