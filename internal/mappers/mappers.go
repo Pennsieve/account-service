@@ -5,6 +5,51 @@ import (
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
 
+// DynamoDBNodeToJsonNodeWithAccountStatus converts DynamoDB nodes to JSON nodes with account status override
+// If the account is Paused and the node is not Pending, the node status will be overridden to Paused
+func DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes []models.DynamoDBNode, accountStatusMap map[string]string) []models.Node {
+	nodes := []models.Node{}
+
+	for _, c := range dynamoNodes {
+		// Determine the effective status
+		nodeStatus := c.Status
+		if c.Status != "Pending" {
+			// Check if account is paused
+			if accountStatus, exists := accountStatusMap[c.AccountUuid]; exists && accountStatus == "Paused" {
+				nodeStatus = "Paused"
+			}
+		}
+		
+		// Convert INDEPENDENT back to empty string for API response consistency
+		responseOrganizationId := c.OrganizationId
+		if c.OrganizationId == "INDEPENDENT" {
+			responseOrganizationId = ""
+		}
+		
+		nodes = append(nodes, models.Node{
+			Uuid:                  c.Uuid,
+			Name:                  c.Name,
+			Description:           c.Description,
+			ComputeNodeGatewayUrl: c.ComputeNodeGatewayUrl,
+			EfsId:                 c.EfsId,
+			QueueUrl:              c.QueueUrl,
+			Account: models.NodeAccount{
+				Uuid:        c.AccountUuid,
+				AccountId:   c.AccountId,
+				AccountType: c.AccountType,
+			},
+			CreatedAt:          c.CreatedAt,
+			OrganizationId:     responseOrganizationId,
+			UserId:             c.UserId,
+			Identifier:         c.Identifier,
+			WorkflowManagerTag: c.WorkflowManagerTag,
+			Status:             nodeStatus,
+		})
+	}
+
+	return nodes
+}
+
 func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 	nodes := []models.Node{}
 

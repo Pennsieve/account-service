@@ -179,7 +179,34 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}
 	}
 
-	m, err := json.Marshal(mappers.DynamoDBNodeToJsonNode(dynamoNodes))
+	// Fetch account statuses for all nodes
+	accountStatusMap := make(map[string]string)
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	if accountsTable != "" {
+		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+		
+		// Get unique account UUIDs
+		accountUuids := make(map[string]bool)
+		for _, node := range dynamoNodes {
+			accountUuids[node.AccountUuid] = true
+		}
+		
+		// Fetch account statuses
+		for accountUuid := range accountUuids {
+			account, err := accountStore.GetById(ctx, accountUuid)
+			if err != nil {
+				log.Printf("Warning: could not fetch account %s for status check: %v", accountUuid, err)
+				// Skip this account if we can't fetch it
+				continue
+			}
+			accountStatusMap[accountUuid] = account.Status
+		}
+	}
+
+	// Apply account status override to nodes
+	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes, accountStatusMap)
+	
+	m, err := json.Marshal(jsonNodes)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

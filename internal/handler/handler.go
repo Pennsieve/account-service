@@ -39,6 +39,7 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.GET("/compute-nodes", computeHandler.GetComputesNodesHandler)
     router.GET("/compute-nodes/{id}", computeHandler.GetComputeNodeHandler)
     router.PUT("/compute-nodes/{id}", computeHandler.PutComputeNodeHandler)
+    router.PATCH("/compute-nodes/{id}", computeHandler.PatchComputeNodeHandler)
     router.DELETE("/compute-nodes/{id}", computeHandler.DeleteComputeNodeHandler)
     
     // Compute node permission routes

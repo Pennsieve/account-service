@@ -16,6 +16,7 @@ type ComputeRouterHandlerFunc func(context.Context, events.APIGatewayV2HTTPReque
 type ComputeRouter interface {
 	POST(string, ComputeRouterHandlerFunc)
 	GET(string, ComputeRouterHandlerFunc)
+	PATCH(string, ComputeRouterHandlerFunc)
 	PUT(string, ComputeRouterHandlerFunc)
 	DELETE(string, ComputeRouterHandlerFunc)
 	Start(context.Context, events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error)
@@ -24,6 +25,7 @@ type ComputeRouter interface {
 type ComputeLambdaRouter struct {
 	getRoutes    map[string]ComputeRouterHandlerFunc
 	postRoutes   map[string]ComputeRouterHandlerFunc
+	patchRoutes  map[string]ComputeRouterHandlerFunc
 	putRoutes    map[string]ComputeRouterHandlerFunc
 	deleteRoutes map[string]ComputeRouterHandlerFunc
 }
@@ -32,6 +34,7 @@ func NewComputeLambdaRouter() ComputeRouter {
 	return &ComputeLambdaRouter{
 		getRoutes:    make(map[string]ComputeRouterHandlerFunc),
 		postRoutes:   make(map[string]ComputeRouterHandlerFunc),
+		patchRoutes:  make(map[string]ComputeRouterHandlerFunc),
 		putRoutes:    make(map[string]ComputeRouterHandlerFunc),
 		deleteRoutes: make(map[string]ComputeRouterHandlerFunc),
 	}
@@ -43,6 +46,10 @@ func (r *ComputeLambdaRouter) POST(routeKey string, handler ComputeRouterHandler
 
 func (r *ComputeLambdaRouter) GET(routeKey string, handler ComputeRouterHandlerFunc) {
 	r.getRoutes[routeKey] = handler
+}
+
+func (r *ComputeLambdaRouter) PATCH(routeKey string, handler ComputeRouterHandlerFunc) {
+	r.patchRoutes[routeKey] = handler
 }
 
 func (r *ComputeLambdaRouter) PUT(routeKey string, handler ComputeRouterHandlerFunc) {
@@ -67,6 +74,13 @@ func (r *ComputeLambdaRouter) Start(ctx context.Context, request events.APIGatew
 		}
 	case http.MethodGet:
 		f, ok := r.getRoutes[routeKey]
+		if ok {
+			return f(ctx, request)
+		} else {
+			return handleComputeError()
+		}
+	case http.MethodPatch:
+		f, ok := r.patchRoutes[routeKey]
 		if ok {
 			return f(ctx, request)
 		} else {
