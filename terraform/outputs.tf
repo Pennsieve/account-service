@@ -9,3 +9,19 @@ output "service_lambda_invoke_arn" {
 output "service_lambda_function_name" {
   value = aws_lambda_function.service_lambda.function_name
 }
+
+output "accounts_table_arn" {
+  value = aws_dynamodb_table.accounts_table.arn
+}
+
+output "accounts_workspace_table_arn" {
+  value = aws_dynamodb_table.account_workspace_table.arn
+}
+
+output "compute_nodes_table_arn" {
+  value = aws_dynamodb_table.compute_resource_nodes_table.arn
+}
+
+output "compute_nodes_access_table_arn" {
+  value = aws_dynamodb_table.compute_node_access_table.arn
+}
