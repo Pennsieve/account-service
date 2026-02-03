@@ -3,11 +3,16 @@ package container
 import (
 	"context"
 	"database/sql"
+	"log"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	postgresClient "github.com/pennsieve/account-service/internal/clients/postgres"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
@@ -32,6 +37,8 @@ type Container struct {
 	dynamoClient     *dynamodb.Client
 	ecsClient        *ecs.Client
 	postgresDB       *sql.DB
+	postgresPool     *pgxpool.Pool
+	rdsProxy         *postgresClient.RDSProxy
 	accountStore     store_dynamodb.DynamoDBStore
 	nodeAccessStore  store_dynamodb.NodeAccessStore
 	nodeStore        store_dynamodb.NodeStore
@@ -44,7 +51,6 @@ type Container struct {
 	computeNodesTable              string
 	nodeAccessTable                string
 	accountWorkspaceEnablementTable string
-	postgresURL                    string
 }
 
 func NewContainer() (*Container, error) {
@@ -79,10 +85,48 @@ func (c *Container) ECSClient() *ecs.Client {
 }
 
 func (c *Container) PostgresDB() *sql.DB {
-	if c.postgresDB == nil && c.postgresURL != "" {
-		db, err := sql.Open("postgres", c.postgresURL)
-		if err == nil {
-			c.postgresDB = db
+	if c.postgresDB == nil {
+		// Use RDS proxy connection
+		if c.rdsProxy == nil {
+			c.rdsProxy = postgresClient.NewRDSProxy(c.awsConfig)
+		}
+		
+		if c.postgresPool == nil {
+			pool, err := c.rdsProxy.Connect(context.Background())
+			if err != nil {
+				// Log detailed error information for debugging
+				host := os.Getenv("POSTGRES_HOST")
+				if host == "" {
+					host = "localhost"
+				}
+				database := os.Getenv("POSTGRES_ORGANIZATION_DATABASE")
+				if database == "" {
+					database = "pennsieve_postgres"
+				}
+				user := os.Getenv("POSTGRES_USER")
+				password := os.Getenv("POSTGRES_PASSWORD")
+				
+				// Determine connection mode
+				connectionMode := "RDS IAM Auth"
+				if password != "" {
+					connectionMode = "Password Auth"
+				}
+				
+				log.Printf("PostgreSQL connection failed [%s]: host=%s, database=%s, user=%s, error=%v", 
+					connectionMode, host, database, user, err)
+				
+				// Log additional context for troubleshooting
+				if password == "" && (host == "localhost" || host == "pennsievedb") {
+					log.Printf("PostgreSQL troubleshooting: Test environment detected but no POSTGRES_PASSWORD set. This may indicate a configuration issue.")
+				}
+				
+				return nil
+			}
+			c.postgresPool = pool
+			// Convert pgx pool to sql.DB
+			c.postgresDB = stdlib.OpenDBFromPool(pool)
+			log.Printf("PostgreSQL connection established successfully: host=%s, database=%s", 
+				os.Getenv("POSTGRES_HOST"), os.Getenv("POSTGRES_ORGANIZATION_DATABASE"))
 		}
 	}
 	return c.postgresDB
@@ -130,10 +174,9 @@ func (c *Container) PermissionService() *service.PermissionService {
 	return c.permissionSvc
 }
 
-func (c *Container) SetConfig(accountsTable, computeNodesTable, nodeAccessTable, accountWorkspaceEnablementTable, postgresURL string) {
+func (c *Container) SetConfig(accountsTable, computeNodesTable, nodeAccessTable, accountWorkspaceEnablementTable string) {
 	c.accountsTable = accountsTable
 	c.computeNodesTable = computeNodesTable
 	c.nodeAccessTable = nodeAccessTable
 	c.accountWorkspaceEnablementTable = accountWorkspaceEnablementTable
-	c.postgresURL = postgresURL
 }

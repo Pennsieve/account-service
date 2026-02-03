@@ -12,17 +12,24 @@ import (
 )
 
 type PermissionService struct {
-	NodeAccessStore store_dynamodb.NodeAccessStore
-	TeamStore       store_postgres.TeamStore
-	NodeStore       store_dynamodb.NodeStore
+	NodeAccessStore    store_dynamodb.NodeAccessStore
+	TeamStore          store_postgres.TeamStore
+	OrganizationStore  store_postgres.OrganizationStore
+	NodeStore          store_dynamodb.NodeStore
 }
 
 func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore) *PermissionService {
 	return &PermissionService{
-		NodeAccessStore: nodeAccessStore,
-		TeamStore:       teamStore,
-		NodeStore:       nil, // Optional - set via SetNodeStore if needed
+		NodeAccessStore:   nodeAccessStore,
+		TeamStore:         teamStore,
+		OrganizationStore: nil, // Optional - set via SetOrganizationStore if needed for user validation
+		NodeStore:         nil, // Optional - set via SetNodeStore if needed
 	}
+}
+
+// SetOrganizationStore allows setting the organization store for user validation and cleanup functionality
+func (s *PermissionService) SetOrganizationStore(orgStore store_postgres.OrganizationStore) {
+	s.OrganizationStore = orgStore
 }
 
 // SetNodeStore allows setting the node store for auto-healing functionality
@@ -175,14 +182,48 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 		desiredAccess[workspaceEntityId] = true
 		
 	case models.AccessScopeShared:
-		// Add shared users
+		// Validate and add shared users
 		for _, userId := range req.SharedWithUsers {
+			// Validate user exists if we have OrganizationStore
+			if s.OrganizationStore != nil {
+				userIdInt, err := strconv.ParseInt(userId, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid user ID format: %s", userId)
+				}
+				
+				userExists, err := s.OrganizationStore.CheckUserExists(ctx, userIdInt)
+				if err != nil {
+					return fmt.Errorf("error checking if user %s exists: %w", userId, err)
+				}
+				
+				if !userExists {
+					return fmt.Errorf("user %s does not exist", userId)
+				}
+			}
+			
 			userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 			desiredAccess[userEntityId] = true
 		}
 		
-		// Add shared teams
+		// Validate and add shared teams
 		for _, teamId := range req.SharedWithTeams {
+			// Validate team exists if we have TeamStore
+			if s.TeamStore != nil {
+				teamIdInt, err := strconv.ParseInt(teamId, 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid team ID format: %s", teamId)
+				}
+				
+				team, err := s.TeamStore.GetTeamById(ctx, teamIdInt)
+				if err != nil {
+					return fmt.Errorf("error checking if team %s exists: %w", teamId, err)
+				}
+				
+				if team == nil {
+					return fmt.Errorf("team %s does not exist", teamId)
+				}
+			}
+			
 			teamEntityId := models.FormatEntityId(models.EntityTypeTeam, teamId)
 			desiredAccess[teamEntityId] = true
 		}
@@ -361,6 +402,103 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 				response.Owner = node.UserId
 				if response.OrganizationId == "" {
 					response.OrganizationId = node.OrganizationId
+				}
+			}
+		}
+	}
+	
+	// Cleanup stale user/team permissions if PostgreSQL stores are available
+	var stalePermissions []models.NodeAccess
+	if s.OrganizationStore != nil || s.TeamStore != nil {
+		fmt.Printf("DEBUG: Starting cleanup, orgStore=%v, teamStore=%v\n", s.OrganizationStore != nil, s.TeamStore != nil)
+		for _, access := range accessList {
+			shouldRemove := false
+			
+			// Check if user permissions reference users that no longer exist
+			if access.EntityType == models.EntityTypeUser && s.OrganizationStore != nil {
+				fmt.Printf("DEBUG: Checking user access: EntityType=%s, AccessType=%s, EntityRawId=%s\n", access.EntityType, access.AccessType, access.EntityRawId)
+				// Skip owner validation (owners should always be valid)
+				if access.AccessType != models.AccessTypeOwner {
+					userIdInt, err := strconv.ParseInt(access.EntityRawId, 10, 64)
+					if err == nil {
+						fmt.Printf("DEBUG: Calling CheckUserExists for user %d\n", userIdInt)
+						userExists, err := s.OrganizationStore.CheckUserExists(ctx, userIdInt)
+						if err != nil {
+							// Log error but don't remove on DB error
+							fmt.Printf("Warning: Error checking if user %s exists: %v\n", access.EntityRawId, err)
+						} else if !userExists {
+							shouldRemove = true
+							fmt.Printf("Info: Removing stale permission for deleted user %s on node %s\n", access.EntityRawId, nodeUuid)
+						} else {
+							fmt.Printf("DEBUG: User %d exists, keeping permission\n", userIdInt)
+						}
+					} else {
+						fmt.Printf("DEBUG: Failed to parse user ID %s: %v\n", access.EntityRawId, err)
+					}
+				} else {
+					fmt.Printf("DEBUG: Skipping owner validation for user %s\n", access.EntityRawId)
+				}
+			} else {
+				fmt.Printf("DEBUG: Skipping user check: EntityType=%s, hasOrgStore=%v\n", access.EntityType, s.OrganizationStore != nil)
+			}
+			
+			// Check if team permissions reference teams that no longer exist
+			if access.EntityType == models.EntityTypeTeam && s.TeamStore != nil {
+				teamIdInt, err := strconv.ParseInt(access.EntityRawId, 10, 64)
+				if err == nil {
+					team, err := s.TeamStore.GetTeamById(ctx, teamIdInt)
+					if err != nil {
+						// Log other errors but don't remove on DB error
+						fmt.Printf("Warning: Error checking if team %s exists: %v\n", access.EntityRawId, err)
+					} else if team == nil {
+						// Team doesn't exist
+						shouldRemove = true
+						fmt.Printf("Info: Removing stale permission for deleted team %s on node %s\n", access.EntityRawId, nodeUuid)
+					}
+				}
+			}
+			
+			if shouldRemove {
+				stalePermissions = append(stalePermissions, access)
+			}
+		}
+		
+		// Remove stale permissions from DynamoDB
+		if len(stalePermissions) > 0 {
+			nodeId := models.FormatNodeId(nodeUuid)
+			for _, staleAccess := range stalePermissions {
+				err := s.NodeAccessStore.RevokeAccess(ctx, staleAccess.EntityId, nodeId)
+				if err != nil {
+					// Log error but continue with other cleanups
+					fmt.Printf("Warning: Failed to remove stale permission %s for node %s: %v\n", staleAccess.EntityId, nodeUuid, err)
+				} else {
+					// Remove from response lists
+					if staleAccess.EntityType == models.EntityTypeUser {
+						// Remove from SharedWithUsers
+						for i, userId := range response.SharedWithUsers {
+							if userId == staleAccess.EntityRawId {
+								response.SharedWithUsers = append(response.SharedWithUsers[:i], response.SharedWithUsers[i+1:]...)
+								break
+							}
+						}
+					} else if staleAccess.EntityType == models.EntityTypeTeam {
+						// Remove from SharedWithTeams
+						for i, teamId := range response.SharedWithTeams {
+							if teamId == staleAccess.EntityRawId {
+								response.SharedWithTeams = append(response.SharedWithTeams[:i], response.SharedWithTeams[i+1:]...)
+								break
+							}
+						}
+					}
+				}
+			}
+			
+			// Recalculate access scope after cleanup
+			if response.AccessScope != models.AccessScopeWorkspace {
+				if len(response.SharedWithUsers) > 0 || len(response.SharedWithTeams) > 0 {
+					response.AccessScope = models.AccessScopeShared
+				} else {
+					response.AccessScope = models.AccessScopePrivate
 				}
 			}
 		}

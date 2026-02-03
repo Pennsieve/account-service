@@ -28,6 +28,8 @@ type OrganizationStore interface {
 	GetUserPermissionBit(ctx context.Context, userId, organizationId int64) (int, error)
 	// CheckUserIsOrganizationAdmin checks if a user has admin access (permission_bit >= 16) to an organization
 	CheckUserIsOrganizationAdmin(ctx context.Context, userId, organizationId int64) (bool, error)
+	// CheckUserExists checks if a user exists in the platform
+	CheckUserExists(ctx context.Context, userId int64) (bool, error)
 }
 
 type PostgresOrganizationStore struct {
@@ -91,4 +93,23 @@ func (s *PostgresOrganizationStore) CheckUserIsOrganizationAdmin(ctx context.Con
 	
 	// Check if user has Admin or Owner permissions (permission_bit >= 16)
 	return permissionBit >= MinimumAdminPermission, nil
+}
+
+// CheckUserExists checks if a user exists in the platform
+func (s *PostgresOrganizationStore) CheckUserExists(ctx context.Context, userId int64) (bool, error) {
+	query := `
+		SELECT 1 
+		FROM pennsieve.users 
+		WHERE id = $1`
+	
+	var exists int
+	err := s.DB.QueryRowContext(ctx, query, userId).Scan(&exists)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("error checking if user exists: %w", err)
+	}
+	
+	return true, nil
 }

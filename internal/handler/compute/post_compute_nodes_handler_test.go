@@ -671,6 +671,11 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
+		
+		// If not 201, log the response for debugging
+		if response.StatusCode != 201 {
+			t.Logf("Response status: %d, body: %s", response.StatusCode, response.Body)
+		}
 		assert.Equal(t, 201, response.StatusCode) // Created
 
 		var createdNode models.Node
@@ -695,15 +700,11 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
 		
-		// When POSTGRES_URL is not set (test environment), the PostgreSQL admin check is skipped
-		// and the request should succeed since isPublic = true
-		if os.Getenv("POSTGRES_URL") == "" {
-			assert.Equal(t, 201, response.StatusCode) // Created
-			var createdNode models.Node
-			err = json.Unmarshal([]byte(response.Body), &createdNode)
-			assert.NoError(t, err)
-			assert.Equal(t, orgId, createdNode.OrganizationId)
-			assert.Equal(t, adminUserId, createdNode.UserId)
+		// When POSTGRES_HOST is not set (test environment), the PostgreSQL connection won't be available
+		// and the handler should return an error since isPublic = true requires admin check
+		if os.Getenv("POSTGRES_HOST") == "" {
+			// Without PostgreSQL, the handler should return an error for public accounts
+			assert.Equal(t, 500, response.StatusCode) // Internal server error
 		} else {
 			// With PostgreSQL available, the admin check would run and might fail depending on test data
 			// In a full integration test environment, you'd set up the PostgreSQL data appropriately
@@ -822,15 +823,11 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
 		
-		// When POSTGRES_URL is not set (normal test environment), the PostgreSQL admin check 
-		// is skipped and the request succeeds since isPublic = true
-		// This tests that the public account logic works when PostgreSQL is not available
-		if os.Getenv("POSTGRES_URL") == "" {
-			assert.Equal(t, 201, response.StatusCode) // Created - admin check skipped
-			var createdNode models.Node
-			err = json.Unmarshal([]byte(response.Body), &createdNode)
-			assert.NoError(t, err)
-			assert.Equal(t, nonAdminUserId, createdNode.UserId)
+		// When POSTGRES_HOST is not set (normal test environment), the PostgreSQL connection
+		// won't be available and the handler should return an error for public accounts
+		// This tests that the public account logic requires PostgreSQL for admin checks
+		if os.Getenv("POSTGRES_HOST") == "" {
+			assert.Equal(t, 500, response.StatusCode) // Internal server error - no PostgreSQL
 		}
 		
 		// Note: In a production environment with PostgreSQL, non-admin users would be 

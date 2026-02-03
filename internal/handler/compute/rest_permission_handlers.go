@@ -2,12 +2,12 @@ package compute
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -83,25 +83,32 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 	
-	// Initialize PostgreSQL if available
-	var teamStore store_postgres.TeamStore
-	if pgHost := os.Getenv("POSTGRES_HOST"); pgHost != "" {
-		pgConnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			pgHost,
-			os.Getenv("POSTGRES_PORT"),
-			os.Getenv("POSTGRES_USER"),
-			os.Getenv("POSTGRES_PASSWORD"),
-			os.Getenv("POSTGRES_DB"),
-		)
-		db, err := sql.Open("postgres", pgConnStr)
-		if err == nil {
-			teamStore = store_postgres.NewPostgresTeamStore(db)
-			defer db.Close()
-		}
+	// Initialize container to get PostgreSQL connection
+	appContainer, err := utils.GetContainer(ctx, cfg)
+	if err != nil {
+		log.Printf("Error getting container: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
 	}
+
+	db := appContainer.PostgresDB()
+	if db == nil {
+		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)", 
+			handlerName, nodeUuid)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+	
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
 	
 	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
 	permissionService.SetNodeStore(nodesStore)
+	permissionService.SetOrganizationStore(orgStore)
 	
 	// Check if the node exists and user owns it
 	node, err := nodesStore.GetById(ctx, nodeUuid)
@@ -365,6 +372,80 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
 		}, nil
+	}
+
+	// Initialize container to get PostgreSQL connection
+	appContainer, err := utils.GetContainer(ctx, cfg)
+	if err != nil {
+		log.Printf("Error getting container: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
+	db := appContainer.PostgresDB()
+	if db == nil {
+		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)", 
+			handlerName, nodeUuid)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
+	// Validate entity exists before granting access
+	if entityType == models.EntityTypeUser {
+		// Validate user exists
+		orgStore := store_postgres.NewPostgresOrganizationStore(db)
+		userIdInt, err := strconv.ParseInt(entityId, 10, 64)
+		if err != nil {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       fmt.Sprintf("{\"error\": \"Invalid user ID format: %s\"}", entityId),
+			}, nil
+		}
+		
+		userExists, err := orgStore.CheckUserExists(ctx, userIdInt)
+		if err != nil {
+			log.Printf("Error checking if user exists: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+			}, nil
+		}
+		
+		if !userExists {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       fmt.Sprintf("{\"error\": \"User %s does not exist\"}", entityId),
+			}, nil
+		}
+	} else if entityType == models.EntityTypeTeam {
+		// Validate team exists
+		teamStore := store_postgres.NewPostgresTeamStore(db)
+		teamIdInt, err := strconv.ParseInt(entityId, 10, 64)
+		if err != nil {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       fmt.Sprintf("{\"error\": \"Invalid team ID format: %s\"}", entityId),
+			}, nil
+		}
+		
+		_, err = teamStore.GetTeamById(ctx, teamIdInt)
+		if err != nil {
+			if err.Error() == "sql: no rows in result set" || err.Error() == "team not found" {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusBadRequest,
+					Body:       fmt.Sprintf("{\"error\": \"Team %s does not exist\"}", entityId),
+				}, nil
+			}
+			log.Printf("Error checking if team exists: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+			}, nil
+		}
 	}
 	
 	// Create the access entry

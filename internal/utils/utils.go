@@ -10,6 +10,7 @@ import (
     "github.com/aws/aws-sdk-go-v2/aws"
     "github.com/aws/aws-sdk-go-v2/config"
     "github.com/aws/aws-sdk-go-v2/service/dynamodb"
+    "github.com/pennsieve/account-service/internal/container"
     "github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
@@ -73,4 +74,19 @@ func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
 
     // Production environment - use default config
     return config.LoadDefaultConfig(ctx)
+}
+
+// GetContainer returns a configured container with all dependencies
+func GetContainer(ctx context.Context, awsConfig aws.Config) (*container.Container, error) {
+    c := container.NewContainerWithConfig(awsConfig)
+    
+    // Set configuration from environment variables
+    c.SetConfig(
+        os.Getenv("ACCOUNTS_TABLE"),
+        os.Getenv("COMPUTE_NODES_TABLE"),
+        os.Getenv("NODE_ACCESS_TABLE"),
+        os.Getenv("ACCOUNT_WORKSPACE_TABLE"),
+    )
+    
+    return c, nil
 }
