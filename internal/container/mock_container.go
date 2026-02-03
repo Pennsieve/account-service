@@ -12,7 +12,6 @@ import (
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
-	_ "github.com/lib/pq"
 )
 
 // MockContainer implements the container interface with mocked dependencies for unit tests
@@ -106,7 +105,6 @@ func NewIntegrationTestContainer() (*IntegrationTestContainer, error) {
 		os.Getenv("COMPUTE_NODES_TABLE"),
 		os.Getenv("NODE_ACCESS_TABLE"),
 		os.Getenv("ACCOUNT_WORKSPACE_TABLE"),
-		os.Getenv("POSTGRES_URL"),
 	)
 
 	return &IntegrationTestContainer{

@@ -2,7 +2,6 @@ package compute
 
 import (
     "context"
-    "database/sql"
     "encoding/json"
     "fmt"
     "hash/fnv"
@@ -19,7 +18,6 @@ import (
     "github.com/aws/aws-sdk-go-v2/service/ecs"
     "github.com/aws/aws-sdk-go-v2/service/ecs/types"
     "github.com/google/uuid"
-    _ "github.com/lib/pq"
     "github.com/pennsieve/account-service/internal/errors"
     "github.com/pennsieve/account-service/internal/models"
     "github.com/pennsieve/account-service/internal/runner"
@@ -143,31 +141,39 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
         }
 
         // Check if user can create nodes based on isPublic flag
-        if !enablement.IsPublic {
-            // Only account owner can create nodes when isPublic is false
-            if account.UserId != userId {
-                log.Printf("User %s is not the owner of account %s (owner: %s)", userId, accountUuid, account.UserId)
+        // First check if user is the account owner - account owners can always create nodes
+        if account.UserId == userId {
+            // Account owner can always create nodes, regardless of isPublic flag
+        } else if !enablement.IsPublic {
+            // For private accounts, only the account owner can create nodes
+            log.Printf("User %s is not the owner of account %s (owner: %s)", userId, accountUuid, account.UserId)
+            return events.APIGatewayV2HTTPResponse{
+                StatusCode: http.StatusForbidden,
+                Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyAccountOwnerCanCreateNodes),
+            }, nil
+        } else {
+            // When isPublic is true and user is not the account owner, user must be a workspace admin
+            // Use container to get PostgreSQL connection
+            appContainer, err := utils.GetContainer(ctx, cfg)
+            if err != nil {
+                log.Printf("Error getting container: %v", err)
                 return events.APIGatewayV2HTTPResponse{
-                    StatusCode: http.StatusForbidden,
-                    Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyAccountOwnerCanCreateNodes),
+                    StatusCode: http.StatusInternalServerError,
+                    Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
                 }, nil
             }
-        } else {
-            // When isPublic is true, user must be a workspace admin
-            // Set up PostgreSQL connection to check organization admin access
-            postgresURL := os.Getenv("POSTGRES_URL")
-            if postgresURL != "" {
-                db, err := sql.Open("postgres", postgresURL)
-                if err != nil {
-                    log.Printf("Error connecting to PostgreSQL: %v", err)
-                    return events.APIGatewayV2HTTPResponse{
-                        StatusCode: http.StatusInternalServerError,
-                        Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
-                    }, nil
-                }
-                defer db.Close()
 
-                orgStore := store_postgres.NewPostgresOrganizationStore(db)
+            db := appContainer.PostgresDB()
+            if db == nil {
+                log.Printf("PostgreSQL connection required but unavailable for admin check: user=%s, organization=%s, account=%s (isPublic=true)", 
+                    userId, organizationId, accountUuid)
+                return events.APIGatewayV2HTTPResponse{
+                    StatusCode: http.StatusInternalServerError,
+                    Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+                }, nil
+            }
+
+            orgStore := store_postgres.NewPostgresOrganizationStore(db)
 
                 // Parse user ID and organization ID to integers
                 userIdInt, err := strconv.ParseInt(userId, 10, 64)
@@ -198,13 +204,12 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
                     }, nil
                 }
 
-                if !isAdmin {
-                    log.Printf("User %s is not an admin in organization %s", userId, organizationId)
-                    return events.APIGatewayV2HTTPResponse{
-                        StatusCode: http.StatusForbidden,
-                        Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyWorkspaceAdminsCanCreateNodes),
-                    }, nil
-                }
+            if !isAdmin {
+                log.Printf("User %s is not an admin in organization %s", userId, organizationId)
+                return events.APIGatewayV2HTTPResponse{
+                    StatusCode: http.StatusForbidden,
+                    Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyWorkspaceAdminsCanCreateNodes),
+                }, nil
             }
         }
     }

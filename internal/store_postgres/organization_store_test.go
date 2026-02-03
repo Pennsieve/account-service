@@ -28,6 +28,11 @@ func (m *MockOrganizationStore) CheckUserIsOrganizationAdmin(ctx context.Context
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockOrganizationStore) CheckUserExists(ctx context.Context, userId int64) (bool, error) {
+	args := m.Called(ctx, userId)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestMinimumCollaboratorPermission(t *testing.T) {
 	// Verify that the minimum permission bit for Collaborator is 8
 	assert.Equal(t, 8, MinimumCollaboratorPermission)

@@ -24,6 +24,11 @@ resource "aws_lambda_function" "service_lambda" {
       ACCOUNT_WORKSPACE_TABLE = aws_dynamodb_table.account_workspace_table.name
       COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
       NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
+      # PostgreSQL Configuration
+      POSTGRES_HOST    = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
+      POSTGRES_PORT    = "5432"
+      POSTGRES_USER    = "${var.environment_name}_rds_proxy_user"
+      POSTGRES_ORGANIZATION_DATABASE = "pennsieve_postgres"
       # ECS Configuration for compute node provisioning
       TASK_DEF_ARN = aws_ecs_task_definition.provisioner_ecs_task_definition.arn
       CLUSTER_ARN = data.terraform_remote_state.fargate.outputs.ecs_cluster_arn

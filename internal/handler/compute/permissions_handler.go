@@ -2,9 +2,7 @@ package compute
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -59,25 +57,32 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	
-	// Initialize PostgreSQL if available
-	var teamStore store_postgres.TeamStore
-	if pgHost := os.Getenv("POSTGRES_HOST"); pgHost != "" {
-		pgConnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			pgHost,
-			os.Getenv("POSTGRES_PORT"),
-			os.Getenv("POSTGRES_USER"),
-			os.Getenv("POSTGRES_PASSWORD"),
-			os.Getenv("POSTGRES_DB"),
-		)
-		db, err := sql.Open("postgres", pgConnStr)
-		if err == nil {
-			teamStore = store_postgres.NewPostgresTeamStore(db)
-			defer db.Close()
-		}
+	// Initialize container to get PostgreSQL connection
+	appContainer, err := utils.GetContainer(ctx, cfg)
+	if err != nil {
+		log.Printf("Error getting container: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
 	}
+
+	db := appContainer.PostgresDB()
+	if db == nil {
+		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)", 
+			handlerName, nodeUuid)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+	
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
 	
 	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
 	permissionService.SetNodeStore(nodeStore)
+	permissionService.SetOrganizationStore(orgStore)
 	
 	// Check if user has access to the node
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
