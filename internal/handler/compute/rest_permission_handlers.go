@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -396,17 +395,9 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 
 	// Validate entity exists before granting access
 	if entityType == models.EntityTypeUser {
-		// Validate user exists
+		// Validate user exists using node ID format (e.g., "N:user:uuid")
 		orgStore := store_postgres.NewPostgresOrganizationStore(db)
-		userIdInt, err := strconv.ParseInt(entityId, 10, 64)
-		if err != nil {
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       fmt.Sprintf("{\"error\": \"Invalid user ID format: %s\"}", entityId),
-			}, nil
-		}
-		
-		userExists, err := orgStore.CheckUserExists(ctx, userIdInt)
+		userExists, err := orgStore.CheckUserExistsByNodeId(ctx, entityId)
 		if err != nil {
 			log.Printf("Error checking if user exists: %v", err)
 			return events.APIGatewayV2HTTPResponse{
@@ -422,28 +413,21 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			}, nil
 		}
 	} else if entityType == models.EntityTypeTeam {
-		// Validate team exists
+		// Validate team exists using node ID format (e.g., "N:team:uuid")
 		teamStore := store_postgres.NewPostgresTeamStore(db)
-		teamIdInt, err := strconv.ParseInt(entityId, 10, 64)
+		team, err := teamStore.GetTeamByNodeId(ctx, entityId)
 		if err != nil {
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       fmt.Sprintf("{\"error\": \"Invalid team ID format: %s\"}", entityId),
-			}, nil
-		}
-		
-		_, err = teamStore.GetTeamById(ctx, teamIdInt)
-		if err != nil {
-			if err.Error() == "sql: no rows in result set" || err.Error() == "team not found" {
-				return events.APIGatewayV2HTTPResponse{
-					StatusCode: http.StatusBadRequest,
-					Body:       fmt.Sprintf("{\"error\": \"Team %s does not exist\"}", entityId),
-				}, nil
-			}
 			log.Printf("Error checking if team exists: %v", err)
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+			}, nil
+		}
+		
+		if team == nil {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       fmt.Sprintf("{\"error\": \"Team %s does not exist\"}", entityId),
 			}, nil
 		}
 	}
