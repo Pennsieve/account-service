@@ -110,7 +110,7 @@ resource "aws_lambda_function" "check_user_node_access" {
   role          = aws_iam_role.check_access_lambda_role.arn
 
   s3_bucket = var.lambda_bucket
-  s3_key    = "${var.service_name}/${var.service_name}-${var.image_tag}.zip"
+  s3_key    = "${var.service_name}/${var.service_name}-check-access-${var.image_tag}.zip"
 
   handler     = "check-access"
   runtime     = "provided.al2"
