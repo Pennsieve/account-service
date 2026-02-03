@@ -27,6 +27,7 @@ type TeamStore interface {
 	GetUserTeams(ctx context.Context, userId, organizationId int64) ([]UserTeam, error)
 	GetTeamById(ctx context.Context, teamId int64) (*Team, error)
 	GetTeamMembers(ctx context.Context, teamId int64) ([]int64, error)
+	GetTeamByNodeId(ctx context.Context, nodeId string) (*Team, error)
 }
 
 type PostgresTeamStore struct {
@@ -138,4 +139,33 @@ func (s *PostgresTeamStore) GetTeamMembers(ctx context.Context, teamId int64) ([
 	}
 	
 	return userIds, nil
+}
+
+// GetTeamByNodeId returns a team by its node_id (e.g., "N:team:uuid")
+func (s *PostgresTeamStore) GetTeamByNodeId(ctx context.Context, nodeId string) (*Team, error) {
+	query := `
+		SELECT 
+			t.id,
+			t.name,
+			t.node_id,
+			ot.organization_id
+		FROM pennsieve.teams t
+		JOIN pennsieve.organization_team ot ON ot.team_id = t.id
+		WHERE t.node_id = $1`
+	
+	var team Team
+	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(
+		&team.Id,
+		&team.Name,
+		&team.NodeId,
+		&team.OrganizationId,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error getting team by node_id: %w", err)
+	}
+	
+	return &team, nil
 }

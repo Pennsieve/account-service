@@ -30,6 +30,8 @@ type OrganizationStore interface {
 	CheckUserIsOrganizationAdmin(ctx context.Context, userId, organizationId int64) (bool, error)
 	// CheckUserExists checks if a user exists in the platform
 	CheckUserExists(ctx context.Context, userId int64) (bool, error)
+	// CheckUserExistsByNodeId checks if a user exists by their node_id (e.g., "N:user:uuid")
+	CheckUserExistsByNodeId(ctx context.Context, nodeId string) (bool, error)
 }
 
 type PostgresOrganizationStore struct {
@@ -109,6 +111,25 @@ func (s *PostgresOrganizationStore) CheckUserExists(ctx context.Context, userId 
 			return false, nil
 		}
 		return false, fmt.Errorf("error checking if user exists: %w", err)
+	}
+	
+	return true, nil
+}
+
+// CheckUserExistsByNodeId checks if a user exists by their node_id (e.g., "N:user:uuid")
+func (s *PostgresOrganizationStore) CheckUserExistsByNodeId(ctx context.Context, nodeId string) (bool, error) {
+	query := `
+		SELECT 1 
+		FROM pennsieve.users 
+		WHERE node_id = $1`
+	
+	var exists int
+	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(&exists)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("error checking if user exists by node_id: %w", err)
 	}
 	
 	return true, nil

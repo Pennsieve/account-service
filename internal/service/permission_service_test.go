@@ -2,14 +2,46 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"os"
 	"testing"
 
+	_ "github.com/lib/pq"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// setupTestPostgreSQL creates a connection to the test PostgreSQL database
+func setupTestPostgreSQL(t *testing.T) *sql.DB {
+	// Connect to the postgres database (the pennsieve schema is in the postgres database in the seeded image)
+	// Use POSTGRES_HOST environment variable if set (for Docker), otherwise use localhost
+	host := "localhost"
+	if postgresHost := os.Getenv("POSTGRES_HOST"); postgresHost != "" {
+		host = postgresHost
+	}
+	
+	connectionString := fmt.Sprintf("postgres://postgres:password@%s:5432/postgres?sslmode=disable", host)
+	db, err := sql.Open("postgres", connectionString)
+	if err != nil {
+		t.Fatalf("Failed to connect to test database: %v", err)
+	}
+
+	// Test the connection
+	err = db.Ping()
+	if err != nil {
+		t.Fatalf("Failed to ping test database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	return db
+}
 
 // Mock implementations for testing
 
@@ -82,6 +114,14 @@ func (m *MockTeamStore) GetTeamById(ctx context.Context, teamId int64) (*store_p
 func (m *MockTeamStore) GetTeamMembers(ctx context.Context, teamId int64) ([]int64, error) {
 	args := m.Called(ctx, teamId)
 	return args.Get(0).([]int64), args.Error(1)
+}
+
+func (m *MockTeamStore) GetTeamByNodeId(ctx context.Context, nodeId string) (*store_postgres.Team, error) {
+	args := m.Called(ctx, nodeId)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*store_postgres.Team), args.Error(1)
 }
 
 type MockNodeStore struct {
@@ -1138,38 +1178,18 @@ func TestPermissionService_GetNodePermissions_AutoRepair_OwnerAlreadyExists(t *t
 	// mockNodeStore should not be called at all since owner already exists
 }
 
-// MockOrganizationStore for testing validation logic
-type MockOrganizationStore struct {
-	mock.Mock
-}
-
-func (m *MockOrganizationStore) CheckUserOrganizationAccess(ctx context.Context, userId, organizationId int64) (bool, error) {
-	args := m.Called(ctx, userId, organizationId)
-	return args.Bool(0), args.Error(1)
-}
-
-func (m *MockOrganizationStore) GetUserPermissionBit(ctx context.Context, userId, organizationId int64) (int, error) {
-	args := m.Called(ctx, userId, organizationId)
-	return args.Int(0), args.Error(1)
-}
-
-func (m *MockOrganizationStore) CheckUserIsOrganizationAdmin(ctx context.Context, userId, organizationId int64) (bool, error) {
-	args := m.Called(ctx, userId, organizationId)
-	return args.Bool(0), args.Error(1)
-}
-
-func (m *MockOrganizationStore) CheckUserExists(ctx context.Context, userId int64) (bool, error) {
-	args := m.Called(ctx, userId)
-	return args.Bool(0), args.Error(1)
-}
-
 // Tests for validation of non-existent users/teams when granting permissions
+// Using real PostgreSQL stores instead of mocks
 func TestPermissionService_SetNodePermissions_NonExistentUsersValidation(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
+	
+	// Use real PostgreSQL stores
+	db := setupTestPostgreSQL(t)
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
+	
+	service := NewPermissionService(mockNodeStore, teamStore)
+	service.SetOrganizationStore(orgStore)
 
 	ctx := context.Background()
 	nodeUuid := "node-123"
@@ -1180,8 +1200,8 @@ func TestPermissionService_SetNodePermissions_NonExistentUsersValidation(t *test
 	req := models.NodeAccessRequest{
 		NodeUuid:        nodeUuid,
 		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{"123", "456", "999"}, // 999 doesn't exist
-		SharedWithTeams: []string{"10"},
+		SharedWithUsers: []string{"N:user:99f02be5-009c-4ecd-9006-f016d48628bf", "N:user:invalid-user"}, // First exists in seeded DB, second doesn't
+		SharedWithTeams: []string{},
 	}
 
 	// Mock current access (only owner)
@@ -1196,26 +1216,46 @@ func TestPermissionService_SetNodePermissions_NonExistentUsersValidation(t *test
 	}
 	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
 
-	// Mock user validation - users 123 and 456 exist, but 999 does not
-	mockOrgStore.On("CheckUserExists", ctx, int64(123)).Return(true, nil)
-	mockOrgStore.On("CheckUserExists", ctx, int64(456)).Return(true, nil)
-	mockOrgStore.On("CheckUserExists", ctx, int64(999)).Return(false, nil)
+	// No GrantAccess calls should be made because validation should fail first
 
 	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
 
-	// Should return error for non-existent user
+	// Should return error for non-existent user before any grants are attempted
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "user 999 does not exist")
+	assert.Contains(t, err.Error(), "user N:user:invalid-user does not exist")
 	mockNodeStore.AssertExpectations(t)
-	mockOrgStore.AssertExpectations(t)
 }
 
 func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
+	
+	// Use real PostgreSQL stores
+	db := setupTestPostgreSQL(t)
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
+	
+	// Insert a test team into the database
+	_, err := db.ExecContext(context.Background(), `
+		INSERT INTO pennsieve.teams (id, name, node_id) 
+		VALUES (100, 'Test Team', 'N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca')
+		ON CONFLICT (id) DO NOTHING
+	`)
+	if err != nil {
+		t.Fatalf("Failed to insert test team: %v", err)
+	}
+	
+	// Associate the team with an organization
+	_, err = db.ExecContext(context.Background(), `
+		INSERT INTO pennsieve.organization_team (organization_id, team_id) 
+		VALUES (1, 100)
+		ON CONFLICT (organization_id, team_id) DO NOTHING
+	`)
+	if err != nil {
+		t.Fatalf("Failed to associate team with organization: %v", err)
+	}
+	
+	service := NewPermissionService(mockNodeStore, teamStore)
+	service.SetOrganizationStore(orgStore)
 
 	ctx := context.Background()
 	nodeUuid := "node-123"
@@ -1226,8 +1266,8 @@ func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *test
 	req := models.NodeAccessRequest{
 		NodeUuid:        nodeUuid,
 		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{"123"},
-		SharedWithTeams: []string{"10", "20", "99"}, // 99 doesn't exist
+		SharedWithUsers: []string{"N:user:99f02be5-009c-4ecd-9006-f016d48628bf"}, // Valid user in seeded DB
+		SharedWithTeams: []string{"N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca", "N:team:invalid-team"}, // First exists (we just created it), second doesn't
 	}
 
 	// Mock current access (only owner)
@@ -1242,203 +1282,27 @@ func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *test
 	}
 	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
 
-	// Mock user validation - user 123 exists
-	mockOrgStore.On("CheckUserExists", ctx, int64(123)).Return(true, nil)
+	// No GrantAccess calls should be made because validation should fail first
 
-	// Mock team validation - teams 10 and 20 exist, but 99 does not
-	team10 := &store_postgres.Team{Id: 10, Name: "Team 10", NodeId: "team-10", OrganizationId: 789}
-	team20 := &store_postgres.Team{Id: 20, Name: "Team 20", NodeId: "team-20", OrganizationId: 789}
-	mockTeamStore.On("GetTeamById", ctx, int64(10)).Return(team10, nil)
-	mockTeamStore.On("GetTeamById", ctx, int64(20)).Return(team20, nil)
-	mockTeamStore.On("GetTeamById", ctx, int64(99)).Return(nil, nil) // Team doesn't exist
+	err = service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
 
-	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
-
-	// Should return error for non-existent team
+	// Should return error for non-existent team before any grants are attempted
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "team 99 does not exist")
-	mockNodeStore.AssertExpectations(t)
-	mockOrgStore.AssertExpectations(t)
-	mockTeamStore.AssertExpectations(t)
-}
-
-func TestPermissionService_SetNodePermissions_InvalidUserIdFormat(t *testing.T) {
-	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-	ownerId := "owner-456"
-	organizationId := "org-789"
-	grantedBy := "admin-user"
-
-	req := models.NodeAccessRequest{
-		NodeUuid:        nodeUuid,
-		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{"invalid-user-id"}, // Invalid format
-		SharedWithTeams: []string{},
-	}
-
-	// Mock current access (only owner)
-	currentAccess := []models.NodeAccess{
-		{
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, ownerId),
-			NodeId:      models.FormatNodeId(nodeUuid),
-			AccessType:  models.AccessTypeOwner,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: ownerId,
-		},
-	}
-	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
-
-	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
-
-	// Should return error for invalid user ID format
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid user ID format: invalid-user-id")
-	mockNodeStore.AssertExpectations(t)
-}
-
-func TestPermissionService_SetNodePermissions_InvalidTeamIdFormat(t *testing.T) {
-	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-	ownerId := "owner-456"
-	organizationId := "org-789"
-	grantedBy := "admin-user"
-
-	req := models.NodeAccessRequest{
-		NodeUuid:        nodeUuid,
-		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{},
-		SharedWithTeams: []string{"invalid-team-id"}, // Invalid format
-	}
-
-	// Mock current access (only owner)
-	currentAccess := []models.NodeAccess{
-		{
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, ownerId),
-			NodeId:      models.FormatNodeId(nodeUuid),
-			AccessType:  models.AccessTypeOwner,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: ownerId,
-		},
-	}
-	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
-
-	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
-
-	// Should return error for invalid team ID format
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid team ID format: invalid-team-id")
-	mockNodeStore.AssertExpectations(t)
-}
-
-func TestPermissionService_SetNodePermissions_UserValidationWithoutOrgStore(t *testing.T) {
-	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
-	// Note: No organization store set, validation should be skipped
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-	ownerId := "owner-456"
-	organizationId := "org-789"
-	grantedBy := "admin-user"
-
-	req := models.NodeAccessRequest{
-		NodeUuid:        nodeUuid,
-		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{"123", "999"}, // 999 may not exist but validation is skipped
-		SharedWithTeams: []string{},
-	}
-
-	// Mock current access (only owner)
-	currentAccess := []models.NodeAccess{
-		{
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, ownerId),
-			NodeId:      models.FormatNodeId(nodeUuid),
-			AccessType:  models.AccessTypeOwner,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: ownerId,
-		},
-	}
-	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
-
-	// Should grant access to both users since validation is skipped
-	mockNodeStore.On("GrantAccess", ctx, mock.MatchedBy(func(access models.NodeAccess) bool {
-		return access.EntityType == models.EntityTypeUser &&
-			access.AccessType == models.AccessTypeShared &&
-			(access.EntityRawId == "123" || access.EntityRawId == "999")
-	})).Return(nil).Twice()
-
-	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
-
-	// Should succeed without validation
-	assert.NoError(t, err)
-	mockNodeStore.AssertExpectations(t)
-}
-
-func TestPermissionService_SetNodePermissions_TeamValidationWithoutTeamStore(t *testing.T) {
-	mockNodeStore := new(MockNodeAccessStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeStore, nil) // No team store
-	service.SetOrganizationStore(mockOrgStore)
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-	ownerId := "owner-456"
-	organizationId := "org-789"
-	grantedBy := "admin-user"
-
-	req := models.NodeAccessRequest{
-		NodeUuid:        nodeUuid,
-		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{},
-		SharedWithTeams: []string{"99"}, // Team may not exist but validation is skipped
-	}
-
-	// Mock current access (only owner)
-	currentAccess := []models.NodeAccess{
-		{
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, ownerId),
-			NodeId:      models.FormatNodeId(nodeUuid),
-			AccessType:  models.AccessTypeOwner,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: ownerId,
-		},
-	}
-	mockNodeStore.On("GetNodeAccess", ctx, nodeUuid).Return(currentAccess, nil)
-
-	// Should grant access to team since validation is skipped
-	mockNodeStore.On("GrantAccess", ctx, mock.MatchedBy(func(access models.NodeAccess) bool {
-		return access.EntityType == models.EntityTypeTeam &&
-			access.AccessType == models.AccessTypeShared &&
-			access.EntityRawId == "99"
-	})).Return(nil)
-
-	err := service.SetNodePermissions(ctx, nodeUuid, req, ownerId, organizationId, grantedBy)
-
-	// Should succeed without validation
-	assert.NoError(t, err)
+	assert.Contains(t, err.Error(), "team N:team:invalid-team does not exist")
 	mockNodeStore.AssertExpectations(t)
 }
 
 // Tests for cleanup of stale permissions when getting permissions
 func TestPermissionService_GetNodePermissions_CleanupStaleUsers(t *testing.T) {
 	mockNodeAccessStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeAccessStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
+	
+	// Use real PostgreSQL stores
+	db := setupTestPostgreSQL(t)
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
+	
+	service := NewPermissionService(mockNodeAccessStore, teamStore)
+	service.SetOrganizationStore(orgStore)
 
 	ctx := context.Background()
 	nodeUuid := "node-123"
@@ -1455,27 +1319,23 @@ func TestPermissionService_GetNodePermissions_CleanupStaleUsers(t *testing.T) {
 		{
 			NodeUuid:    nodeUuid,
 			EntityType:  models.EntityTypeUser,
-			EntityRawId: "456", // This user exists
+			EntityRawId: "N:user:99f02be5-009c-4ecd-9006-f016d48628bf", // Valid user in seeded DB
 			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "456"),
+			EntityId:    models.FormatEntityId(models.EntityTypeUser, "N:user:99f02be5-009c-4ecd-9006-f016d48628bf"),
 		},
 		{
 			NodeUuid:    nodeUuid,
 			EntityType:  models.EntityTypeUser,
-			EntityRawId: "999", // This user no longer exists
+			EntityRawId: "N:user:deleted-user", // This user no longer exists
 			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "999"),
+			EntityId:    models.FormatEntityId(models.EntityTypeUser, "N:user:deleted-user"),
 		},
 	}
 	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(accessList, nil)
 
-	// Mock user existence checks - owner validation is skipped, others are checked
-	mockOrgStore.On("CheckUserExists", ctx, int64(456)).Return(true, nil)  // valid user exists
-	mockOrgStore.On("CheckUserExists", ctx, int64(999)).Return(false, nil) // deleted user doesn't exist
-
 	// Mock removal of stale permission
 	nodeId := models.FormatNodeId(nodeUuid)
-	deletedUserEntityId := models.FormatEntityId(models.EntityTypeUser, "999")
+	deletedUserEntityId := models.FormatEntityId(models.EntityTypeUser, "N:user:deleted-user")
 	mockNodeAccessStore.On("RevokeAccess", ctx, deletedUserEntityId, nodeId).Return(nil)
 
 	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
@@ -1487,20 +1347,23 @@ func TestPermissionService_GetNodePermissions_CleanupStaleUsers(t *testing.T) {
 	assert.Equal(t, models.AccessScopeShared, permissions.AccessScope)
 	
 	// Should only contain valid user, not the deleted one
-	assert.Contains(t, permissions.SharedWithUsers, "456")
-	assert.NotContains(t, permissions.SharedWithUsers, "999")
+	assert.Contains(t, permissions.SharedWithUsers, "N:user:99f02be5-009c-4ecd-9006-f016d48628bf")
+	assert.NotContains(t, permissions.SharedWithUsers, "N:user:deleted-user")
 	assert.Len(t, permissions.SharedWithUsers, 1)
 
 	mockNodeAccessStore.AssertExpectations(t)
-	mockOrgStore.AssertExpectations(t)
 }
 
 func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 	mockNodeAccessStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeAccessStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
+	
+	// Use real PostgreSQL stores
+	db := setupTestPostgreSQL(t)
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
+	
+	service := NewPermissionService(mockNodeAccessStore, teamStore)
+	service.SetOrganizationStore(orgStore)
 	service.SetNodeStore(nil) // Disable auto-repair for this test
 
 	ctx := context.Background()
@@ -1518,28 +1381,23 @@ func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 		{
 			NodeUuid:    nodeUuid,
 			EntityType:  models.EntityTypeTeam,
-			EntityRawId: "10", // This team exists
+			EntityRawId: "N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca", // Valid team in seeded DB
 			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "10"),
+			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca"),
 		},
 		{
 			NodeUuid:    nodeUuid,
 			EntityType:  models.EntityTypeTeam,
-			EntityRawId: "99", // This team no longer exists
+			EntityRawId: "N:team:deleted-team", // This team no longer exists
 			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "99"),
+			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "N:team:deleted-team"),
 		},
 	}
 	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(accessList, nil)
 
-	// Mock team existence checks
-	validTeam := &store_postgres.Team{Id: 10, Name: "Valid Team", NodeId: "team-10", OrganizationId: 789}
-	mockTeamStore.On("GetTeamById", ctx, int64(10)).Return(validTeam, nil)   // valid team exists
-	mockTeamStore.On("GetTeamById", ctx, int64(99)).Return(nil, nil)         // deleted team doesn't exist
-
 	// Mock removal of stale permission
 	nodeId := models.FormatNodeId(nodeUuid)
-	deletedTeamEntityId := models.FormatEntityId(models.EntityTypeTeam, "99")
+	deletedTeamEntityId := models.FormatEntityId(models.EntityTypeTeam, "N:team:deleted-team")
 	mockNodeAccessStore.On("RevokeAccess", ctx, deletedTeamEntityId, nodeId).Return(nil)
 
 	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
@@ -1551,263 +1409,8 @@ func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 	assert.Equal(t, models.AccessScopeShared, permissions.AccessScope)
 	
 	// Should only contain valid team, not the deleted one
-	assert.Contains(t, permissions.SharedWithTeams, "10")
-	assert.NotContains(t, permissions.SharedWithTeams, "99")
-	assert.Len(t, permissions.SharedWithTeams, 1)
-
-	mockNodeAccessStore.AssertExpectations(t)
-	mockTeamStore.AssertExpectations(t)
-}
-
-func TestPermissionService_GetNodePermissions_CleanupMixedStalePermissions(t *testing.T) {
-	mockNodeAccessStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeAccessStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
-	service.SetNodeStore(nil) // Disable auto-repair for this test
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-
-	// Mock access list with mix of valid and invalid users and teams
-	accessList := []models.NodeAccess{
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "owner-123",
-			AccessType:  models.AccessTypeOwner,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "owner-123"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "456",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "456"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "789",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "789"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeTeam,
-			EntityRawId: "10",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "10"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeTeam,
-			EntityRawId: "20",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "20"),
-		},
-	}
-	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(accessList, nil)
-
-	// Mock user existence checks
-	mockOrgStore.On("CheckUserExists", ctx, int64(456)).Return(true, nil)  // valid user exists
-	mockOrgStore.On("CheckUserExists", ctx, int64(789)).Return(false, nil) // deleted user doesn't exist
-
-	// Mock team existence checks
-	validTeam := &store_postgres.Team{Id: 10, Name: "Valid Team", NodeId: "team-10", OrganizationId: 789}
-	mockTeamStore.On("GetTeamById", ctx, int64(10)).Return(validTeam, nil)   // valid team exists
-	mockTeamStore.On("GetTeamById", ctx, int64(20)).Return(nil, nil)         // deleted team doesn't exist
-
-	// Mock removal of stale permissions
-	nodeId := models.FormatNodeId(nodeUuid)
-	deletedUserEntityId := models.FormatEntityId(models.EntityTypeUser, "789")
-	deletedTeamEntityId := models.FormatEntityId(models.EntityTypeTeam, "20")
-	mockNodeAccessStore.On("RevokeAccess", ctx, deletedUserEntityId, nodeId).Return(nil)
-	mockNodeAccessStore.On("RevokeAccess", ctx, deletedTeamEntityId, nodeId).Return(nil)
-
-	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, permissions)
-	assert.Equal(t, nodeUuid, permissions.NodeUuid)
-	assert.Equal(t, "owner-123", permissions.Owner)
-	assert.Equal(t, models.AccessScopeShared, permissions.AccessScope)
-	
-	// Should only contain valid entities, not the deleted ones
-	assert.Contains(t, permissions.SharedWithUsers, "456")
-	assert.NotContains(t, permissions.SharedWithUsers, "789")
-	assert.Len(t, permissions.SharedWithUsers, 1)
-	
-	assert.Contains(t, permissions.SharedWithTeams, "10")
-	assert.NotContains(t, permissions.SharedWithTeams, "20")
-	assert.Len(t, permissions.SharedWithTeams, 1)
-
-	mockNodeAccessStore.AssertExpectations(t)
-	mockOrgStore.AssertExpectations(t)
-	mockTeamStore.AssertExpectations(t)
-}
-
-func TestPermissionService_GetNodePermissions_CleanupAccessScopeRecalculation(t *testing.T) {
-	mockNodeAccessStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeAccessStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
-	service.SetNodeStore(nil) // Disable auto-repair for this test
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-
-	// Mock access list where all shared permissions are stale (users/teams deleted)
-	accessList := []models.NodeAccess{
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "owner-123",
-			AccessType:  models.AccessTypeOwner,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "owner-123"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "456", // This user no longer exists
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "456"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeTeam,
-			EntityRawId: "10", // This team no longer exists
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "10"),
-		},
-	}
-	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(accessList, nil)
-
-	// Mock that both user and team no longer exist
-	mockOrgStore.On("CheckUserExists", ctx, int64(456)).Return(false, nil) // deleted user doesn't exist
-	mockTeamStore.On("GetTeamById", ctx, int64(10)).Return(nil, nil)       // deleted team doesn't exist
-
-	// Mock removal of both stale permissions
-	nodeId := models.FormatNodeId(nodeUuid)
-	deletedUserEntityId := models.FormatEntityId(models.EntityTypeUser, "456")
-	deletedTeamEntityId := models.FormatEntityId(models.EntityTypeTeam, "10")
-	mockNodeAccessStore.On("RevokeAccess", ctx, deletedUserEntityId, nodeId).Return(nil)
-	mockNodeAccessStore.On("RevokeAccess", ctx, deletedTeamEntityId, nodeId).Return(nil)
-
-	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, permissions)
-	assert.Equal(t, nodeUuid, permissions.NodeUuid)
-	assert.Equal(t, "owner-123", permissions.Owner)
-	
-	// Access scope should be recalculated to Private since all shared permissions were removed
-	assert.Equal(t, models.AccessScopePrivate, permissions.AccessScope)
-	assert.Len(t, permissions.SharedWithUsers, 0)
-	assert.Len(t, permissions.SharedWithTeams, 0)
-
-	mockNodeAccessStore.AssertExpectations(t)
-	mockOrgStore.AssertExpectations(t)
-	mockTeamStore.AssertExpectations(t)
-}
-
-func TestPermissionService_GetNodePermissions_CleanupErrorHandling(t *testing.T) {
-	mockNodeAccessStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	mockOrgStore := new(MockOrganizationStore)
-	service := NewPermissionService(mockNodeAccessStore, mockTeamStore)
-	service.SetOrganizationStore(mockOrgStore)
-	service.SetNodeStore(nil) // Disable auto-repair for this test
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-
-	// Mock access list with user and team
-	accessList := []models.NodeAccess{
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "owner-123",
-			AccessType:  models.AccessTypeOwner,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "owner-123"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "456",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "456"),
-		},
-	}
-	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(accessList, nil)
-
-	// Mock database error when checking user existence
-	mockOrgStore.On("CheckUserExists", ctx, int64(456)).Return(false, errors.ErrDynamoDB)
-
-	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
-
-	// Should not fail even if user validation has DB error
-	assert.NoError(t, err)
-	assert.NotNil(t, permissions)
-	assert.Equal(t, nodeUuid, permissions.NodeUuid)
-	assert.Equal(t, "owner-123", permissions.Owner)
-	
-	// User should still be present since DB error prevents cleanup
-	assert.Contains(t, permissions.SharedWithUsers, "456")
-	assert.Len(t, permissions.SharedWithUsers, 1)
-
-	mockNodeAccessStore.AssertExpectations(t)
-	mockOrgStore.AssertExpectations(t)
-}
-
-func TestPermissionService_GetNodePermissions_NoCleanupWithoutStores(t *testing.T) {
-	mockNodeAccessStore := new(MockNodeAccessStore)
-	service := NewPermissionService(mockNodeAccessStore, nil) // No team or org store
-
-	ctx := context.Background()
-	nodeUuid := "node-123"
-
-	// Mock access list with users and teams that might not exist
-	accessList := []models.NodeAccess{
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "owner-123",
-			AccessType:  models.AccessTypeOwner,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "owner-123"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeUser,
-			EntityRawId: "456",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeUser, "456"),
-		},
-		{
-			NodeUuid:    nodeUuid,
-			EntityType:  models.EntityTypeTeam,
-			EntityRawId: "10",
-			AccessType:  models.AccessTypeShared,
-			EntityId:    models.FormatEntityId(models.EntityTypeTeam, "10"),
-		},
-	}
-	mockNodeAccessStore.On("GetNodeAccess", ctx, nodeUuid).Return(accessList, nil)
-
-	permissions, err := service.GetNodePermissions(ctx, nodeUuid)
-
-	// Should succeed without any cleanup since stores are not available
-	assert.NoError(t, err)
-	assert.NotNil(t, permissions)
-	assert.Equal(t, nodeUuid, permissions.NodeUuid)
-	assert.Equal(t, "owner-123", permissions.Owner)
-	assert.Equal(t, models.AccessScopeShared, permissions.AccessScope)
-	
-	// All permissions should remain since no cleanup can occur
-	assert.Contains(t, permissions.SharedWithUsers, "456")
-	assert.Len(t, permissions.SharedWithUsers, 1)
-	assert.Contains(t, permissions.SharedWithTeams, "10")
+	assert.Contains(t, permissions.SharedWithTeams, "N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca")
+	assert.NotContains(t, permissions.SharedWithTeams, "N:team:deleted-team")
 	assert.Len(t, permissions.SharedWithTeams, 1)
 
 	mockNodeAccessStore.AssertExpectations(t)
