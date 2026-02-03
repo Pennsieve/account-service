@@ -131,7 +131,7 @@ resource "aws_lambda_function" "check_user_node_access" {
 
   vpc_config {
     subnet_ids         = tolist(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
-    security_group_ids = [data.terraform_remote_state.vpc.outputs.upload_v2_security_group_id]
+    security_group_ids = [data.terraform_remote_state.platform_infrastructure.outputs.upload_v2_security_group_id]
   }
 
   tags = merge(
