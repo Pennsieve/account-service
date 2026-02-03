@@ -205,14 +205,39 @@ func TestPermissionService_CheckNodeAccess_WorkspaceAccess(t *testing.T) {
 }
 
 func TestPermissionService_CheckNodeAccess_TeamAccess(t *testing.T) {
+	// Setup PostgreSQL stores
+	db := setupTestPostgreSQL(t)
+	
+	// Create test data: team and team membership
+	_, err := db.ExecContext(context.Background(), `
+		INSERT INTO pennsieve.teams (id, name, node_id) 
+		VALUES (1, 'Test Team', 'N:team:a4b8172f-54ba-4bc8-aedf-b3e86e37f00f')
+		ON CONFLICT (id) DO NOTHING;
+		
+		INSERT INTO pennsieve.organization_team (organization_id, team_id)
+		VALUES (1, 1)
+		ON CONFLICT (organization_id, team_id) DO NOTHING;
+		
+		INSERT INTO pennsieve.team_user (team_id, user_id)
+		VALUES (1, 1)
+		ON CONFLICT (team_id, user_id) DO NOTHING;
+	`)
+	if err != nil {
+		t.Fatalf("Failed to create test data: %v", err)
+	}
+	
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
+	
 	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
+	service := NewPermissionService(mockNodeStore, teamStore)
+	service.SetOrganizationStore(orgStore)
 
 	ctx := context.Background()
-	userId := "123"
+	// Use actual node IDs from the seeded database
+	userId := "N:user:99f02be5-009c-4ecd-9006-f016d48628bf" // User ID 1 from seeded data
 	nodeUuid := "node-456"
-	organizationId := "789"
+	organizationId := "N:organization:88c078d6-1827-4e14-867b-801448fe0622" // Org ID 1 from seeded data
 	
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
@@ -222,17 +247,11 @@ func TestPermissionService_CheckNodeAccess_TeamAccess(t *testing.T) {
 	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
 	mockNodeStore.On("HasAccess", ctx, workspaceEntityId, nodeId).Return(false, nil)
 
-	// Mock user teams
-	teams := []store_postgres.UserTeam{
-		{TeamId: 100, TeamNodeId: "team-100", TeamName: "Team Alpha", UserId: 123, OrganizationId: 789},
-		{TeamId: 200, TeamNodeId: "team-200", TeamName: "Team Beta", UserId: 123, OrganizationId: 789},
-	}
-	mockTeamStore.On("GetUserTeams", ctx, int64(123), int64(789)).Return(teams, nil)
-
-	// Mock team access check - one team has access
+	// Mock team access check - user's teams have access
+	// The actual teams will be fetched from the real database
+	// We just need to mock the BatchCheckAccess call with the correct team node IDs
 	teamEntityIds := []string{
-		models.FormatEntityId(models.EntityTypeTeam, "100"),
-		models.FormatEntityId(models.EntityTypeTeam, "200"),
+		models.FormatEntityId(models.EntityTypeTeam, "N:team:a4b8172f-54ba-4bc8-aedf-b3e86e37f00f"),
 	}
 	mockNodeStore.On("BatchCheckAccess", ctx, teamEntityIds, nodeId).Return(true, nil)
 
@@ -241,18 +260,42 @@ func TestPermissionService_CheckNodeAccess_TeamAccess(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, hasAccess)
 	mockNodeStore.AssertExpectations(t)
-	mockTeamStore.AssertExpectations(t)
 }
 
 func TestPermissionService_CheckNodeAccess_NoAccess(t *testing.T) {
+	// Setup PostgreSQL stores
+	db := setupTestPostgreSQL(t)
+	
+	// Create test data: team and team membership
+	_, err := db.ExecContext(context.Background(), `
+		INSERT INTO pennsieve.teams (id, name, node_id) 
+		VALUES (1, 'Test Team', 'N:team:a4b8172f-54ba-4bc8-aedf-b3e86e37f00f')
+		ON CONFLICT (id) DO NOTHING;
+		
+		INSERT INTO pennsieve.organization_team (organization_id, team_id)
+		VALUES (1, 1)
+		ON CONFLICT (organization_id, team_id) DO NOTHING;
+		
+		INSERT INTO pennsieve.team_user (team_id, user_id)
+		VALUES (1, 1)
+		ON CONFLICT (team_id, user_id) DO NOTHING;
+	`)
+	if err != nil {
+		t.Fatalf("Failed to create test data: %v", err)
+	}
+	
+	teamStore := store_postgres.NewPostgresTeamStore(db)
+	orgStore := store_postgres.NewPostgresOrganizationStore(db)
+	
 	mockNodeStore := new(MockNodeAccessStore)
-	mockTeamStore := new(MockTeamStore)
-	service := NewPermissionService(mockNodeStore, mockTeamStore)
+	service := NewPermissionService(mockNodeStore, teamStore)
+	service.SetOrganizationStore(orgStore)
 
 	ctx := context.Background()
-	userId := "123"
+	// Use actual node IDs from the seeded database
+	userId := "N:user:99f02be5-009c-4ecd-9006-f016d48628bf" // User ID 1 from seeded data
 	nodeUuid := "node-456"
-	organizationId := "789"
+	organizationId := "N:organization:88c078d6-1827-4e14-867b-801448fe0622" // Org ID 1 from seeded data
 	
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
@@ -262,15 +305,9 @@ func TestPermissionService_CheckNodeAccess_NoAccess(t *testing.T) {
 	mockNodeStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
 	mockNodeStore.On("HasAccess", ctx, workspaceEntityId, nodeId).Return(false, nil)
 
-	// Mock user teams
-	teams := []store_postgres.UserTeam{
-		{TeamId: 100, TeamNodeId: "team-100", TeamName: "Team Alpha", UserId: 123, OrganizationId: 789},
-	}
-	mockTeamStore.On("GetUserTeams", ctx, int64(123), int64(789)).Return(teams, nil)
-
 	// Mock team access check - no team has access
 	teamEntityIds := []string{
-		models.FormatEntityId(models.EntityTypeTeam, "100"),
+		models.FormatEntityId(models.EntityTypeTeam, "N:team:a4b8172f-54ba-4bc8-aedf-b3e86e37f00f"),
 	}
 	mockNodeStore.On("BatchCheckAccess", ctx, teamEntityIds, nodeId).Return(false, nil)
 
@@ -279,7 +316,6 @@ func TestPermissionService_CheckNodeAccess_NoAccess(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, hasAccess)
 	mockNodeStore.AssertExpectations(t)
-	mockTeamStore.AssertExpectations(t)
 }
 
 func TestPermissionService_GetAccessibleNodes(t *testing.T) {

@@ -41,3 +41,19 @@ output "compute_nodes_table_name" {
 output "compute_nodes_access_table_name" {
   value = aws_dynamodb_table.compute_node_access_table.name
 }
+
+# Output the Lambda function ARN for other services to use
+output "check_access_lambda_arn" {
+  value = aws_lambda_function.check_user_node_access.arn
+  description = "ARN of the internal check access Lambda function"
+}
+
+output "check_access_lambda_invoke_arn" {
+  value = aws_lambda_function.check_user_node_access.invoke_arn
+  description = "Invoke ARN of the internal check access Lambda function (for API Gateway integrations)"
+}
+
+output "check_access_lambda_name" {
+  value = aws_lambda_function.check_user_node_access.function_name
+  description = "Name of the internal check access Lambda function"
+}

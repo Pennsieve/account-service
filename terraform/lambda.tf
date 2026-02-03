@@ -99,3 +99,54 @@ resource "aws_lambda_permission" "eventbridge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.compute_node_provisioning.arn
 }
+
+
+# Lambda function for internal service-to-service access checking
+# This function is NOT exposed through API Gateway and can only be invoked directly
+
+# Lambda function for checking user access to compute nodes
+resource "aws_lambda_function" "check_user_node_access" {
+  function_name = "${var.environment_name}-${var.service_name}-check-access-lambda-use1"
+  role          = aws_iam_role.check_access_lambda_role.arn
+
+  s3_bucket = var.lambda_bucket
+  s3_key    = "${var.service_name}/${var.service_name}-${var.image_tag}.zip"
+
+  handler     = "check-access"
+  runtime     = "provided.al2"
+  timeout     = 30
+  memory_size = 256
+
+  environment {
+    variables = {
+      ENV                = var.environment_name
+      NODE_ACCESS_TABLE  = aws_dynamodb_table.compute_node_access_table.name
+      # PostgreSQL Configuration via RDS Proxy with IAM auth
+      POSTGRES_HOST      = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
+      POSTGRES_PORT      = "5432"
+      POSTGRES_USER      = "${var.environment_name}_rds_proxy_user"
+      POSTGRES_ORGANIZATION_DATABASE = "pennsieve_postgres"
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = tolist(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
+    security_group_ids = [data.terraform_remote_state.vpc.outputs.upload_v2_security_group_id]
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      "lambda:purpose" = "internal-access-check"
+      "lambda:trigger" = "direct-invocation"
+    }
+  )
+}
+
+# Lambda permission to allow any Lambda function in the same account to invoke this function
+resource "aws_lambda_permission" "allow_same_account_lambdas" {
+  statement_id  = "AllowSameAccountLambdasInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.check_user_node_access.function_name
+  principal     = data.aws_caller_identity.current.account_id
+}

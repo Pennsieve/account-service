@@ -32,6 +32,10 @@ type OrganizationStore interface {
 	CheckUserExists(ctx context.Context, userId int64) (bool, error)
 	// CheckUserExistsByNodeId checks if a user exists by their node_id (e.g., "N:user:uuid")
 	CheckUserExistsByNodeId(ctx context.Context, nodeId string) (bool, error)
+	// GetUserIdByNodeId returns the numeric user ID for a given node_id
+	GetUserIdByNodeId(ctx context.Context, nodeId string) (int64, error)
+	// GetOrganizationIdByNodeId returns the numeric organization ID for a given node_id
+	GetOrganizationIdByNodeId(ctx context.Context, nodeId string) (int64, error)
 }
 
 type PostgresOrganizationStore struct {
@@ -133,4 +137,42 @@ func (s *PostgresOrganizationStore) CheckUserExistsByNodeId(ctx context.Context,
 	}
 	
 	return true, nil
+}
+
+// GetUserIdByNodeId returns the numeric user ID for a given node_id
+func (s *PostgresOrganizationStore) GetUserIdByNodeId(ctx context.Context, nodeId string) (int64, error) {
+	query := `
+		SELECT id 
+		FROM pennsieve.users 
+		WHERE node_id = $1`
+	
+	var userId int64
+	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(&userId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, fmt.Errorf("user with node_id %s not found", nodeId)
+		}
+		return 0, fmt.Errorf("error getting user ID by node_id: %w", err)
+	}
+	
+	return userId, nil
+}
+
+// GetOrganizationIdByNodeId returns the numeric organization ID for a given node_id
+func (s *PostgresOrganizationStore) GetOrganizationIdByNodeId(ctx context.Context, nodeId string) (int64, error) {
+	query := `
+		SELECT id 
+		FROM pennsieve.organizations 
+		WHERE node_id = $1`
+	
+	var orgId int64
+	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(&orgId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, fmt.Errorf("organization with node_id %s not found", nodeId)
+		}
+		return 0, fmt.Errorf("error getting organization ID by node_id: %w", err)
+	}
+	
+	return orgId, nil
 }

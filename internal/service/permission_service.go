@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	
 	"github.com/pennsieve/account-service/internal/errors"
@@ -68,20 +69,35 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 	}
 	
 	// 3. Check team access (only for organization-bound nodes)
-	if s.TeamStore != nil {
-		userIdInt, err := strconv.ParseInt(userId, 10, 64)
-		if err == nil {
-			orgIdInt, err := strconv.ParseInt(organizationId, 10, 64)
-			if err == nil {
+	if s.TeamStore != nil && s.OrganizationStore != nil {
+		// Get numeric IDs from node IDs
+		userIdInt, err := s.OrganizationStore.GetUserIdByNodeId(ctx, userId)
+		if err != nil {
+			// Log error but continue - user ID lookup failure shouldn't block access
+			slog.Warn("Failed to get numeric user ID",
+				"userNodeId", userId,
+				"error", err)
+		} else {
+			orgIdInt, err := s.OrganizationStore.GetOrganizationIdByNodeId(ctx, organizationId)
+			if err != nil {
+				// Log error but continue - org ID lookup failure shouldn't block access
+				slog.Warn("Failed to get numeric org ID",
+					"orgNodeId", organizationId,
+					"error", err)
+			} else {
 				teams, err := s.TeamStore.GetUserTeams(ctx, userIdInt, orgIdInt)
 				if err != nil {
 					// Log error but continue - team lookup failure shouldn't block access
-					// In production, you'd want proper logging here
+					slog.Warn("Failed to get user teams",
+						"userId", userIdInt,
+						"orgId", orgIdInt,
+						"error", err)
 				} else {
 					// Check if any of the user's teams have access
 					teamEntityIds := make([]string, len(teams))
 					for i, team := range teams {
-						teamEntityIds[i] = models.FormatEntityId(models.EntityTypeTeam, strconv.FormatInt(team.TeamId, 10))
+						// Use TeamNodeId instead of converting TeamId
+						teamEntityIds[i] = models.FormatEntityId(models.EntityTypeTeam, team.TeamNodeId)
 					}
 					
 					hasTeamAccess, err := s.NodeAccessStore.BatchCheckAccess(ctx, teamEntityIds, nodeId)
@@ -387,8 +403,9 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 			err = s.NodeAccessStore.GrantAccess(ctx, ownerAccess)
 			if err != nil {
 				// Log but don't fail - return current state
-				// In production, you'd want proper logging here
-				fmt.Printf("Warning: Failed to auto-restore owner access for node %s: %v\n", nodeUuid, err)
+				slog.Warn("Failed to auto-restore owner access",
+					"nodeUuid", nodeUuid,
+					"error", err)
 			} else {
 				// Successfully restored owner access - update response
 				response.Owner = node.UserId
@@ -413,10 +430,14 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 					userExists, err := s.OrganizationStore.CheckUserExistsByNodeId(ctx, access.EntityRawId)
 					if err != nil {
 						// Log error but don't remove on DB error
-						fmt.Printf("Warning: Error checking if user %s exists: %v\n", access.EntityRawId, err)
+						slog.Warn("Error checking if user exists",
+							"userNodeId", access.EntityRawId,
+							"error", err)
 					} else if !userExists {
 						shouldRemove = true
-						fmt.Printf("Info: Removing stale permission for deleted user %s on node %s\n", access.EntityRawId, nodeUuid)
+						slog.Info("Removing stale permission for deleted user",
+							"userNodeId", access.EntityRawId,
+							"nodeUuid", nodeUuid)
 					}
 				}
 			}
@@ -427,11 +448,15 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 				team, err := s.TeamStore.GetTeamByNodeId(ctx, access.EntityRawId)
 				if err != nil {
 					// Log other errors but don't remove on DB error
-					fmt.Printf("Warning: Error checking if team %s exists: %v\n", access.EntityRawId, err)
+					slog.Warn("Error checking if team exists",
+						"teamNodeId", access.EntityRawId,
+						"error", err)
 				} else if team == nil {
 					// Team doesn't exist
 					shouldRemove = true
-					fmt.Printf("Info: Removing stale permission for deleted team %s on node %s\n", access.EntityRawId, nodeUuid)
+					slog.Info("Removing stale permission for deleted team",
+						"teamNodeId", access.EntityRawId,
+						"nodeUuid", nodeUuid)
 				}
 			}
 			
@@ -447,7 +472,10 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 				err := s.NodeAccessStore.RevokeAccess(ctx, staleAccess.EntityId, nodeId)
 				if err != nil {
 					// Log error but continue with other cleanups
-					fmt.Printf("Warning: Failed to remove stale permission %s for node %s: %v\n", staleAccess.EntityId, nodeUuid, err)
+					slog.Warn("Failed to remove stale permission",
+						"entityId", staleAccess.EntityId,
+						"nodeUuid", nodeUuid,
+						"error", err)
 				} else {
 					// Remove from response lists
 					if staleAccess.EntityType == models.EntityTypeUser {
