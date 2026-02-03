@@ -51,7 +51,7 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       "rds-db:connect"
     ]
     resources = [
-      "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_resource_id}/${var.environment_name}_rds_proxy_user"
+      "*"
     ]
   }
 
