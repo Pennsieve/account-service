@@ -112,7 +112,7 @@ resource "aws_lambda_function" "check_user_node_access" {
   s3_bucket = var.lambda_bucket
   s3_key    = "${var.service_name}/${var.service_name}-check-access-${var.image_tag}.zip"
 
-  handler     = "check-access"
+  handler     = "bootstrap"
   runtime     = "provided.al2"
   timeout     = 30
   memory_size = 256

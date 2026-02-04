@@ -1,4 +1,4 @@
-package internal
+package checkaccess
 
 import (
 	"context"
@@ -18,16 +18,16 @@ import (
 // CheckUserNodeAccessRequest is the request structure for checking user access to a node
 type CheckUserNodeAccessRequest struct {
 	UserNodeId     string `json:"userNodeId"`     // User node ID in format "N:user:uuid"
-	NodeUuid       string `json:"nodeUuid"`        // Compute node UUID
-	OrganizationId string `json:"organizationId"`  // Organization node ID in format "N:organization:uuid"
+	NodeUuid       string `json:"nodeUuid"`       // Compute node UUID
+	OrganizationId string `json:"organizationId"` // Organization node ID in format "N:organization:uuid"
 }
 
 // CheckUserNodeAccessResponse is the response structure for access check
 type CheckUserNodeAccessResponse struct {
 	HasAccess      bool   `json:"hasAccess"`
-	AccessType     string `json:"accessType,omitempty"`     // "owner", "shared", "workspace", "team", or empty if no access
-	AccessSource   string `json:"accessSource,omitempty"`   // "direct", "workspace", "team", or empty
-	TeamId         string `json:"teamId,omitempty"`         // If access is through a team, which team
+	AccessType     string `json:"accessType,omitempty"`   // "owner", "shared", "workspace", "team", or empty if no access
+	AccessSource   string `json:"accessSource,omitempty"` // "direct", "workspace", "team", or empty
+	TeamId         string `json:"teamId,omitempty"`       // If access is through a team, which team
 	NodeUuid       string `json:"nodeUuid"`
 	UserNodeId     string `json:"userNodeId"`
 	OrganizationId string `json:"organizationId"`
@@ -119,13 +119,13 @@ func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccess
 }
 
 // enrichAccessDetails adds information about how the user has access
-func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessResponse, 
+func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessResponse,
 	nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore,
 	orgStore store_postgres.OrganizationStore) error {
-	
+
 	nodeId := models.FormatNodeId(response.NodeUuid)
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, response.UserNodeId)
-	
+
 	// Check direct user access first
 	hasDirectAccess, err := nodeAccessStore.HasAccess(ctx, userEntityId, nodeId)
 	if err == nil && hasDirectAccess {
@@ -141,7 +141,7 @@ func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessRespo
 			}
 		}
 	}
-	
+
 	// Check workspace access
 	if response.OrganizationId != "" {
 		workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, response.OrganizationId)
@@ -152,7 +152,7 @@ func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessRespo
 			return nil
 		}
 	}
-	
+
 	// Check team access (if stores are available)
 	if teamStore != nil && orgStore != nil && response.OrganizationId != "" {
 		// Get numeric IDs from node IDs
@@ -177,12 +177,12 @@ func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessRespo
 				}
 			}
 		}
-		
+
 		// If we get here, we know they have team access but couldn't identify the specific team
 		response.AccessType = string(models.AccessTypeShared)
 		response.AccessSource = "team"
 	}
-	
+
 	return nil
 }
 
@@ -190,14 +190,14 @@ func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessRespo
 // It wraps CheckUserNodeAccessHandler to handle Lambda's event format
 func LambdaHandler(ctx context.Context, event json.RawMessage) (CheckUserNodeAccessResponse, error) {
 	var request CheckUserNodeAccessRequest
-	
+
 	// Try to unmarshal the event
 	err := json.Unmarshal(event, &request)
 	if err != nil {
 		log.Printf("LambdaHandler: Error unmarshaling request: %v", err)
 		return CheckUserNodeAccessResponse{}, err
 	}
-	
+
 	return CheckUserNodeAccessHandler(ctx, request)
 }
 
@@ -205,7 +205,7 @@ func LambdaHandler(ctx context.Context, event json.RawMessage) (CheckUserNodeAcc
 // This is included for completeness but should NOT be exposed through public API Gateway
 func APIGatewayHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var checkRequest CheckUserNodeAccessRequest
-	
+
 	// Parse request body
 	if err := json.Unmarshal([]byte(request.Body), &checkRequest); err != nil {
 		return events.APIGatewayV2HTTPResponse{
@@ -213,7 +213,7 @@ func APIGatewayHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       `{"error": "Invalid request body"}`,
 		}, nil
 	}
-	
+
 	// Call the main handler
 	response, err := CheckUserNodeAccessHandler(ctx, checkRequest)
 	if err != nil {
@@ -222,7 +222,7 @@ func APIGatewayHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       `{"error": "Internal server error"}`,
 		}, nil
 	}
-	
+
 	// Marshal response
 	responseBody, err := json.Marshal(response)
 	if err != nil {
@@ -231,7 +231,7 @@ func APIGatewayHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       `{"error": "Error marshaling response"}`,
 		}, nil
 	}
-	
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: 200,
 		Body:       string(responseBody),
