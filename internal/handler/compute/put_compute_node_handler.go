@@ -167,6 +167,11 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		authTypeValue = "NONE" // default value
 	}
 
+	nodeIdentifierKey := "NODE_IDENTIFIER"
+	nodeIdentifierValue := computeNode.Identifier
+	nodeNameKey := "NODE_NAME"
+	nodeNameValue := computeNode.Name
+
 	runTaskIn := &ecs.RunTaskInput{
 		TaskDefinition: aws.String(TaskDefinitionArn),
 		Cluster:        aws.String(cluster),
@@ -233,6 +238,14 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &authTypeKey,
 							Value: &authTypeValue,
+						},
+						{
+							Name:  &nodeIdentifierKey,
+							Value: &nodeIdentifierValue,
+						},
+						{
+							Name:  &nodeNameKey,
+							Value: &nodeNameValue,
 						},
 					},
 				},
