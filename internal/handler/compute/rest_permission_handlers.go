@@ -80,6 +80,22 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
 
+	if nodesTable == "" {
+		log.Println("COMPUTE_NODES_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
+	if nodeAccessTable == "" {
+		log.Println("NODE_ACCESS_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 
@@ -342,6 +358,22 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
 
+	if nodesTable == "" {
+		log.Println("COMPUTE_NODES_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
+	if nodeAccessTable == "" {
+		log.Println("NODE_ACCESS_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 
@@ -521,6 +553,22 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+
+	if nodesTable == "" {
+		log.Println("COMPUTE_NODES_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
+	if nodeAccessTable == "" {
+		log.Println("NODE_ACCESS_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
 
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
