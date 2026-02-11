@@ -15,8 +15,7 @@ type Node struct {
 	Account               NodeAccount   `json:"account"`
 	CreatedAt             string        `json:"createdAt"`
 	OrganizationId        string        `json:"organizationId,omitempty"` // Optional - empty string means organization-independent
-	NodeOwnerId           string        `json:"nodeOwnerId"`
-	AccountOwnerId        string        `json:"accountOwnerId,omitempty"` // The owner of the AWS/GCP account
+	OwnerId               string        `json:"ownerId"` // The owner of the compute node
 	Identifier            string        `json:"identifier"`
 	WorkflowManagerTag    string        `json:"workflowManagerTag"`
 	Status                string        `json:"status"`
@@ -26,6 +25,7 @@ type NodeAccount struct {
 	Uuid        string `json:"uuid"`
 	AccountId   string `json:"accountId"`
 	AccountType string `json:"accountType"`
+	OwnerId     string `json:"ownerId,omitempty"` // The owner of the AWS/GCP account
 }
 
 type NodeResponse struct {

@@ -140,7 +140,7 @@ func TestGetComputeNodeHandler_Success(t *testing.T) {
 	assert.Equal(t, testNode.AccountId, node.Account.AccountId)
 	assert.Equal(t, testNode.AccountType, node.Account.AccountType)
 	assert.Equal(t, testNode.OrganizationId, node.OrganizationId)
-	assert.Equal(t, testNode.UserId, node.NodeOwnerId)
+	assert.Equal(t, testNode.UserId, node.OwnerId)
 	assert.Equal(t, testNode.WorkflowManagerTag, node.WorkflowManagerTag)
 	assert.Equal(t, testNode.Status, node.Status)
 }
