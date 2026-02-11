@@ -18,6 +18,8 @@ type Node struct {
 	OwnerId               string        `json:"ownerId"` // The owner of the compute node
 	Identifier            string        `json:"identifier"`
 	WorkflowManagerTag    string        `json:"workflowManagerTag"`
+	ProvisionerImage      string        `json:"provisionerImage,omitempty"` // Docker image for the provisioner
+	ProvisionerImageTag   string        `json:"provisionerImageTag,omitempty"` // Docker tag for the provisioner image
 	Status                string        `json:"status"`
 }
 

@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.17
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.54.0
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.71.0
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.8
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0

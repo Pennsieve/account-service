@@ -190,6 +190,14 @@ components:
           type: string
           description: Docker tag for the workflow manager
           default: latest
+        provisionerImage:
+          type: string
+          description: Docker image for the provisioner
+          default: pennsieve/compute-node-aws-provisioner
+        provisionerImageTag:
+          type: string
+          description: Docker tag for the provisioner image
+          default: latest
     computeNodeResponse:
       type: object
       properties:

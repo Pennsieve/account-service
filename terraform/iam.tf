@@ -116,6 +116,24 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = ["*"]
   }
 
+  statement {
+    sid       = "SSMGetParameterPermissions"
+    effect    = "Allow"
+    actions   = [
+      "ssm:GetParameter",
+      "ssm:GetParameters", 
+      "ssm:GetParametersByPath"
+    ]
+    resources = ["arn:aws:ssm:${data.aws_region.current_region.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment_name}/${var.service_name}/*"]
+  }
+
+  statement {
+    sid       = "SSMKMSDecryptPermissions"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey*"]
+    resources = [data.aws_kms_key.aws_ssm_kms_key.arn]
+  }
+
 }
 
 

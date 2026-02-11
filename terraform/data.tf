@@ -88,6 +88,11 @@ data "aws_kms_key" "ssm_kms_key" {
   key_id = "alias/aws/secretsmanager"
 }
 
+# Import AWS Default SSM KMS Key
+data "aws_kms_key" "aws_ssm_kms_key" {
+  key_id = "alias/aws/ssm"
+}
+
 # Import Postgres
 data "terraform_remote_state" "pennsieve_postgres" {
   backend = "s3"
