@@ -27,6 +27,11 @@ variable "image_url" {
   default = "pennsieve/compute-node-aws-provisioner"
 }
 
+variable "provisioner_image" {
+  description = "Docker image for the compute node provisioner Fargate task"
+  default     = "pennsieve/compute-node-aws-provisioner"
+}
+
 variable "provisioner_image_tag" {
   description = "Docker image tag for the compute node provisioner Fargate task"
   default     = "latest"
