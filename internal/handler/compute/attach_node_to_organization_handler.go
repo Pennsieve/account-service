@@ -9,12 +9,12 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
-	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // AttachNodeToOrganizationHandler attaches a compute node to an organization
@@ -25,7 +25,7 @@ import (
 // - Node must be organization-independent (not already attached to an organization)
 func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "AttachNodeToOrganizationHandler"
-	
+
 	nodeId := request.PathParameters["id"]
 	if nodeId == "" {
 		log.Println("Node ID is required")
@@ -35,7 +35,10 @@ func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGate
 		}, nil
 	}
 
-	organizationId := request.QueryStringParameters["organization_id"]
+	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
+	organizationId := claims.OrgClaim.NodeId
+	userId := claims.UserClaim.NodeId
+
 	if organizationId == "" {
 		log.Println("Organization ID is required")
 		return events.APIGatewayV2HTTPResponse{
@@ -43,9 +46,6 @@ func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGate
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
-
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	userId := claims.UserClaim.NodeId
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -72,7 +72,7 @@ func AttachNodeToOrganizationHandler(ctx context.Context, request events.APIGate
 	err = permissionService.AttachNodeToOrganization(ctx, nodeId, organizationId, userId)
 	if err != nil {
 		log.Printf("Error attaching node to organization: %v", err)
-		
+
 		switch err {
 		case models.ErrCannotAttachNodeWithExistingOrganization:
 			return events.APIGatewayV2HTTPResponse{

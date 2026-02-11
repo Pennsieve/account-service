@@ -8,12 +8,12 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
@@ -22,6 +22,7 @@ import (
 //
 // Required Permissions:
 // - Must have access to the node (owner, shared user, workspace member, or team member)
+// - If organization_id is provided, user must be a member of that organization
 func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetComputeNodeHandler"
 	uuid := request.PathParameters["id"]
@@ -52,9 +53,15 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Get organization ID from claims if present
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	organizationId := claims.OrgClaim.NodeId
+	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
+	organizationId := request.QueryStringParameters["organization_id"]
+	
+	// Also check for organization in auth claims (for security validation)
+	var orgClaimId string
+	if request.RequestContext.Authorizer != nil && request.RequestContext.Authorizer.Lambda != nil {
+		claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
+		orgClaimId = claims.OrgClaim.NodeId
+	}
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
@@ -75,15 +82,41 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Validate node organization matches user's organization context
-	// Skip validation for INDEPENDENT nodes (organization-independent nodes)
-	if organizationId != "" && computeNode.OrganizationId != "INDEPENDENT" && computeNode.OrganizationId != organizationId {
-		log.Printf("Node %s belongs to organization '%s' but user claims organization '%s'", 
-			uuid, computeNode.OrganizationId, organizationId)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusForbidden,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
-		}, nil
+	// If there's an organization claim in the auth context, validate it matches the node's organization
+	if orgClaimId != "" {
+		if computeNode.OrganizationId == "INDEPENDENT" || computeNode.OrganizationId == "" {
+			// Organization claim provided but node is INDEPENDENT
+			log.Printf("Organization claim %s provided for INDEPENDENT node %s", orgClaimId, uuid)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusForbidden,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
+			}, nil
+		}
+		if computeNode.OrganizationId != orgClaimId {
+			// Organization claim doesn't match node's organization
+			log.Printf("Organization claim %s does not match node's organization %s", orgClaimId, computeNode.OrganizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusForbidden,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
+			}, nil
+		}
+	}
+
+	// If organization_id parameter is provided, validate it
+	if organizationId != "" {
+		// Validate that provided organization_id matches the compute node's existing organization
+		if computeNode.OrganizationId != organizationId && computeNode.OrganizationId != "INDEPENDENT" {
+			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, computeNode.OrganizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+			}, nil
+		}
+		
+		// Validate user is a member of the provided organization
+		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+			return *validationResponse, nil
+		}
 	}
 
 	// Check if user has access to the node

@@ -185,12 +185,35 @@ func handleDeleteComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 
 	log.Printf("Processing DELETE completion for node %s", event.ComputeNodeId)
 
-	// Delete the node from DynamoDB
+	// Load AWS configuration for additional cleanup
+	cfg, err := utils.LoadAWSConfig(ctx)
+	if err != nil {
+		log.Printf("Error loading AWS config for cleanup: %v", err)
+		return fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	dynamoDBClient := dynamodb.NewFromConfig(cfg)
+
+	// Clean up all node access records (permissions) for this node
+	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+	if nodeAccessTable != "" {
+		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+		if err := nodeAccessStore.RemoveAllNodeAccess(ctx, event.ComputeNodeId); err != nil {
+			log.Printf("Error removing access records for node %s: %v", event.ComputeNodeId, err)
+			// Continue with deletion even if access cleanup fails
+		} else {
+			log.Printf("Cleaned up all access records for node %s", event.ComputeNodeId)
+		}
+	} else {
+		log.Printf("NODE_ACCESS_TABLE not configured, skipping access cleanup")
+	}
+
+	// Delete the node from the main nodes table
 	if err := nodeStore.Delete(ctx, event.ComputeNodeId); err != nil {
-		log.Printf("Error deleting node %s: %v", event.ComputeNodeId, err)
+		log.Printf("Error deleting node %s from nodes table: %v", event.ComputeNodeId, err)
 		return fmt.Errorf("failed to delete node: %w", err)
 	}
 
-	log.Printf("Successfully deleted node %s from database", event.ComputeNodeId)
+	log.Printf("Successfully deleted node %s and all associated access records from database", event.ComputeNodeId)
 	return nil
 }

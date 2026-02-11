@@ -24,9 +24,10 @@ import (
 //
 // Required Permissions:
 // - Must be the owner of the compute node
+// - No organization membership required (owner-only operation)
 func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "SetNodeAccessScopeHandler"
-	
+
 	// Get node UUID from path
 	nodeUuid := request.PathParameters["id"]
 	if nodeUuid == "" {
@@ -35,7 +36,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingNodeUuid),
 		}, nil
 	}
-	
+
 	// Parse request body
 	var scopeReq struct {
 		AccessScope models.NodeAccessScope `json:"accessScope"`
@@ -47,7 +48,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
-	
+
 	// Validate access scope value
 	switch scopeReq.AccessScope {
 	case models.AccessScopePrivate, models.AccessScopeWorkspace, models.AccessScopeShared:
@@ -59,11 +60,11 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidAccessScope),
 		}, nil
 	}
-	
+
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	
+
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -73,15 +74,15 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
+
 	// Initialize stores
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-	
+
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-	
+
 	// Initialize container to get PostgreSQL connection
 	appContainer, err := utils.GetContainer(ctx, cfg)
 	if err != nil {
@@ -94,21 +95,21 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 
 	db := appContainer.PostgresDB()
 	if db == nil {
-		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)", 
+		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)",
 			handlerName, nodeUuid)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
+
 	teamStore := store_postgres.NewPostgresTeamStore(db)
 	orgStore := store_postgres.NewPostgresOrganizationStore(db)
-	
+
 	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
 	permissionService.SetNodeStore(nodesStore)
 	permissionService.SetOrganizationStore(orgStore)
-	
+
 	// Check if the node exists and user owns it
 	node, err := nodesStore.GetById(ctx, nodeUuid)
 	if err != nil {
@@ -118,14 +119,14 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
-	
+
 	if node.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
-	
+
 	// Only the owner can change access scope
 	if node.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
@@ -133,7 +134,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
 		}, nil
 	}
-	
+
 	// Create NodeAccessRequest for the new access scope
 	accessRequest := models.NodeAccessRequest{
 		NodeUuid:        nodeUuid,
@@ -141,7 +142,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 		SharedWithUsers: []string{}, // Empty when just setting scope
 		SharedWithTeams: []string{}, // Empty when just setting scope
 	}
-	
+
 	// Update access scope using the permission service to ensure owner access is preserved
 	err = permissionService.SetNodePermissions(ctx, nodeUuid, accessRequest, node.UserId, node.OrganizationId, userId)
 	if err != nil {
@@ -151,7 +152,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUpdatingPermissions),
 		}, nil
 	}
-	
+
 	// Get updated permissions
 	permissions, err := permissionService.GetNodePermissions(ctx, nodeUuid)
 	if err != nil {
@@ -161,7 +162,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrGettingPermissions),
 		}, nil
 	}
-	
+
 	response, err := json.Marshal(permissions)
 	if err != nil {
 		log.Println(err.Error())
@@ -170,7 +171,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
-	
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
 		Body:       string(response),
@@ -182,9 +183,10 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 //
 // Required Permissions:
 // - Must be the owner of the compute node
+// - If node belongs to an organization, user must be a member of that organization
 func GrantUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GrantUserAccessHandler"
-	
+
 	// Get node UUID from path
 	nodeUuid := request.PathParameters["id"]
 	if nodeUuid == "" {
@@ -193,7 +195,7 @@ func GrantUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingNodeUuid),
 		}, nil
 	}
-	
+
 	// Parse request body
 	var grantReq struct {
 		UserId string `json:"userId"`
@@ -205,14 +207,14 @@ func GrantUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
-	
+
 	if grantReq.UserId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingUserId),
 		}, nil
 	}
-	
+
 	return grantEntityAccess(ctx, request, nodeUuid, models.EntityTypeUser, grantReq.UserId, handlerName)
 }
 
@@ -222,27 +224,28 @@ func GrantUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 // Required Permissions:
 // - Must be the owner of the compute node
 // - Cannot revoke access from the node owner
+// - If node belongs to an organization, user must be a member of that organization
 func RevokeUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "RevokeUserAccessHandler"
-	
+
 	// Get node UUID and user ID from path
 	nodeUuid := request.PathParameters["id"]
 	targetUserId := request.PathParameters["userId"]
-	
+
 	if nodeUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingNodeUuid),
 		}, nil
 	}
-	
+
 	if targetUserId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingUserId),
 		}, nil
 	}
-	
+
 	return revokeEntityAccess(ctx, request, nodeUuid, models.EntityTypeUser, targetUserId, handlerName)
 }
 
@@ -252,9 +255,10 @@ func RevokeUserAccessHandler(ctx context.Context, request events.APIGatewayV2HTT
 // Required Permissions:
 // - Must be the owner of the compute node
 // - Organization-independent nodes cannot share with teams
+// - If node belongs to an organization, user must be a member of that organization
 func GrantTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GrantTeamAccessHandler"
-	
+
 	// Get node UUID from path
 	nodeUuid := request.PathParameters["id"]
 	if nodeUuid == "" {
@@ -263,7 +267,7 @@ func GrantTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingNodeUuid),
 		}, nil
 	}
-	
+
 	// Parse request body
 	var grantReq struct {
 		TeamId string `json:"teamId"`
@@ -275,14 +279,14 @@ func GrantTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnmarshaling),
 		}, nil
 	}
-	
+
 	if grantReq.TeamId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingTeamId),
 		}, nil
 	}
-	
+
 	return grantEntityAccess(ctx, request, nodeUuid, models.EntityTypeTeam, grantReq.TeamId, handlerName)
 }
 
@@ -291,27 +295,28 @@ func GrantTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTP
 //
 // Required Permissions:
 // - Must be the owner of the compute node
+// - If node belongs to an organization, user must be a member of that organization
 func RevokeTeamAccessHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "RevokeTeamAccessHandler"
-	
+
 	// Get node UUID and team ID from path
 	nodeUuid := request.PathParameters["id"]
 	targetTeamId := request.PathParameters["teamId"]
-	
+
 	if nodeUuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingNodeUuid),
 		}, nil
 	}
-	
+
 	if targetTeamId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingTeamId),
 		}, nil
 	}
-	
+
 	return revokeEntityAccess(ctx, request, nodeUuid, models.EntityTypeTeam, targetTeamId, handlerName)
 }
 
@@ -321,7 +326,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
 	organizationId := claims.OrgClaim.NodeId
-	
+
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -331,15 +336,15 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
+
 	// Initialize stores
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-	
+
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-	
+
 	// Check if the node exists and user owns it
 	node, err := nodesStore.GetById(ctx, nodeUuid)
 	if err != nil {
@@ -349,14 +354,14 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
-	
+
 	if node.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
-	
+
 	// Only the owner can grant access
 	if node.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
@@ -364,7 +369,16 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
 		}, nil
 	}
-	
+
+	// Validate that node's organization matches the organization from claims
+	if node.OrganizationId != organizationId {
+		log.Printf("Node organization %s does not match claim organization %s", node.OrganizationId, organizationId)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+		}, nil
+	}
+
 	// Check if organization-independent nodes cannot be shared with teams
 	if node.OrganizationId == "" && entityType == models.EntityTypeTeam {
 		return events.APIGatewayV2HTTPResponse{
@@ -385,7 +399,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 
 	db := appContainer.PostgresDB()
 	if db == nil {
-		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)", 
+		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)",
 			handlerName, nodeUuid)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -405,7 +419,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 			}, nil
 		}
-		
+
 		if !userExists {
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusBadRequest,
@@ -423,7 +437,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 			}, nil
 		}
-		
+
 		if team == nil {
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusBadRequest,
@@ -431,11 +445,11 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			}, nil
 		}
 	}
-	
+
 	// Create the access entry
 	nodeId := models.FormatNodeId(nodeUuid)
 	entityFormattedId := models.FormatEntityId(entityType, entityId)
-	
+
 	access := models.NodeAccess{
 		EntityId:       entityFormattedId,
 		NodeId:         nodeId,
@@ -446,7 +460,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 		OrganizationId: organizationId,
 		GrantedBy:      userId,
 	}
-	
+
 	// Grant access
 	err = nodeAccessStore.GrantAccess(ctx, access)
 	if err != nil {
@@ -456,7 +470,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrGrantingAccess),
 		}, nil
 	}
-	
+
 	// Prepare response
 	actionResponse := struct {
 		Message    string `json:"message"`
@@ -471,7 +485,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 		EntityType: string(entityType),
 		EntityId:   entityId,
 	}
-	
+
 	response, err := json.Marshal(actionResponse)
 	if err != nil {
 		log.Println(err.Error())
@@ -480,7 +494,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
-	
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusCreated,
 		Body:       string(response),
@@ -492,7 +506,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	
+
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -502,15 +516,15 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
+
 	// Initialize stores
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-	
+
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-	
+
 	// Check if the node exists and user owns it
 	node, err := nodesStore.GetById(ctx, nodeUuid)
 	if err != nil {
@@ -520,14 +534,14 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
-	
+
 	if node.Uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
-	
+
 	// Only the owner can revoke access
 	if node.UserId != userId {
 		return events.APIGatewayV2HTTPResponse{
@@ -535,7 +549,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
 		}, nil
 	}
-	
+
 	// Cannot revoke access from the owner
 	if entityType == models.EntityTypeUser && entityId == node.UserId {
 		return events.APIGatewayV2HTTPResponse{
@@ -543,11 +557,11 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrCannotRevokeOwnerAccess),
 		}, nil
 	}
-	
+
 	// Revoke access
 	nodeId := models.FormatNodeId(nodeUuid)
 	entityFormattedId := models.FormatEntityId(entityType, entityId)
-	
+
 	err = nodeAccessStore.RevokeAccess(ctx, entityFormattedId, nodeId)
 	if err != nil {
 		log.Printf("error revoking access: %v", err)
@@ -556,7 +570,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRevokingAccess),
 		}, nil
 	}
-	
+
 	// Prepare response
 	actionResponse := struct {
 		Message    string `json:"message"`
@@ -571,7 +585,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		EntityType: string(entityType),
 		EntityId:   entityId,
 	}
-	
+
 	response, err := json.Marshal(actionResponse)
 	if err != nil {
 		log.Println(err.Error())
@@ -580,7 +594,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
-	
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
 		Body:       string(response),
