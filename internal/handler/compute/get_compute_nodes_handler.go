@@ -179,8 +179,9 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}
 	}
 
-	// Fetch account statuses for all nodes
+	// Fetch account statuses and owners for all nodes
 	accountStatusMap := make(map[string]string)
+	accountOwnerMap := make(map[string]string)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	if accountsTable != "" {
 		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
@@ -191,20 +192,33 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			accountUuids[node.AccountUuid] = true
 		}
 
-		// Fetch account statuses
+		// Fetch account statuses and owners
 		for accountUuid := range accountUuids {
 			account, err := accountStore.GetById(ctx, accountUuid)
 			if err != nil {
-				log.Printf("Warning: could not fetch account %s for status check: %v", accountUuid, err)
-				// Skip this account if we can't fetch it
+				log.Printf("Error: could not fetch account %s: %v", accountUuid, err)
+				// Skip this account if we can't fetch it - this will result in missing accountOwnerId
 				continue
 			}
 			accountStatusMap[accountUuid] = account.Status
+			accountOwnerMap[accountUuid] = account.UserId
+		}
+		
+		// Log errors for accounts that couldn't be fetched
+		for _, node := range dynamoNodes {
+			if _, found := accountOwnerMap[node.AccountUuid]; !found {
+				log.Printf("Error: could not determine account owner for node %s (account: %s)", node.Uuid, node.AccountUuid)
+			}
+		}
+	} else {
+		log.Printf("Error: ACCOUNTS_TABLE environment variable not set")
+		for _, node := range dynamoNodes {
+			log.Printf("Error: could not determine account owner for node %s (account: %s) - ACCOUNTS_TABLE not configured", node.Uuid, node.AccountUuid)
 		}
 	}
 
-	// Apply account status override to nodes
-	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes, accountStatusMap)
+	// Apply account status override and owner info to nodes
+	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, accountOwnerMap)
 
 	m, err := json.Marshal(jsonNodes)
 	if err != nil {

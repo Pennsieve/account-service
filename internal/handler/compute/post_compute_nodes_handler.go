@@ -410,7 +410,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
             Description:        node.Description,
             Account:            node.Account,
             OrganizationId:     responseOrganizationId,
-            UserId:             userId,
+            NodeOwnerId:        userId,
             WorkflowManagerTag: node.WorkflowManagerTag,
             Status:             "Pending",
         }
