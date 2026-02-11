@@ -131,22 +131,32 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Check account status if node is not Pending
+	// Check account status if node is not Pending and get account owner
 	// If account is Paused, override node status to Paused
 	nodeStatus := computeNode.Status
-	if computeNode.Status != "Pending" {
-		accountsTable := os.Getenv("ACCOUNTS_TABLE")
-		if accountsTable != "" {
-			accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
-			account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
-			if err != nil {
-				log.Printf("Warning: could not fetch account %s for status check: %v", computeNode.AccountUuid, err)
-				// Continue with original node status if account fetch fails
-			} else if account.Status == "Paused" {
-				// Override node status to Paused if account is Paused
+	var accountOwnerId string
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	if accountsTable != "" {
+		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+		account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
+		if err != nil {
+			log.Printf("Error: could not fetch account %s: %v", computeNode.AccountUuid, err)
+			// accountOwnerId remains empty - this is an error condition
+		} else {
+			// Get the account owner's userId
+			accountOwnerId = account.UserId
+			
+			// Override node status to Paused if account is Paused and node is not Pending
+			if computeNode.Status != "Pending" && account.Status == "Paused" {
 				nodeStatus = "Paused"
 			}
 		}
+	} else {
+		log.Printf("Error: ACCOUNTS_TABLE environment variable not set")
+	}
+	
+	if accountOwnerId == "" {
+		log.Printf("Error: could not determine account owner for node %s (account: %s)", computeNode.Uuid, computeNode.AccountUuid)
 	}
 
 	// Convert INDEPENDENT back to empty string for API response consistency
@@ -169,7 +179,8 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		},
 		CreatedAt:          computeNode.CreatedAt,
 		OrganizationId:     responseOrganizationId,
-		UserId:             computeNode.UserId,
+		NodeOwnerId:        computeNode.UserId,
+		AccountOwnerId:     accountOwnerId,
 		Identifier:         computeNode.Identifier,
 		WorkflowManagerTag: computeNode.WorkflowManagerTag,
 		Status:             nodeStatus,

@@ -15,7 +15,8 @@ type Node struct {
 	Account               NodeAccount   `json:"account"`
 	CreatedAt             string        `json:"createdAt"`
 	OrganizationId        string        `json:"organizationId,omitempty"` // Optional - empty string means organization-independent
-	UserId                string        `json:"userId"`
+	NodeOwnerId           string        `json:"nodeOwnerId"`
+	AccountOwnerId        string        `json:"accountOwnerId,omitempty"` // The owner of the AWS/GCP account
 	Identifier            string        `json:"identifier"`
 	WorkflowManagerTag    string        `json:"workflowManagerTag"`
 	Status                string        `json:"status"`

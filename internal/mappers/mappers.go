@@ -8,6 +8,14 @@ import (
 // DynamoDBNodeToJsonNodeWithAccountStatus converts DynamoDB nodes to JSON nodes with account status override
 // If the account is Paused and the node is not Pending, the node status will be overridden to Paused
 func DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes []models.DynamoDBNode, accountStatusMap map[string]string) []models.Node {
+	// Use the new function with empty owner map for backwards compatibility
+	return DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, nil)
+}
+
+// DynamoDBNodeToJsonNodeWithAccountInfo converts DynamoDB nodes to JSON nodes with account status override and owner info
+// If the account is Paused and the node is not Pending, the node status will be overridden to Paused
+// Also includes the account owner's userId if available
+func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, accountStatusMap map[string]string, accountOwnerMap map[string]string) []models.Node {
 	nodes := []models.Node{}
 
 	for _, c := range dynamoNodes {
@@ -18,6 +26,12 @@ func DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes []models.DynamoDBNode, 
 			if accountStatus, exists := accountStatusMap[c.AccountUuid]; exists && accountStatus == "Paused" {
 				nodeStatus = "Paused"
 			}
+		}
+		
+		// Get account owner if available
+		accountOwnerId := ""
+		if accountOwnerMap != nil {
+			accountOwnerId = accountOwnerMap[c.AccountUuid]
 		}
 		
 		// Convert INDEPENDENT back to empty string for API response consistency
@@ -40,7 +54,8 @@ func DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes []models.DynamoDBNode, 
 			},
 			CreatedAt:          c.CreatedAt,
 			OrganizationId:     responseOrganizationId,
-			UserId:             c.UserId,
+			NodeOwnerId:        c.UserId,
+			AccountOwnerId:     accountOwnerId,
 			Identifier:         c.Identifier,
 			WorkflowManagerTag: c.WorkflowManagerTag,
 			Status:             nodeStatus,
@@ -74,7 +89,7 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			},
 			CreatedAt:          c.CreatedAt,
 			OrganizationId:     responseOrganizationId,
-			UserId:             c.UserId,
+			NodeOwnerId:        c.UserId,
 			Identifier:         c.Identifier,
 			WorkflowManagerTag: c.WorkflowManagerTag,
 			Status:             c.Status,
