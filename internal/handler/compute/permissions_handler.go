@@ -98,12 +98,21 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	
 	// If organization_id parameter is provided, validate it
 	if organizationId != "" {
-		// Validate that provided organization_id matches the compute node's existing organization
-		if node.OrganizationId != organizationId && node.OrganizationId != "INDEPENDENT" {
-			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, node.OrganizationId)
+		// If the node is INDEPENDENT, organization_id parameter is not allowed
+		if node.OrganizationId == "INDEPENDENT" {
+			log.Printf("Cannot access INDEPENDENT node %s with organization_id %s", nodeUuid, organizationId)
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusBadRequest,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+			}, nil
+		}
+		
+		// Validate that provided organization_id matches the compute node's existing organization
+		if node.OrganizationId != organizationId {
+			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, node.OrganizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusForbidden,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
 			}, nil
 		}
 		

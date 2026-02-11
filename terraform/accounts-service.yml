@@ -1033,12 +1033,16 @@ paths:
       summary: Grant access to a user
       description: |
         Grants access to a specific user for a compute node. Only the owner of the node can grant access.
+        
+        **Important**: This operation is only available for compute nodes that belong to a workspace (organization).
+        Independent compute nodes cannot be shared with users or teams.
+        
         This will automatically set the node's access scope to "shared" if it's currently "private" or "workspace".
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: grantUserAccess
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Compute Nodes
       parameters:
@@ -1048,12 +1052,6 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
-        - in: query
-          name: organization_id
-          required: true
-          schema:
-            type: string
-          description: The organization ID to attach the node to
       requestBody:
         description: User to grant access to
         required: true
@@ -1082,6 +1080,9 @@ paths:
       description: |
         Revokes access from a specific user for a compute node. Only the owner of the node can revoke access.
         Cannot revoke access from the node owner.
+        
+        **Note**: This operation only applies to compute nodes that belong to a workspace (organization).
+        Independent compute nodes do not support sharing.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: revokeUserAccess
@@ -1122,12 +1123,16 @@ paths:
       summary: Grant access to a team
       description: |
         Grants access to a specific team for a compute node. Only the owner of the node can grant access.
+        
+        **Important**: This operation is only available for compute nodes that belong to a workspace (organization).
+        Independent compute nodes cannot be shared with users or teams.
+        
         This will automatically set the node's access scope to "shared" if it's currently "private" or "workspace".
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: grantTeamAccess
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Compute Nodes
       parameters:
@@ -1137,12 +1142,6 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
-        - in: query
-          name: organization_id
-          required: true
-          schema:
-            type: string
-          description: The organization ID to attach the node to
       requestBody:
         description: Team to grant access to
         required: true
@@ -1170,6 +1169,9 @@ paths:
       summary: Revoke access from a team
       description: |
         Revokes access from a specific team for a compute node. Only the owner of the node can revoke access.
+        
+        **Note**: This operation only applies to compute nodes that belong to a workspace (organization).
+        Independent compute nodes do not support sharing.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: revokeTeamAccess

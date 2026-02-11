@@ -341,7 +341,6 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	organizationId := claims.OrgClaim.NodeId
 
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
@@ -402,20 +401,26 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 		}, nil
 	}
 
-	// Validate that node's organization matches the organization from claims
-	if node.OrganizationId != organizationId {
-		log.Printf("Node organization %s does not match claim organization %s", node.OrganizationId, organizationId)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusBadRequest,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
-		}, nil
-	}
+	// Get organization ID from the node. We require the node to be attached to a workspace before sharing.
+	organizationId := node.OrganizationId
 
-	// Check if organization-independent nodes cannot be shared with teams
-	if node.OrganizationId == "" && entityType == models.EntityTypeTeam {
+	// Reject sharing for INDEPENDENT nodes
+	if organizationId == "INDEPENDENT" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
+		}, nil
+	}
+
+	// Validate that user requesting the permission update is a member of the node's organization.
+	// If a node belongs to an organization, but the requester does not, this is an error.
+	// This would be a case where the owner of the node was removed from the organization after creating a node there.
+	if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+		// If the user is not a member of the organization, provide a helpful error message
+		log.Printf("Node owner %s is not a member of organization %s. Node sharing requires organization membership.", userId, organizationId)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       fmt.Sprintf(`{"error": "You are not a member of the workspace where this node belongs. To manage permissions, you must either: (1) detach the node from the workspace by setting its access scope to 'private' using PUT /compute-nodes/%s/permissions with {\"accessScope\": \"private\"}, or (2) delete the node using DELETE /compute-nodes/%s"}`, nodeUuid, nodeUuid),
 		}, nil
 	}
 
