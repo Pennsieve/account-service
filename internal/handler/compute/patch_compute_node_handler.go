@@ -184,7 +184,7 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		},
 		CreatedAt:          node.CreatedAt,
 		OrganizationId:     responseOrganizationId,
-		NodeOwnerId:        node.UserId,
+		OwnerId:            node.UserId,
 		Identifier:         node.Identifier,
 		WorkflowManagerTag: node.WorkflowManagerTag,
 		Status:             node.Status,

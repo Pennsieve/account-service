@@ -143,7 +143,7 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 	assert.Equal(t, "Test Node", createdNode.Name)
 	assert.Equal(t, "Test Description", createdNode.Description)
 	assert.Equal(t, "", createdNode.OrganizationId) // Should be empty (converted from INDEPENDENT)
-	assert.Equal(t, testAccount.UserId, createdNode.NodeOwnerId)
+	assert.Equal(t, testAccount.UserId, createdNode.OwnerId)
 	assert.Equal(t, "Pending", createdNode.Status)
 	assert.NotEmpty(t, createdNode.Uuid)
 }
@@ -295,7 +295,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPrivateAccount(t *testing.T) {
 		err = json.Unmarshal([]byte(response.Body), &createdNode)
 		assert.NoError(t, err)
 		assert.Equal(t, orgId, createdNode.OrganizationId)
-		assert.Equal(t, testAccount.UserId, createdNode.NodeOwnerId)
+		assert.Equal(t, testAccount.UserId, createdNode.OwnerId)
 	})
 
 	// Test case 2: Non-account owner cannot create nodes (private account)
@@ -618,7 +618,7 @@ func TestPostComputeNodesHandler_InitialPermissions(t *testing.T) {
 	// Note: This test verifies that the permission setup code runs without error
 	// The actual permission validation would require the node to be in the database
 	assert.NotEmpty(t, createdNode.Uuid)
-	assert.Equal(t, testAccount.UserId, createdNode.NodeOwnerId)
+	assert.Equal(t, testAccount.UserId, createdNode.OwnerId)
 }
 
 func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
@@ -682,7 +682,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		err = json.Unmarshal([]byte(response.Body), &createdNode)
 		assert.NoError(t, err)
 		assert.Equal(t, orgId, createdNode.OrganizationId)
-		assert.Equal(t, testAccount.UserId, createdNode.NodeOwnerId)
+		assert.Equal(t, testAccount.UserId, createdNode.OwnerId)
 	})
 
 	// Test case 2: Workspace admin can create nodes (public account)
