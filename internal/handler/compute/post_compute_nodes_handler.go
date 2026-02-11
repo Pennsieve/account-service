@@ -87,6 +87,89 @@ func validateProvisionerImage(ctx context.Context, cfg aws.Config, image string)
 	return fmt.Errorf("provisioner image '%s' is not in whitelist", image)
 }
 
+// createDynamicTaskDefinition creates or reuses an ECS task definition with a custom provisioner image
+func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image, tag, envName string) (*types.TaskDefinition, error) {
+	// Get the base task definition configuration from environment variables
+	baseTaskDefArn := os.Getenv("TASK_DEF_ARN")
+	if baseTaskDefArn == "" {
+		return nil, fmt.Errorf("TASK_DEF_ARN environment variable not set")
+	}
+	
+	// Get existing task definition to copy settings
+	describeResult, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: aws.String(baseTaskDefArn),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe base task definition: %w", err)
+	}
+	
+	baseDef := describeResult.TaskDefinition
+	if baseDef == nil || len(baseDef.ContainerDefinitions) == 0 {
+		return nil, fmt.Errorf("base task definition has no container definitions")
+	}
+	
+	// Create a unique family name for the dynamic task definition
+	familyName := fmt.Sprintf("%s-custom-%s-%s", *baseDef.Family, strings.ReplaceAll(image, "/", "-"), tag)
+	
+	// Check if a task definition for this image already exists
+	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName)
+	if err != nil {
+		log.Printf("Error checking for existing task definition: %v", err)
+		// Continue with creating a new one
+	} else if existingTaskDef != nil {
+		log.Printf("Reusing existing task definition: %s with image %s:%s", *existingTaskDef.TaskDefinitionArn, image, tag)
+		return existingTaskDef, nil
+	}
+	
+	// Create a new container definition with the custom image
+	newContainerDef := baseDef.ContainerDefinitions[0] // Copy the first container
+	newContainerDef.Image = aws.String(fmt.Sprintf("%s:%s", image, tag))
+	
+	// Create the new task definition
+	registerInput := &ecs.RegisterTaskDefinitionInput{
+		Family:                  aws.String(familyName),
+		ContainerDefinitions:    []types.ContainerDefinition{newContainerDef},
+		RequiresCompatibilities: baseDef.RequiresCompatibilities,
+		NetworkMode:             baseDef.NetworkMode,
+		Cpu:                     baseDef.Cpu,
+		Memory:                  baseDef.Memory,
+		TaskRoleArn:             baseDef.TaskRoleArn,
+		ExecutionRoleArn:        baseDef.ExecutionRoleArn,
+	}
+	
+	registerResult, err := client.RegisterTaskDefinition(ctx, registerInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register dynamic task definition: %w", err)
+	}
+	
+	log.Printf("Created new dynamic task definition: %s with image %s:%s", *registerResult.TaskDefinition.TaskDefinitionArn, image, tag)
+	return registerResult.TaskDefinition, nil
+}
+
+// findExistingTaskDefinition checks if a task definition family already exists and returns the latest active revision
+func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyName string) (*types.TaskDefinition, error) {
+	// Try to describe the latest task definition for this family
+	describeResult, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+		TaskDefinition: aws.String(familyName),
+	})
+	if err != nil {
+		// Task definition doesn't exist or other error
+		return nil, err
+	}
+	
+	taskDef := describeResult.TaskDefinition
+	if taskDef == nil {
+		return nil, nil
+	}
+	
+	// Check if the task definition is active (not inactive/deregistered)
+	if taskDef.Status == types.TaskDefinitionStatusActive {
+		return taskDef, nil
+	}
+	
+	return nil, nil
+}
+
 // PostComputeNodesHandler creates a new compute node
 // POST /compute-nodes
 //
@@ -343,7 +426,18 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// Skip AWS ECS task creation in test environments
 	if envValue != "DOCKER" && envValue != "TEST" {
 		client := ecs.NewFromConfig(cfg)
-		log.Println("Initiating new Provisioning Fargate Task.")
+		log.Printf("Initiating new Provisioning Fargate Task with image: %s:%s", node.ProvisionerImage, node.ProvisionerImageTag)
+		
+		// Create a dynamic task definition with the custom provisioner image
+		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, node.ProvisionerImage, node.ProvisionerImageTag, envValue)
+		if err != nil {
+			log.Printf("Error creating dynamic task definition: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
+			}, nil
+		}
+		TaskDefinitionArn = *dynamicTaskDef.TaskDefinitionArn
 		envKey := "ENV"
 		accountIdKey := "ACCOUNT_ID"
 		accountIdValue := node.Account.AccountId
@@ -463,8 +557,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			LaunchType: types.LaunchTypeFargate,
 		}
 
-		runner := runner.NewECSTaskRunner(client, runTaskIn)
-		if err := runner.Run(ctx); err != nil {
+		taskRunner := runner.NewECSTaskRunner(client, runTaskIn)
+		if err := taskRunner.Run(ctx); err != nil {
 			log.Println(err)
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: 500,

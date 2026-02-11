@@ -102,7 +102,9 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     actions = [
       "ecs:DescribeTasks",
       "ecs:RunTask",
-      "ecs:ListTasks"
+      "ecs:ListTasks",
+      "ecs:DescribeTaskDefinition",
+      "ecs:RegisterTaskDefinition"
     ]
     resources = ["*"]
   }
