@@ -23,6 +23,7 @@ import (
 //
 // Required Permissions:
 // - Must have access to the node (owner, shared user, workspace member, or team member)
+// - If organization_id is provided, user must be a member of that organization
 func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetNodePermissionsHandler"
 	
@@ -38,7 +39,9 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	organizationId := claims.OrgClaim.NodeId
+	
+	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
+	organizationId := request.QueryStringParameters["organization_id"]
 	
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
@@ -49,13 +52,6 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
-	// Initialize stores
-	dynamoDBClient := dynamodb.NewFromConfig(cfg)
-	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
-	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 	
 	// Initialize container to get PostgreSQL connection
 	appContainer, err := utils.GetContainer(ctx, cfg)
@@ -75,6 +71,46 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
+	}
+	
+	// Initialize stores
+	dynamoDBClient := dynamodb.NewFromConfig(cfg)
+	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
+	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
+	
+	// Get the node to validate organization context
+	node, err := nodeStore.GetById(ctx, nodeUuid)
+	if err != nil {
+		log.Printf("Error fetching node %s: %v", nodeUuid, err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}, nil
+	}
+	if node.Uuid == "" {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusNotFound,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNoRecordsFound),
+		}, nil
+	}
+	
+	// If organization_id parameter is provided, validate it
+	if organizationId != "" {
+		// Validate that provided organization_id matches the compute node's existing organization
+		if node.OrganizationId != organizationId && node.OrganizationId != "INDEPENDENT" {
+			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, node.OrganizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+			}, nil
+		}
+		
+		// Validate user is a member of the provided organization
+		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+			return *validationResponse, nil
+		}
 	}
 	
 	teamStore := store_postgres.NewPostgresTeamStore(db)

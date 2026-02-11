@@ -444,13 +444,13 @@ func TestPermissionHandlers_MissingEnvironmentVariables(t *testing.T) {
 			name:         "MissingNodesTable",
 			envToUnset:   "COMPUTE_NODES_TABLE",
 			expectedCode: 500,
-			expectedErr:  "error performing action on DynamoDB table",
+			expectedErr:  "error loading AWS config",
 		},
 		{
 			name:         "MissingAccessTable", 
 			envToUnset:   "NODE_ACCESS_TABLE",
-			expectedCode: 404, // Node lookup succeeds but node doesn't exist
-			expectedErr:  "not found",
+			expectedCode: 500,
+			expectedErr:  "error loading AWS config",
 		},
 	}
 

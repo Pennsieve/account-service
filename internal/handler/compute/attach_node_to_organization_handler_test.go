@@ -76,7 +76,7 @@ func TestAttachNodeToOrganizationHandler_Success(t *testing.T) {
 			"organization_id": targetOrganizationId,
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(testNode.UserId, "test-org"),
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, targetOrganizationId),
 		},
 	}
 
@@ -182,7 +182,7 @@ func TestAttachNodeToOrganizationHandler_ValidationErrors(t *testing.T) {
 				PathParameters:        pathParams,
 				QueryStringParameters: queryParams,
 				RequestContext: events.APIGatewayV2HTTPRequestContext{
-					Authorizer: test.CreateTestAuthorizer(tc.userId, "test-org"),
+					Authorizer: test.CreateTestAuthorizer(tc.userId, tc.organizationId),
 				},
 			}
 
@@ -277,7 +277,7 @@ func TestAttachNodeToOrganizationHandler_MissingEnvironmentVariables(t *testing.
 					"organization_id": "org-" + testId,
 				},
 				RequestContext: events.APIGatewayV2HTTPRequestContext{
-					Authorizer: test.CreateTestAuthorizer("user-"+testId, "test-org"),
+					Authorizer: test.CreateTestAuthorizer("user-"+testId, "org-"+testId),
 				},
 			}
 
@@ -328,7 +328,7 @@ func TestAttachNodeToOrganizationHandler_PermissionService_Integration(t *testin
 			"organization_id": targetOrganizationId,
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(testNode.UserId, "test-org"),
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, targetOrganizationId),
 		},
 	}
 

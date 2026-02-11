@@ -398,14 +398,17 @@ func TestGetComputeNodeHandler_OrganizationMismatch(t *testing.T) {
 	err = accessStore.GrantAccess(ctx, accessRecord)
 	require.NoError(t, err)
 
-	// Create request with different organization in claims
+	// Create request with different organization in query parameters
 	differentOrgId := "different-org-" + testId
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"id": testNode.Uuid,
 		},
+		QueryStringParameters: map[string]string{
+			"organization_id": differentOrgId,
+		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(testNode.UserId, differentOrgId),
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, ""),
 		},
 	}
 

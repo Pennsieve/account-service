@@ -11,15 +11,15 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/runner"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
-	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // PutComputeNodeHandler updates a compute node
@@ -28,6 +28,7 @@ import (
 // Required Permissions:
 // - Must be the owner of the compute node OR
 // - Must be the owner of the account associated with the compute node
+// - If organization_id is provided, user must be a member of that organization
 func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PutComputeNodeHandler"
 	uuid := request.PathParameters["id"]
@@ -59,8 +60,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	TaskDefContainerName := os.Getenv("TASK_DEF_CONTAINER_NAME")
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	organizationId := claims.OrgClaim.NodeId
 	userId := claims.UserClaim.NodeId
+
+	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
+	organizationId := request.QueryStringParameters["organization_id"]
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
@@ -81,9 +84,26 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
+	// If organization_id parameter is provided, validate it
+	if organizationId != "" {
+		// Validate that provided organization_id matches the compute node's existing organization
+		if computeNode.OrganizationId != organizationId {
+			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, computeNode.OrganizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+			}, nil
+		}
+		
+		// Validate user is a member of the provided organization
+		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+			return *validationResponse, nil
+		}
+	}
+
 	// Check update permissions: only node owner or account owner can update
 	canUpdate := false
-	
+
 	// Check if user is the node owner
 	if computeNode.UserId == userId {
 		canUpdate = true
@@ -97,7 +117,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 			}, nil
 		}
-		
+
 		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
 		account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
 		if err != nil {
@@ -107,13 +127,13 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 			}, nil
 		}
-		
+
 		// Check if account exists and user is the account owner
 		if (store_dynamodb.Account{}) != account && account.UserId == userId {
 			canUpdate = true
 		}
 	}
-	
+
 	if !canUpdate {
 		log.Printf("User %s does not have permission to update node %s (node owner: %s)", userId, uuid, computeNode.UserId)
 		return events.APIGatewayV2HTTPResponse{
@@ -128,7 +148,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	computeNodeIdKey := "COMPUTE_NODE_ID"
 	envKey := "ENV"
 	organizationIdKey := "ORG_ID"
-	organizationIdValue := organizationId
+	organizationIdValue := computeNode.OrganizationId
 	userIdKey := "USER_ID"
 	userIdValue := userId
 	actionKey := "ACTION"
@@ -257,7 +277,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	// In test environment, skip ECS task execution and return mock response
 	if envValue == "DOCKER" || envValue == "TEST" {
 		log.Println("Test environment detected, skipping ECS task execution")
-		
+
 		m, err := json.Marshal(models.NodeResponse{
 			Message: "Compute node update initiated",
 		})

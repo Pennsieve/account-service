@@ -10,15 +10,15 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/runner"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
-	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // DeleteComputeNodeHandler deletes a compute node
@@ -49,7 +49,6 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	TaskDefContainerName := os.Getenv("TASK_DEF_CONTAINER_NAME")
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	organizationId := claims.OrgClaim.NodeId
 	userId := claims.UserClaim.NodeId
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
@@ -73,7 +72,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 
 	// Check delete permissions: only node owner or account owner can delete
 	canDelete := false
-	
+
 	// Check if user is the node owner
 	if computeNode.UserId == userId {
 		canDelete = true
@@ -87,7 +86,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 			}, nil
 		}
-		
+
 		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
 		account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
 		if err != nil {
@@ -97,13 +96,13 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 			}, nil
 		}
-		
+
 		// Check if account exists and user is the account owner
 		if (store_dynamodb.Account{}) != account && account.UserId == userId {
 			canDelete = true
 		}
 	}
-	
+
 	if !canDelete {
 		log.Printf("User %s does not have permission to delete node %s (node owner: %s)", userId, uuid, computeNode.UserId)
 		return events.APIGatewayV2HTTPResponse{
@@ -117,7 +116,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	computeNodeIdKey := "COMPUTE_NODE_ID"
 	envKey := "ENV"
 	organizationIdKey := "ORG_ID"
-	organizationIdValue := organizationId
+	organizationIdValue := computeNode.OrganizationId
 	userIdKey := "USER_ID"
 	userIdValue := userId
 	actionKey := "ACTION"
@@ -210,7 +209,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	// In test environment, skip ECS task execution and return mock response
 	if envValue == "DOCKER" || envValue == "TEST" {
 		log.Println("Test environment detected, skipping ECS task execution")
-		
+
 		m, err := json.Marshal(models.NodeResponse{
 			Message: "Compute node deletion initiated",
 		})

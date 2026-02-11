@@ -9,13 +9,13 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
-	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // GetComputesNodesHandler retrieves a list of compute nodes
@@ -24,7 +24,7 @@ import (
 // Required Permissions:
 // - Returns only nodes that the user has access to (owner, shared, workspace, or team)
 // - When account_owner=true: Returns all nodes for accounts owned by the user
-// - When organization_id specified: Returns nodes within that organization the user has access to
+// - When organization_id specified: User must be a member of that organization, returns nodes within that organization the user has access to
 func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetComputesNodesHandler"
 
@@ -41,15 +41,10 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	
+
 	// Check query parameters
 	organizationId := request.QueryStringParameters["organization_id"]
 	accountOwnerMode := request.QueryStringParameters["account_owner"] == "true"
-	
-	log.Println("userId:", userId)
-	log.Println("organizationId from query:", request.QueryStringParameters["organization_id"])
-	log.Println("organizationId from claims:", claims.OrgClaim.NodeId)
-	log.Println("account_owner mode:", accountOwnerMode)
 
 	// Set up stores for access control
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
@@ -67,7 +62,7 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if accountOwnerMode {
 		// Account owner mode: return ALL nodes on accounts owned by the user
 		log.Println("Account owner mode: returning all nodes on user-owned accounts")
-		
+
 		// Get accounts table configuration
 		accountsTable := os.Getenv("ACCOUNTS_TABLE")
 		if accountsTable == "" {
@@ -126,7 +121,7 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		if organizationId == "" {
 			// No organization_id provided: return nodes owned by the user
 			log.Println("No organization_id provided, returning user-owned nodes")
-			
+
 			// Get all access records for this user
 			userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 			userAccess, err := nodeAccessStore.GetEntityAccess(ctx, userEntityId)
@@ -155,6 +150,11 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			// Organization_id provided: return nodes accessible to user within that workspace
 			log.Println("Organization_id provided:", organizationId, "returning accessible nodes in workspace")
 			
+			// Validate organization membership if organization ID is provided
+			if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+				return *validationResponse, nil
+			}
+
 			// Use existing GetAccessibleNodes method with the specified organization
 			accessibleNodeUuids, err := permissionService.GetAccessibleNodes(ctx, userId, organizationId)
 			if err != nil {
@@ -184,13 +184,13 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	if accountsTable != "" {
 		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
-		
+
 		// Get unique account UUIDs
 		accountUuids := make(map[string]bool)
 		for _, node := range dynamoNodes {
 			accountUuids[node.AccountUuid] = true
 		}
-		
+
 		// Fetch account statuses
 		for accountUuid := range accountUuids {
 			account, err := accountStore.GetById(ctx, accountUuid)
@@ -205,7 +205,7 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Apply account status override to nodes
 	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes, accountStatusMap)
-	
+
 	m, err := json.Marshal(jsonNodes)
 	if err != nil {
 		log.Println(err.Error())

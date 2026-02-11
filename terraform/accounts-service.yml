@@ -797,6 +797,12 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: false
+          description: Organization ID for workspace context. Required for organization-bound nodes, omit for organization-independent nodes.
       responses:
         '200':
           description: Compute node details
@@ -829,6 +835,12 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: false
+          description: Organization ID for workspace context. Required for organization-bound nodes, omit for organization-independent nodes.
       requestBody:
         description: Compute node update configuration
         required: true
@@ -947,6 +959,12 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: organization_id
+          schema:
+            type: string
+          required: false
+          description: Organization ID for workspace context. Required for organization-bound nodes, omit for organization-independent nodes.
       responses:
         '200':
           description: Current permission settings
@@ -1020,7 +1038,7 @@ paths:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: grantUserAccess
       security:
-        - token_auth: [ ]
+        - token_workspace_auth: [ ]
       tags:
         - Compute Nodes
       parameters:
@@ -1030,6 +1048,12 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+          description: The organization ID to attach the node to
       requestBody:
         description: User to grant access to
         required: true
@@ -1103,7 +1127,7 @@ paths:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: grantTeamAccess
       security:
-        - token_auth: [ ]
+        - token_workspace_auth: [ ]
       tags:
         - Compute Nodes
       parameters:
@@ -1113,6 +1137,12 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+          description: The organization ID to attach the node to
       requestBody:
         description: Team to grant access to
         required: true

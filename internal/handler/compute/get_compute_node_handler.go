@@ -8,13 +8,12 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/errors"
-	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
+	"github.com/pennsieve/account-service/internal/utils"
 )
 
 // GetComputeNodeHandler retrieves a single compute node by ID
@@ -22,6 +21,7 @@ import (
 //
 // Required Permissions:
 // - Must have access to the node (owner, shared user, workspace member, or team member)
+// - If organization_id is provided, user must be a member of that organization
 func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetComputeNodeHandler"
 	uuid := request.PathParameters["id"]
@@ -52,9 +52,8 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Get organization ID from claims if present
-	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
-	organizationId := claims.OrgClaim.NodeId
+	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
+	organizationId := request.QueryStringParameters["organization_id"]
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
@@ -75,15 +74,30 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Validate node organization matches user's organization context
-	// Skip validation for INDEPENDENT nodes (organization-independent nodes)
-	if organizationId != "" && computeNode.OrganizationId != "INDEPENDENT" && computeNode.OrganizationId != organizationId {
-		log.Printf("Node %s belongs to organization '%s' but user claims organization '%s'", 
-			uuid, computeNode.OrganizationId, organizationId)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusForbidden,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
-		}, nil
+	// If organization_id parameter is provided, validate it
+	if organizationId != "" {
+		// If the node is INDEPENDENT, organization_id parameter is not allowed
+		if computeNode.OrganizationId == "INDEPENDENT" {
+			log.Printf("Cannot access INDEPENDENT node %s with organization_id %s", uuid, organizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+			}, nil
+		}
+		
+		// Validate that provided organization_id matches the compute node's existing organization
+		if computeNode.OrganizationId != organizationId {
+			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, computeNode.OrganizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusForbidden,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
+			}, nil
+		}
+		
+		// Validate user is a member of the provided organization
+		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+			return *validationResponse, nil
+		}
 	}
 
 	// Check if user has access to the node
