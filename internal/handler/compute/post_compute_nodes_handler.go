@@ -185,6 +185,11 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
+	// Use the fetched account details to populate the node account information
+	node.Account.AccountId = account.AccountId
+	node.Account.AccountType = account.AccountType
+	node.Account.Uuid = account.Uuid
+
 	// If organizationId is provided and not INDEPENDENT, check workspace enablement and permissions
 	if organizationId != "" && organizationId != "INDEPENDENT" {
 		// Check if account has workspace enablement for this organization
@@ -344,8 +349,6 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		accountIdValue := node.Account.AccountId
 		accountTypeKey := "ACCOUNT_TYPE"
 		accountTypeValue := node.Account.AccountType
-		accountUuidKey := "ACCOUNT_UUID"
-		accountUuidValue := node.Account.Uuid
 		organizationIdKey := "ORG_ID"
 		organizationIdValue := organizationId
 		userIdKey := "USER_ID"
@@ -360,6 +363,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		descriptionValue := node.Description
 		wmTagKey := "WM_TAG"
 		wmTagValue := node.WorkflowManagerTag
+		wmCpuKey := "WM_CPU"
+		wmCpuValue := "1024"  // Default CPU for workflow manager
+		wmMemoryKey := "WM_MEMORY"
+		wmMemoryValue := "2048"  // Default memory for workflow manager
 		provisionerImageKey := "PROVISIONER_IMAGE"
 		provisionerImageValue := node.ProvisionerImage
 		provisionerImageTagKey := "PROVISIONER_IMAGE_TAG"
@@ -402,10 +409,6 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 								Value: &accountIdValue,
 							},
 							{
-								Name:  &accountUuidKey,
-								Value: &accountUuidValue,
-							},
-							{
 								Name:  &accountTypeKey,
 								Value: &accountTypeValue,
 							},
@@ -428,6 +431,14 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 							{
 								Name:  &wmTagKey,
 								Value: &wmTagValue,
+							},
+							{
+								Name:  &wmCpuKey,
+								Value: &wmCpuValue,
+							},
+							{
+								Name:  &wmMemoryKey,
+								Value: &wmMemoryValue,
 							},
 							{
 								Name:  &computeNodeIdKey,
