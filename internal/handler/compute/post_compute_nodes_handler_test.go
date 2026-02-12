@@ -243,7 +243,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPrivateAccount(t *testing.T) {
 	accountStore, _, workspaceStore := setupPostComputeNodesHandlerTest(t)
 	ctx := context.Background()
 	testId := test.GenerateTestId()
-	orgId := "123"
+	orgId := "N:organization:123e4567-e89b-12d3-a456-426614174000"
 
 	// Create test account
 	testAccount := store_dynamodb.Account{
@@ -319,7 +319,7 @@ func TestPostComputeNodesHandler_WorkspaceNotEnabled(t *testing.T) {
 	accountStore, _, _ := setupPostComputeNodesHandlerTest(t)
 	ctx := context.Background()
 	testId := test.GenerateTestId()
-	orgId := "456"
+	orgId := "N:organization:456e4567-e89b-12d3-a456-426614174001"
 
 	// Create test account
 	testAccount := store_dynamodb.Account{
@@ -388,7 +388,7 @@ func TestPostComputeNodesHandler_MissingEnvironmentVariables(t *testing.T) {
 			AccountId:   testAccount.AccountId,
 			AccountType: testAccount.AccountType,
 		},
-		OrganizationId: "123",
+		OrganizationId: "N:organization:123e4567-e89b-12d3-a456-426614174000",
 	}
 	requestBody, err := json.Marshal(nodeRequest)
 	require.NoError(t, err)
@@ -625,7 +625,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 	accountStore, _, workspaceStore := setupPostComputeNodesHandlerTest(t)
 	ctx := context.Background()
 	testId := test.GenerateTestId()
-	orgId := "789"
+	orgId := "N:organization:789e4567-e89b-12d3-a456-426614174002"
 
 	// Create test account (not owned by the test user)
 	testAccount := store_dynamodb.Account{
@@ -738,11 +738,12 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		orgIdInt := int64(789)
 		
 		// First, ensure the organization exists (insert or update)
+		// The seeded database should already have the organizations table with node_id column
 		_, err = db.Exec(`
-			INSERT INTO pennsieve.organizations (id, name, slug, encryption_key_id)
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (id) DO NOTHING
-		`, orgIdInt, "test-org-"+testId, "test-org-"+testId, "test-key")
+			INSERT INTO pennsieve.organizations (id, name, slug, encryption_key_id, node_id)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (id) DO UPDATE SET node_id = $5
+		`, orgIdInt, "test-org-"+testId, "test-org-"+testId, "test-key", orgId)
 		if err != nil {
 			t.Logf("Warning: Could not create organization: %v", err)
 		}
