@@ -275,6 +275,15 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// If organizationId is provided and not INDEPENDENT, check workspace enablement and permissions
 	if organizationId != "" && organizationId != "INDEPENDENT" {
+		// Validate organization ID format
+		if !strings.HasPrefix(organizationId, "N:organization:") {
+			log.Printf("Invalid organization ID format: %s (expected format: N:organization:uuid)", organizationId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidOrganizationIdFormat),
+			}, nil
+		}
+		
 		// Check if account has workspace enablement for this organization
 		enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 		if enablementTable == "" {
@@ -339,7 +348,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 			orgStore := store_postgres.NewPostgresOrganizationStore(db)
 
-			// Parse user ID and organization ID to integers
+			// Parse user ID and get organization ID from node ID
 			userIdInt, err := strconv.ParseInt(userId, 10, 64)
 			if err != nil {
 				log.Printf("Invalid user ID format: %s", userId)
@@ -349,12 +358,13 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				}, nil
 			}
 
-			orgIdInt, err := strconv.ParseInt(organizationId, 10, 64)
+			// Get numeric organization ID from node ID format
+			orgIdInt, err := orgStore.GetOrganizationIdByNodeId(ctx, organizationId)
 			if err != nil {
-				log.Printf("Invalid organization ID format: %s", organizationId)
+				log.Printf("Invalid organization ID or organization not found: %s, error: %v", organizationId, err)
 				return events.APIGatewayV2HTTPResponse{
 					StatusCode: http.StatusBadRequest,
-					Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnauthorized),
+					Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationNotFound),
 				}, nil
 			}
 

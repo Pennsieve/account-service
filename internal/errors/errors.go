@@ -46,6 +46,8 @@ var ErrAccountNotEnabledForWorkspace = errors.New("account is not enabled for th
 var ErrOnlyAccountOwnerCanCreateNodes = errors.New("only the account owner can create nodes on private accounts")
 var ErrOnlyWorkspaceAdminsCanCreateNodes = errors.New("only workspace administrators can create nodes on public accounts")
 var ErrOnlyAccountOwnerCanDetachNodes = errors.New("only the account owner can detach nodes")
+var ErrOrganizationNotFound = errors.New("organization not found")
+var ErrInvalidOrganizationIdFormat = errors.New("invalid organization ID format - expected format: N:organization:uuid")
 var ErrBadRequest = errors.New("bad request")
 
 // Common errors used across handlers
