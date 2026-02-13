@@ -11,7 +11,14 @@
     "environment": [
       { "name" : "ENVIRONMENT", "value": "${environment_name}" },
       { "name" : "ENV", "value": "${environment_name}" },
-      { "name" : "REGION", "value": "${aws_region}" }
+      { "name" : "REGION", "value": "${aws_region}" },
+      { "name" : "TF_PLUGIN_CACHE_DIR", "value": "/mnt/terraform-cache/plugin-cache" }
+    ],
+    "mountPoints": [
+      {
+        "sourceVolume": "terraform-cache",
+        "containerPath": "/mnt/terraform-cache"
+      }
     ],
     "name": "${tier}",
     "image": "${provisioner_image}:${provisioner_image_tag}",
