@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -94,7 +93,7 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 	if baseTaskDefArn == "" {
 		return nil, fmt.Errorf("TASK_DEF_ARN environment variable not set")
 	}
-	
+
 	// Get existing task definition to copy settings
 	describeResult, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(baseTaskDefArn),
@@ -102,15 +101,15 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe base task definition: %w", err)
 	}
-	
+
 	baseDef := describeResult.TaskDefinition
 	if baseDef == nil || len(baseDef.ContainerDefinitions) == 0 {
 		return nil, fmt.Errorf("base task definition has no container definitions")
 	}
-	
+
 	// Create a unique family name for the dynamic task definition
 	familyName := fmt.Sprintf("%s-custom-%s-%s", *baseDef.Family, strings.ReplaceAll(image, "/", "-"), tag)
-	
+
 	// Check if a task definition for this image already exists
 	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName)
 	if err != nil {
@@ -120,11 +119,11 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 		log.Printf("Reusing existing task definition: %s with image %s:%s", *existingTaskDef.TaskDefinitionArn, image, tag)
 		return existingTaskDef, nil
 	}
-	
+
 	// Create a new container definition with the custom image
 	newContainerDef := baseDef.ContainerDefinitions[0] // Copy the first container
 	newContainerDef.Image = aws.String(fmt.Sprintf("%s:%s", image, tag))
-	
+
 	// Create the new task definition
 	registerInput := &ecs.RegisterTaskDefinitionInput{
 		Family:                  aws.String(familyName),
@@ -136,12 +135,12 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 		TaskRoleArn:             baseDef.TaskRoleArn,
 		ExecutionRoleArn:        baseDef.ExecutionRoleArn,
 	}
-	
+
 	registerResult, err := client.RegisterTaskDefinition(ctx, registerInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to register dynamic task definition: %w", err)
 	}
-	
+
 	log.Printf("Created new dynamic task definition: %s with image %s:%s", *registerResult.TaskDefinition.TaskDefinitionArn, image, tag)
 	return registerResult.TaskDefinition, nil
 }
@@ -156,17 +155,17 @@ func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyN
 		// Task definition doesn't exist or other error
 		return nil, err
 	}
-	
+
 	taskDef := describeResult.TaskDefinition
 	if taskDef == nil {
 		return nil, nil
 	}
-	
+
 	// Check if the task definition is active (not inactive/deregistered)
 	if taskDef.Status == types.TaskDefinitionStatusActive {
 		return taskDef, nil
 	}
-	
+
 	return nil, nil
 }
 
@@ -199,6 +198,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	TaskDefContainerName := os.Getenv("TASK_DEF_CONTAINER_NAME")
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
+	userIntId := claims.UserClaim.Id
 	userId := claims.UserClaim.NodeId
 
 	// Use organizationId from request body - use "INDEPENDENT" for organization-independent nodes
@@ -283,7 +283,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidOrganizationIdFormat),
 			}, nil
 		}
-		
+
 		// Check if account has workspace enablement for this organization
 		enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 		if enablementTable == "" {
@@ -348,16 +348,6 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 			orgStore := store_postgres.NewPostgresOrganizationStore(db)
 
-			// Parse user ID and get organization ID from node ID
-			userIdInt, err := strconv.ParseInt(userId, 10, 64)
-			if err != nil {
-				log.Printf("Invalid user ID format: %s", userId)
-				return events.APIGatewayV2HTTPResponse{
-					StatusCode: http.StatusBadRequest,
-					Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnauthorized),
-				}, nil
-			}
-
 			// Get numeric organization ID from node ID format
 			orgIdInt, err := orgStore.GetOrganizationIdByNodeId(ctx, organizationId)
 			if err != nil {
@@ -369,7 +359,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			}
 
 			// Check if user is an admin in the organization (permission_bit >= 16)
-			isAdmin, err := orgStore.CheckUserIsOrganizationAdmin(ctx, userIdInt, orgIdInt)
+			// userIntId is already the numeric user ID from claims.UserClaim.Id
+			isAdmin, err := orgStore.CheckUserIsOrganizationAdmin(ctx, userIntId, orgIdInt)
 			if err != nil {
 				log.Printf("Error checking organization admin access: %v", err)
 				return events.APIGatewayV2HTTPResponse{
@@ -437,7 +428,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if envValue != "DOCKER" && envValue != "TEST" {
 		client := ecs.NewFromConfig(cfg)
 		log.Printf("Initiating new Provisioning Fargate Task with image: %s:%s", node.ProvisionerImage, node.ProvisionerImageTag)
-		
+
 		// Create a dynamic task definition with the custom provisioner image
 		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, node.ProvisionerImage, node.ProvisionerImageTag, envValue)
 		if err != nil {
@@ -468,9 +459,9 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		wmTagKey := "WM_TAG"
 		wmTagValue := node.WorkflowManagerTag
 		wmCpuKey := "WM_CPU"
-		wmCpuValue := "1024"  // Default CPU for workflow manager
+		wmCpuValue := "1024" // Default CPU for workflow manager
 		wmMemoryKey := "WM_MEMORY"
-		wmMemoryValue := "2048"  // Default memory for workflow manager
+		wmMemoryValue := "2048" // Default memory for workflow manager
 		provisionerImageKey := "PROVISIONER_IMAGE"
 		provisionerImageValue := node.ProvisionerImage
 		provisionerImageTagKey := "PROVISIONER_IMAGE_TAG"
