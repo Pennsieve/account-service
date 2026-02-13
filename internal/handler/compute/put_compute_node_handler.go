@@ -51,7 +51,23 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	TaskDefinitionArn := os.Getenv("TASK_DEF_ARN")
+	// Validate provisioner image against whitelist from SSM (using function from post_compute_nodes_handler.go)
+	if err := validateProvisionerImage(ctx, cfg, updateRequest.ProvisionerImage); err != nil {
+		log.Printf("Invalid provisioner image: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+		}, nil
+	}
+
+	// Set defaults for provisioner image and tag if not provided
+	if updateRequest.ProvisionerImage == "" {
+		updateRequest.ProvisionerImage = "pennsieve/compute-node-aws-provisioner"
+	}
+	if updateRequest.ProvisionerImageTag == "" {
+		updateRequest.ProvisionerImageTag = "latest"
+	}
+
 	subIdStr := os.Getenv("SUBNET_IDS")
 	SubNetIds := strings.Split(subIdStr, ",")
 	cluster := os.Getenv("CLUSTER_ARN")
@@ -141,9 +157,30 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
 		}, nil
 	}
+	
+	// In test environment, skip ECS task execution and return mock response
+	if envValue == "DOCKER" || envValue == "TEST" {
+		log.Println("Test environment detected, skipping ECS task execution")
 
+		m, err := json.Marshal(models.NodeResponse{
+			Message: "Compute node update initiated",
+		})
+		if err != nil {
+			log.Println(err.Error())
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: 500,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
+			}, nil
+		}
+
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusAccepted,
+			Body:       string(m),
+		}, nil
+	}
+	
 	client := ecs.NewFromConfig(cfg)
-	log.Println("Initiating new Provisioning Fargate Task for UPDATE.")
+	log.Printf("Initiating new Provisioning Fargate Task for UPDATE with image: %s:%s", updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag)
 
 	computeNodeIdKey := "COMPUTE_NODE_ID"
 	envKey := "ENV"
@@ -191,6 +228,21 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	nodeIdentifierValue := computeNode.Identifier
 	nodeNameKey := "NODE_NAME"
 	nodeNameValue := computeNode.Name
+	provisionerImageKey := "PROVISIONER_IMAGE"
+	provisionerImageValue := updateRequest.ProvisionerImage
+	provisionerImageTagKey := "PROVISIONER_IMAGE_TAG"
+	provisionerImageTagValue := updateRequest.ProvisionerImageTag
+
+	// Create a dynamic task definition with the custom provisioner image (using function from post_compute_nodes_handler.go)
+	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
+	if err != nil {
+		log.Printf("Error creating dynamic task definition: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
+		}, nil
+	}
+	TaskDefinitionArn := *dynamicTaskDef.TaskDefinitionArn
 
 	runTaskIn := &ecs.RunTaskInput{
 		TaskDefinition: aws.String(TaskDefinitionArn),
@@ -267,32 +319,19 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 							Name:  &nodeNameKey,
 							Value: &nodeNameValue,
 						},
+						{
+							Name:  &provisionerImageKey,
+							Value: &provisionerImageValue,
+						},
+						{
+							Name:  &provisionerImageTagKey,
+							Value: &provisionerImageTagValue,
+						},
 					},
 				},
 			},
 		},
 		LaunchType: types.LaunchTypeFargate,
-	}
-
-	// In test environment, skip ECS task execution and return mock response
-	if envValue == "DOCKER" || envValue == "TEST" {
-		log.Println("Test environment detected, skipping ECS task execution")
-
-		m, err := json.Marshal(models.NodeResponse{
-			Message: "Compute node update initiated",
-		})
-		if err != nil {
-			log.Println(err.Error())
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: 500,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
-			}, nil
-		}
-
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusAccepted,
-			Body:       string(m),
-		}, nil
 	}
 
 	taskRunner := runner.NewECSTaskRunner(client, runTaskIn)

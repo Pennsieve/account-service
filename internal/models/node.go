@@ -35,10 +35,12 @@ type NodeResponse struct {
 }
 
 type NodeUpdateRequest struct {
-	WorkflowManagerTag    string `json:"workflowManagerTag"`
-	WorkflowManagerCpu    int    `json:"workflowManagerCpu"`
-	WorkflowManagerMemory int    `json:"workflowManagerMemory"`
-	AuthorizationType     string `json:"authorizationType"` // "NONE" or "AWS_IAM"
+	WorkflowManagerTag    string `json:"workflowManagerTag,omitempty"`    // Optional - only for legacy provisioner
+	WorkflowManagerCpu    int    `json:"workflowManagerCpu,omitempty"`    // Optional - only for legacy provisioner
+	WorkflowManagerMemory int    `json:"workflowManagerMemory,omitempty"` // Optional - only for legacy provisioner
+	AuthorizationType     string `json:"authorizationType,omitempty"`     // Optional - "NONE" or "AWS_IAM", only for legacy provisioner
+	ProvisionerImage      string `json:"provisionerImage,omitempty"`      // Optional - Docker image for the provisioner
+	ProvisionerImageTag   string `json:"provisionerImageTag,omitempty"`   // Optional - Docker tag for the provisioner image
 }
 
 // DynamoDBNode represents the DynamoDB storage structure for compute nodes
