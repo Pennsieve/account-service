@@ -267,17 +267,23 @@ components:
       properties:
         workflowManagerTag:
           type: string
-          description: Docker tag for the workflow manager
+          description: Docker tag for the workflow manager (optional - only for legacy provisioner)
         workflowManagerCpu:
           type: integer
-          description: CPU units for the workflow manager
+          description: CPU units for the workflow manager (optional - only for legacy provisioner)
         workflowManagerMemory:
           type: integer
-          description: Memory (MB) for the workflow manager
+          description: Memory (MB) for the workflow manager (optional - only for legacy provisioner)
         authorizationType:
           type: string
           enum: ["NONE", "AWS_IAM"]
-          description: Authorization type for the API Gateway
+          description: Authorization type for the API Gateway (optional - only for legacy provisioner)
+        provisionerImage:
+          type: string
+          description: Docker image for the provisioner (optional - must be whitelisted)
+        provisionerImageTag:
+          type: string
+          description: Docker tag for the provisioner image (optional - defaults to 'latest')
     computeNodePermissionsRequest:
       type: object
       required:
