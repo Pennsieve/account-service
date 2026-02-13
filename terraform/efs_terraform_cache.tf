@@ -11,7 +11,7 @@ resource "aws_security_group" "terraform_cache_efs_sg" {
     from_port   = 2049
     to_port     = 2049
     protocol    = "tcp"
-    cidr_blocks = [data.terraform_remote_state.vpc.outputs.vpc_cidr]
+    cidr_blocks = [data.terraform_remote_state.vpc.outputs.vpc_cidr_block]
   }
 
   egress {
@@ -53,10 +53,10 @@ resource "aws_efs_file_system" "terraform_cache" {
 
 # EFS Mount Targets (one per private subnet)
 resource "aws_efs_mount_target" "terraform_cache" {
-  count = length(data.terraform_remote_state.vpc.outputs.private_subnets)
+  count = length(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
 
   file_system_id  = aws_efs_file_system.terraform_cache.id
-  subnet_id       = data.terraform_remote_state.vpc.outputs.private_subnets[count.index]
+  subnet_id       = data.terraform_remote_state.vpc.outputs.private_subnet_ids[count.index]
   security_groups = [aws_security_group.terraform_cache_efs_sg.id]
 }
 
