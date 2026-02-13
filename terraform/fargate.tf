@@ -31,8 +31,24 @@ resource "aws_ecs_task_definition" "provisioner_ecs_task_definition" {
   task_role_arn      = aws_iam_role.provisioner_fargate_task_iam_role.arn
   execution_role_arn = aws_iam_role.provisioner_fargate_task_iam_role.arn
 
+  # EFS Volume for Terraform Provider Cache
+  volume {
+    name = "terraform-cache"
+
+    efs_volume_configuration {
+      file_system_id          = aws_efs_file_system.terraform_cache.id
+      transit_encryption      = "ENABLED"
+      transit_encryption_port = 2999
+      authorization_config {
+        access_point_id = aws_efs_access_point.terraform_cache.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
   depends_on = [
     data.template_file.provisioner_ecs_task_definition,
-    aws_cloudwatch_log_group.provisioner_fargate_log_group
+    aws_cloudwatch_log_group.provisioner_fargate_log_group,
+    aws_efs_mount_target.terraform_cache
   ]
 }
