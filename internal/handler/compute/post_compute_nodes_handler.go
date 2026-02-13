@@ -134,6 +134,7 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 		Memory:                  baseDef.Memory,
 		TaskRoleArn:             baseDef.TaskRoleArn,
 		ExecutionRoleArn:        baseDef.ExecutionRoleArn,
+		Volumes:                 baseDef.Volumes,
 	}
 
 	registerResult, err := client.RegisterTaskDefinition(ctx, registerInput)

@@ -22,7 +22,7 @@ echo "Task Definition: ${TASK_FAMILY}"
 echo ""
 
 # Cache initialization command (single line with printf for proper terraform formatting)
-CACHE_COMMAND="mkdir -p /mnt/terraform-cache/plugin-cache && cd /tmp && mkdir terraform-init && cd terraform-init && printf 'terraform {\\n  required_providers {\\n    aws = {\\n      source  = \\\"hashicorp/aws\\\"\\n      version = \\\"~> 6.0\\\"\\n    }\\n    archive = {\\n      source  = \\\"hashicorp/archive\\\"\\n      version = \\\"~> 2.7\\\"\\n    }\\n  }\\n}\\n' > main.tf && terraform init -backend=false && echo 'Cache populated with providers:' && find /mnt/terraform-cache/plugin-cache -name 'terraform-provider-*' -type f | wc -l"
+CACHE_COMMAND="mkdir -p /mnt/terraform-cache/plugin-cache && export TF_PLUGIN_CACHE_DIR=/mnt/terraform-cache/plugin-cache && cd /tmp && mkdir -p terraform-init && cd terraform-init && printf 'terraform {\\n  required_providers {\\n    aws = {\\n      source  = \\\"hashicorp/aws\\\"\\n      version = \\\"~> 6.0\\\"\\n    }\\n    archive = {\\n      source  = \\\"hashicorp/archive\\\"\\n      version = \\\"~> 2.7\\\"\\n    }\\n  }\\n}\\n' > main.tf && cat main.tf && terraform init -backend=false && echo 'Cache populated with providers:' && ls -la /mnt/terraform-cache/plugin-cache/ && find /mnt/terraform-cache/plugin-cache -name 'terraform-provider-*' -type f | wc -l"
 
 # Create task override
 OVERRIDES=$(cat <<EOF
