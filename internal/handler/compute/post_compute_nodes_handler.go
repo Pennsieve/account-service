@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -110,8 +111,8 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 	// Create a unique family name for the dynamic task definition
 	familyName := fmt.Sprintf("%s-custom-%s-%s", *baseDef.Family, strings.ReplaceAll(image, "/", "-"), tag)
 
-	// Check if a task definition for this image already exists
-	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName)
+	// Check if a valid task definition for this image already exists
+	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName, baseDef)
 	if err != nil {
 		log.Printf("Error checking for existing task definition: %v", err)
 		// Continue with creating a new one
@@ -146,14 +147,14 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 	return registerResult.TaskDefinition, nil
 }
 
-// findExistingTaskDefinition checks if a task definition family already exists and returns the latest active revision
-func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyName string) (*types.TaskDefinition, error) {
+// findExistingTaskDefinition checks if a task definition family already exists and returns the latest active revision.
+// It validates that the cached definition matches the base definition to detect configuration drift.
+func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyName string, baseDef *types.TaskDefinition) (*types.TaskDefinition, error) {
 	// Try to describe the latest task definition for this family
 	describeResult, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(familyName),
 	})
 	if err != nil {
-		// Task definition doesn't exist or other error
 		return nil, err
 	}
 
@@ -162,12 +163,41 @@ func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyN
 		return nil, nil
 	}
 
-	// Check if the task definition is active (not inactive/deregistered)
-	if taskDef.Status == types.TaskDefinitionStatusActive {
-		return taskDef, nil
+	if taskDef.Status != types.TaskDefinitionStatusActive {
+		return nil, nil
 	}
 
-	return nil, nil
+	// Validate task-level fields match the base definition
+	if taskDef.NetworkMode != baseDef.NetworkMode ||
+		!reflect.DeepEqual(taskDef.Cpu, baseDef.Cpu) ||
+		!reflect.DeepEqual(taskDef.Memory, baseDef.Memory) ||
+		!reflect.DeepEqual(taskDef.TaskRoleArn, baseDef.TaskRoleArn) ||
+		!reflect.DeepEqual(taskDef.ExecutionRoleArn, baseDef.ExecutionRoleArn) ||
+		!reflect.DeepEqual(taskDef.RequiresCompatibilities, baseDef.RequiresCompatibilities) ||
+		!reflect.DeepEqual(taskDef.Volumes, baseDef.Volumes) {
+		log.Printf("Cached task definition %s has drifted from base - creating new revision", familyName)
+		return nil, nil
+	}
+
+	// Validate container-level fields match (comparing everything except Image)
+	if len(taskDef.ContainerDefinitions) == 0 || len(baseDef.ContainerDefinitions) == 0 {
+		return nil, nil
+	}
+	cachedContainer := taskDef.ContainerDefinitions[0]
+	baseContainer := baseDef.ContainerDefinitions[0]
+
+	// Temporarily set the image to match so we can compare the rest
+	cachedImage := cachedContainer.Image
+	cachedContainer.Image = baseContainer.Image
+	containersMatch := reflect.DeepEqual(cachedContainer, baseContainer)
+	cachedContainer.Image = cachedImage
+
+	if !containersMatch {
+		log.Printf("Cached task definition %s container config has drifted from base - creating new revision", familyName)
+		return nil, nil
+	}
+
+	return taskDef, nil
 }
 
 // PostComputeNodesHandler creates a new compute node
