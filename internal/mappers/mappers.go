@@ -58,6 +58,7 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			OwnerId:            c.UserId,
 			Identifier:         c.Identifier,
 			WorkflowManagerTag: c.WorkflowManagerTag,
+			DeploymentMode:     c.DeploymentMode,
 			Status:             nodeStatus,
 		})
 	}
@@ -92,6 +93,7 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			OwnerId:            c.UserId,
 			Identifier:         c.Identifier,
 			WorkflowManagerTag: c.WorkflowManagerTag,
+			DeploymentMode:     c.DeploymentMode,
 			Status:             c.Status,
 		})
 	}

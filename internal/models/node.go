@@ -20,6 +20,7 @@ type Node struct {
 	WorkflowManagerTag    string        `json:"workflowManagerTag"`
 	ProvisionerImage      string        `json:"provisionerImage,omitempty"` // Docker image for the provisioner
 	ProvisionerImageTag   string        `json:"provisionerImageTag,omitempty"` // Docker tag for the provisioner image
+	DeploymentMode        string        `json:"deploymentMode,omitempty"` // Deployment mode: basic, secure, or compliant
 	Status                string        `json:"status"`
 }
 
@@ -60,6 +61,7 @@ type DynamoDBNode struct {
 	UserId                string `dynamodbav:"userId"`
 	Identifier            string `dynamodbav:"identifier"`
 	WorkflowManagerTag    string `dynamodbav:"workflowManagerTag"`
+	DeploymentMode        string `dynamodbav:"deploymentMode"`
 	Status                string `dynamodbav:"status"`
 }
 

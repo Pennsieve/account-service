@@ -276,6 +276,11 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		node.ProvisionerImageTag = "latest"
 	}
 
+	// Default deploymentMode to "basic" if not provided
+	if node.DeploymentMode == "" {
+		node.DeploymentMode = "basic"
+	}
+
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
@@ -441,6 +446,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			UserId:                userId,
 			Identifier:            nodeIdentifier,
 			WorkflowManagerTag:    node.WorkflowManagerTag,
+			DeploymentMode:        node.DeploymentMode,
 			Status:                "Pending", // New Pending status
 		}
 
@@ -497,6 +503,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		provisionerImageValue := node.ProvisionerImage
 		provisionerImageTagKey := "PROVISIONER_IMAGE_TAG"
 		provisionerImageTagValue := node.ProvisionerImageTag
+		deploymentModeKey := "DEPLOYMENT_MODE"
+		deploymentModeValue := node.DeploymentMode
 
 		computeNodeIdKey := "COMPUTE_NODE_ID"
 		computeNodeIdValue := nodeUuid
@@ -582,6 +590,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 								Name:  &provisionerImageTagKey,
 								Value: &provisionerImageTagValue,
 							},
+							{
+								Name:  &deploymentModeKey,
+								Value: &deploymentModeValue,
+							},
 						},
 					},
 				},
@@ -637,6 +649,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			OrganizationId:     responseOrganizationId,
 			OwnerId:            userId,
 			WorkflowManagerTag: node.WorkflowManagerTag,
+			DeploymentMode:     node.DeploymentMode,
 			Status:             "Pending",
 		}
 

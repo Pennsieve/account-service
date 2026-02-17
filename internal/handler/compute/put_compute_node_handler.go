@@ -232,6 +232,11 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	provisionerImageValue := updateRequest.ProvisionerImage
 	provisionerImageTagKey := "PROVISIONER_IMAGE_TAG"
 	provisionerImageTagValue := updateRequest.ProvisionerImageTag
+	deploymentModeKey := "DEPLOYMENT_MODE"
+	deploymentModeValue := computeNode.DeploymentMode
+	if deploymentModeValue == "" {
+		deploymentModeValue = "basic"
+	}
 
 	// Create a dynamic task definition with the custom provisioner image (using function from post_compute_nodes_handler.go)
 	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
@@ -326,6 +331,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &provisionerImageTagKey,
 							Value: &provisionerImageTagValue,
+						},
+						{
+							Name:  &deploymentModeKey,
+							Value: &deploymentModeValue,
 						},
 					},
 				},

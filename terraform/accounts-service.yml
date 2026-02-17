@@ -202,6 +202,11 @@ components:
           type: string
           description: Organization ID (workspace) this node belongs to. Empty for organization-independent nodes.
           example: "N:organization:050fae39-4412-43ef-a514-703ed8e299d5"
+        deploymentMode:
+          type: string
+          enum: ["basic", "secure", "compliant"]
+          description: Deployment mode controlling the infrastructure networking tier
+          default: basic
     computeNodeResponse:
       type: object
       properties:
@@ -254,6 +259,16 @@ components:
         workflowManagerTag:
           type: string
           description: Docker tag for the workflow manager
+        provisionerImage:
+          type: string
+          description: Docker image for the provisioner
+        provisionerImageTag:
+          type: string
+          description: Docker tag for the provisioner image
+        deploymentMode:
+          type: string
+          enum: ["basic", "secure", "compliant"]
+          description: Deployment mode controlling the infrastructure networking tier
         accessScope:
           type: string
           enum: ["private", "workspace", "shared"]
@@ -284,6 +299,10 @@ components:
         provisionerImageTag:
           type: string
           description: Docker tag for the provisioner image (optional - defaults to 'latest')
+        deploymentMode:
+          type: string
+          enum: ["basic", "secure", "compliant"]
+          description: Deployment mode controlling the infrastructure networking tier (optional)
     computeNodePermissionsRequest:
       type: object
       required:

@@ -187,6 +187,7 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		OwnerId:            node.UserId,
 		Identifier:         node.Identifier,
 		WorkflowManagerTag: node.WorkflowManagerTag,
+		DeploymentMode:     node.DeploymentMode,
 		Status:             node.Status,
 	})
 	if err != nil {
