@@ -133,8 +133,6 @@ func TestGetComputeNodeHandler_Success(t *testing.T) {
 	assert.Equal(t, testNode.Uuid, node.Uuid)
 	assert.Equal(t, testNode.Name, node.Name)
 	assert.Equal(t, testNode.Description, node.Description)
-	assert.Equal(t, testNode.ComputeNodeGatewayUrl, node.ComputeNodeGatewayUrl)
-	assert.Equal(t, testNode.EfsId, node.EfsId)
 	assert.Equal(t, testNode.QueueUrl, node.QueueUrl)
 	assert.Equal(t, testNode.AccountUuid, node.Account.Uuid)
 	assert.Equal(t, testNode.AccountId, node.Account.AccountId)

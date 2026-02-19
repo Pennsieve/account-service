@@ -159,6 +159,15 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		log.Printf("Error: could not determine account owner for node %s (account: %s)", computeNode.Uuid, computeNode.AccountUuid)
 	}
 
+	// Get access scope for the node
+	var accessScope models.NodeAccessScope
+	permissions, err := permissionService.GetNodePermissions(ctx, computeNode.Uuid)
+	if err != nil {
+		log.Printf("Error getting node permissions: %v", err)
+	} else {
+		accessScope = permissions.AccessScope
+	}
+
 	// Convert INDEPENDENT back to empty string for API response consistency
 	responseOrganizationId := computeNode.OrganizationId
 	if computeNode.OrganizationId == "INDEPENDENT" {
@@ -166,12 +175,10 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	}
 
 	m, err := json.Marshal(models.Node{
-		Uuid:                  computeNode.Uuid,
-		Name:                  computeNode.Name,
-		Description:           computeNode.Description,
-		ComputeNodeGatewayUrl: computeNode.ComputeNodeGatewayUrl,
-		EfsId:                 computeNode.EfsId,
-		QueueUrl:              computeNode.QueueUrl,
+		Uuid:        computeNode.Uuid,
+		Name:        computeNode.Name,
+		Description: computeNode.Description,
+		QueueUrl:    computeNode.QueueUrl,
 		Account: models.NodeAccount{
 			Uuid:        computeNode.AccountUuid,
 			AccountId:   computeNode.AccountId,
@@ -184,6 +191,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		Identifier:         computeNode.Identifier,
 		WorkflowManagerTag: computeNode.WorkflowManagerTag,
 		DeploymentMode:     computeNode.DeploymentMode,
+		AccessScope:        accessScope,
 		Status:             nodeStatus,
 	})
 	if err != nil {

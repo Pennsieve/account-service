@@ -209,8 +209,8 @@ func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyN
 // - For organization nodes with isPublic=true: Must be a workspace admin in the organization
 func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostComputeNodesHandler"
-	var node models.Node
-	if err := json.Unmarshal([]byte(request.Body), &node); err != nil {
+	var req models.CreateComputeNodeRequest
+	if err := json.Unmarshal([]byte(request.Body), &req); err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -234,15 +234,15 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Use organizationId from request body - use "INDEPENDENT" for organization-independent nodes
 	// to work around DynamoDB GSI constraint that doesn't allow empty strings
-	organizationId := node.OrganizationId
+	organizationId := req.OrganizationId
 	if organizationId == "" {
 		organizationId = "INDEPENDENT"
 	}
 
 	// Get the account UUID from the request
-	accountUuid := node.Account.Uuid
+	accountUuid := req.AccountId
 	if accountUuid == "" {
-		log.Printf("Account UUID is required")
+		log.Printf("AccountId is required")
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
@@ -260,7 +260,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 
 	// Validate provisioner image against whitelist from SSM
-	if err := validateProvisionerImage(ctx, cfg, node.ProvisionerImage); err != nil {
+	if err := validateProvisionerImage(ctx, cfg, req.ProvisionerImage); err != nil {
 		log.Printf("Invalid provisioner image: %v", err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
@@ -269,16 +269,16 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 
 	// Set defaults for provisioner image and tag if not provided
-	if node.ProvisionerImage == "" {
-		node.ProvisionerImage = "pennsieve/compute-node-aws-provisioner"
+	if req.ProvisionerImage == "" {
+		req.ProvisionerImage = "pennsieve/compute-node-aws-provisioner"
 	}
-	if node.ProvisionerImageTag == "" {
-		node.ProvisionerImageTag = "latest"
+	if req.ProvisionerImageTag == "" {
+		req.ProvisionerImageTag = "latest"
 	}
 
 	// Default deploymentMode to "basic" if not provided
-	if node.DeploymentMode == "" {
-		node.DeploymentMode = "basic"
+	if req.DeploymentMode == "" {
+		req.DeploymentMode = "basic"
 	}
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
@@ -303,11 +303,6 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
-
-	// Use the fetched account details to populate the node account information
-	node.Account.AccountId = account.AccountId
-	node.Account.AccountType = account.AccountType
-	node.Account.Uuid = account.Uuid
 
 	// If organizationId is provided and not INDEPENDENT, check workspace enablement and permissions
 	if organizationId != "" && organizationId != "INDEPENDENT" {
@@ -432,21 +427,21 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		// Create node with PENDING status
 		pendingNode := models.DynamoDBNode{
 			Uuid:                  nodeUuid,
-			Name:                  node.Name,
-			Description:           node.Description,
+			Name:                  req.Name,
+			Description:           req.Description,
 			ComputeNodeGatewayUrl: "", // Will be filled when provisioning completes
 			EfsId:                 "", // Will be filled when provisioning completes
 			QueueUrl:              "", // Will be filled when provisioning completes
 			Env:                   envValue,
 			AccountUuid:           accountUuid,
-			AccountId:             node.Account.AccountId,
-			AccountType:           node.Account.AccountType,
+			AccountId:             account.AccountId,
+			AccountType:           account.AccountType,
 			CreatedAt:             time.Now().UTC().String(),
 			OrganizationId:        organizationId,
 			UserId:                userId,
 			Identifier:            nodeIdentifier,
-			WorkflowManagerTag:    node.WorkflowManagerTag,
-			DeploymentMode:        node.DeploymentMode,
+			WorkflowManagerTag:    req.ProvisionerImageTag,
+			DeploymentMode:        req.DeploymentMode,
 			Status:                "Pending", // New Pending status
 		}
 
@@ -464,10 +459,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// Skip AWS ECS task creation in test environments
 	if envValue != "DOCKER" && envValue != "TEST" {
 		client := ecs.NewFromConfig(cfg)
-		log.Printf("Initiating new Provisioning Fargate Task with image: %s:%s", node.ProvisionerImage, node.ProvisionerImageTag)
+		log.Printf("Initiating new Provisioning Fargate Task with image: %s:%s", req.ProvisionerImage, req.ProvisionerImageTag)
 
 		// Create a dynamic task definition with the custom provisioner image
-		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, node.ProvisionerImage, node.ProvisionerImageTag, envValue)
+		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, req.ProvisionerImage, req.ProvisionerImageTag, envValue)
 		if err != nil {
 			log.Printf("Error creating dynamic task definition: %v", err)
 			return events.APIGatewayV2HTTPResponse{
@@ -478,9 +473,9 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		TaskDefinitionArn = *dynamicTaskDef.TaskDefinitionArn
 		envKey := "ENV"
 		accountIdKey := "ACCOUNT_ID"
-		accountIdValue := node.Account.AccountId
+		accountIdValue := account.AccountId
 		accountTypeKey := "ACCOUNT_TYPE"
-		accountTypeValue := node.Account.AccountType
+		accountTypeValue := account.AccountType
 		organizationIdKey := "ORG_ID"
 		organizationIdValue := organizationId
 		userIdKey := "USER_ID"
@@ -491,20 +486,20 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		tableValue := os.Getenv("COMPUTE_NODES_TABLE")
 		nodeNameKey := "NODE_NAME"
 		nodeDescriptionKey := "NODE_DESCRIPTION"
-		nameValue := node.Name
-		descriptionValue := node.Description
+		nameValue := req.Name
+		descriptionValue := req.Description
 		wmTagKey := "WM_TAG"
-		wmTagValue := node.WorkflowManagerTag
+		wmTagValue := req.ProvisionerImageTag
 		wmCpuKey := "WM_CPU"
 		wmCpuValue := "1024" // Default CPU for workflow manager
 		wmMemoryKey := "WM_MEMORY"
 		wmMemoryValue := "2048" // Default memory for workflow manager
 		provisionerImageKey := "PROVISIONER_IMAGE"
-		provisionerImageValue := node.ProvisionerImage
+		provisionerImageValue := req.ProvisionerImage
 		provisionerImageTagKey := "PROVISIONER_IMAGE_TAG"
-		provisionerImageTagValue := node.ProvisionerImageTag
+		provisionerImageTagValue := req.ProvisionerImageTag
 		deploymentModeKey := "DEPLOYMENT_MODE"
-		deploymentModeValue := node.DeploymentMode
+		deploymentModeValue := req.DeploymentMode
 
 		computeNodeIdKey := "COMPUTE_NODE_ID"
 		computeNodeIdValue := nodeUuid
@@ -642,14 +637,18 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}
 
 		createdNode := models.Node{
-			Uuid:               nodeUuid,
-			Name:               node.Name,
-			Description:        node.Description,
-			Account:            node.Account,
+			Uuid:        nodeUuid,
+			Name:        req.Name,
+			Description: req.Description,
+			Account: models.NodeAccount{
+				Uuid:        account.Uuid,
+				AccountId:   account.AccountId,
+				AccountType: account.AccountType,
+			},
 			OrganizationId:     responseOrganizationId,
 			OwnerId:            userId,
-			WorkflowManagerTag: node.WorkflowManagerTag,
-			DeploymentMode:     node.DeploymentMode,
+			WorkflowManagerTag: req.ProvisionerImageTag,
+			DeploymentMode:     req.DeploymentMode,
 			Status:             "Pending",
 		}
 

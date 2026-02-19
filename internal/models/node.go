@@ -5,23 +5,34 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+// CreateComputeNodeRequest is the request body for POST /compute-nodes
+type CreateComputeNodeRequest struct {
+	AccountId       string `json:"accountId"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	OrganizationId  string `json:"organizationId,omitempty"`
+	ProvisionerImage    string `json:"provisionerImage,omitempty"`
+	ProvisionerImageTag string `json:"provisionerImageTag,omitempty"`
+	DeploymentMode      string `json:"deploymentMode,omitempty"`
+}
+
+// Node is the response representation of a compute node
 type Node struct {
-	Uuid                  string        `json:"uuid"`
-	Name                  string        `json:"name"`
-	Description           string        `json:"description"`
-	ComputeNodeGatewayUrl string        `json:"computeNodeGatewayUrl"`
-	EfsId                 string        `json:"efsId"`
-	QueueUrl              string        `json:"queueUrl"`
-	Account               NodeAccount   `json:"account"`
-	CreatedAt             string        `json:"createdAt"`
-	OrganizationId        string        `json:"organizationId,omitempty"` // Optional - empty string means organization-independent
-	OwnerId               string        `json:"ownerId"` // The owner of the compute node
-	Identifier            string        `json:"identifier"`
-	WorkflowManagerTag    string        `json:"workflowManagerTag"`
-	ProvisionerImage      string        `json:"provisionerImage,omitempty"` // Docker image for the provisioner
-	ProvisionerImageTag   string        `json:"provisionerImageTag,omitempty"` // Docker tag for the provisioner image
-	DeploymentMode        string        `json:"deploymentMode,omitempty"` // Deployment mode: basic, secure, or compliant
-	Status                string        `json:"status"`
+	Uuid                  string          `json:"uuid"`
+	Name                  string          `json:"name"`
+	Description           string          `json:"description"`
+	QueueUrl              string          `json:"queueUrl"`
+	Account               NodeAccount     `json:"account"`
+	CreatedAt             string          `json:"createdAt"`
+	OrganizationId        string          `json:"organizationId,omitempty"`
+	OwnerId               string          `json:"ownerId"`
+	Identifier            string          `json:"identifier"`
+	WorkflowManagerTag    string          `json:"workflowManagerTag"`
+	ProvisionerImage      string          `json:"provisionerImage,omitempty"`
+	ProvisionerImageTag   string          `json:"provisionerImageTag,omitempty"`
+	DeploymentMode        string          `json:"deploymentMode,omitempty"`
+	AccessScope           NodeAccessScope `json:"accessScope,omitempty"`
+	Status                string          `json:"status"`
 }
 
 type NodeAccount struct {

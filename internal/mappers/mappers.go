@@ -8,14 +8,13 @@ import (
 // DynamoDBNodeToJsonNodeWithAccountStatus converts DynamoDB nodes to JSON nodes with account status override
 // If the account is Paused and the node is not Pending, the node status will be overridden to Paused
 func DynamoDBNodeToJsonNodeWithAccountStatus(dynamoNodes []models.DynamoDBNode, accountStatusMap map[string]string) []models.Node {
-	// Use the new function with empty owner map for backwards compatibility
-	return DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, nil)
+	return DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, nil, nil)
 }
 
 // DynamoDBNodeToJsonNodeWithAccountInfo converts DynamoDB nodes to JSON nodes with account status override and owner info
 // If the account is Paused and the node is not Pending, the node status will be overridden to Paused
 // Also includes the account owner's userId if available
-func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, accountStatusMap map[string]string, accountOwnerMap map[string]string) []models.Node {
+func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, accountStatusMap map[string]string, accountOwnerMap map[string]string, accessScopeMap map[string]models.NodeAccessScope) []models.Node {
 	nodes := []models.Node{}
 
 	for _, c := range dynamoNodes {
@@ -27,26 +26,30 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 				nodeStatus = "Paused"
 			}
 		}
-		
+
 		// Get account owner if available
 		accountOwnerId := ""
 		if accountOwnerMap != nil {
 			accountOwnerId = accountOwnerMap[c.AccountUuid]
 		}
-		
+
+		// Get access scope if available
+		var accessScope models.NodeAccessScope
+		if accessScopeMap != nil {
+			accessScope = accessScopeMap[c.Uuid]
+		}
+
 		// Convert INDEPENDENT back to empty string for API response consistency
 		responseOrganizationId := c.OrganizationId
 		if c.OrganizationId == "INDEPENDENT" {
 			responseOrganizationId = ""
 		}
-		
+
 		nodes = append(nodes, models.Node{
-			Uuid:                  c.Uuid,
-			Name:                  c.Name,
-			Description:           c.Description,
-			ComputeNodeGatewayUrl: c.ComputeNodeGatewayUrl,
-			EfsId:                 c.EfsId,
-			QueueUrl:              c.QueueUrl,
+			Uuid:        c.Uuid,
+			Name:        c.Name,
+			Description: c.Description,
+			QueueUrl:    c.QueueUrl,
 			Account: models.NodeAccount{
 				Uuid:        c.AccountUuid,
 				AccountId:   c.AccountId,
@@ -59,6 +62,7 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			Identifier:         c.Identifier,
 			WorkflowManagerTag: c.WorkflowManagerTag,
 			DeploymentMode:     c.DeploymentMode,
+			AccessScope:        accessScope,
 			Status:             nodeStatus,
 		})
 	}
@@ -77,12 +81,10 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 		}
 		
 		nodes = append(nodes, models.Node{
-			Uuid:                  c.Uuid,
-			Name:                  c.Name,
-			Description:           c.Description,
-			ComputeNodeGatewayUrl: c.ComputeNodeGatewayUrl,
-			EfsId:                 c.EfsId,
-			QueueUrl:              c.QueueUrl,
+			Uuid:        c.Uuid,
+			Name:        c.Name,
+			Description: c.Description,
+			QueueUrl:    c.QueueUrl,
 			Account: models.NodeAccount{
 				Uuid:        c.AccountUuid,
 				AccountId:   c.AccountId,

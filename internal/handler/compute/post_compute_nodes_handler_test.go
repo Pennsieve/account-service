@@ -107,16 +107,11 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create node request (organization-independent)
-	nodeRequest := models.Node{
+	nodeRequest := models.CreateComputeNodeRequest{
 		Name:               "Test Node",
 		Description:        "Test Description",
-		WorkflowManagerTag: "test-tag",
-		Account: models.NodeAccount{
-			Uuid:        testAccount.Uuid,
-			AccountId:   testAccount.AccountId,
-			AccountType: testAccount.AccountType,
-		},
-		OrganizationId: "", // Empty for organization-independent
+		AccountId:          testAccount.Uuid,
+		OrganizationId:     "", // Empty for organization-independent
 	}
 	requestBody, err := json.Marshal(nodeRequest)
 	require.NoError(t, err)
@@ -173,15 +168,11 @@ func TestPostComputeNodesHandler_MissingAccountUuid(t *testing.T) {
 	_, _, _ = setupPostComputeNodesHandlerTest(t)
 	ctx := context.Background()
 
-	// Create node request without account UUID
-	nodeRequest := models.Node{
+	// Create node request without accountId
+	nodeRequest := models.CreateComputeNodeRequest{
 		Name:        "Test Node",
 		Description: "Test Description",
-		Account: models.NodeAccount{
-			AccountId:   "test-account",
-			AccountType: "aws",
-			// Uuid missing
-		},
+		// AccountId missing
 	}
 	requestBody, err := json.Marshal(nodeRequest)
 	require.NoError(t, err)
@@ -210,14 +201,10 @@ func TestPostComputeNodesHandler_AccountNotFound(t *testing.T) {
 	nonExistentAccountUuid := uuid.New().String()
 
 	// Create node request with non-existent account
-	nodeRequest := models.Node{
+	nodeRequest := models.CreateComputeNodeRequest{
 		Name:        "Test Node",
 		Description: "Test Description",
-		Account: models.NodeAccount{
-			Uuid:        nonExistentAccountUuid,
-			AccountId:   "test-account",
-			AccountType: "aws",
-		},
+		AccountId:   nonExistentAccountUuid,
 	}
 	requestBody, err := json.Marshal(nodeRequest)
 	require.NoError(t, err)
@@ -265,14 +252,10 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPrivateAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create node request for organization workspace
-	nodeRequest := models.Node{
-		Name:        "Test Workspace Node",
-		Description: "Test Description",
-		Account: models.NodeAccount{
-			Uuid:        testAccount.Uuid,
-			AccountId:   testAccount.AccountId,
-			AccountType: testAccount.AccountType,
-		},
+	nodeRequest := models.CreateComputeNodeRequest{
+		Name:           "Test Workspace Node",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
 		OrganizationId: orgId,
 	}
 	requestBody, err := json.Marshal(nodeRequest)
@@ -334,14 +317,10 @@ func TestPostComputeNodesHandler_WorkspaceNotEnabled(t *testing.T) {
 	// No workspace enablement record created
 
 	// Create node request for organization workspace
-	nodeRequest := models.Node{
-		Name:        "Test Workspace Node",
-		Description: "Test Description",
-		Account: models.NodeAccount{
-			Uuid:        testAccount.Uuid,
-			AccountId:   testAccount.AccountId,
-			AccountType: testAccount.AccountType,
-		},
+	nodeRequest := models.CreateComputeNodeRequest{
+		Name:           "Test Workspace Node",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
 		OrganizationId: orgId,
 	}
 	requestBody, err := json.Marshal(nodeRequest)
@@ -380,14 +359,10 @@ func TestPostComputeNodesHandler_MissingEnvironmentVariables(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create basic node request
-	nodeRequest := models.Node{
-		Name:        "Test Node",
-		Description: "Test Description",
-		Account: models.NodeAccount{
-			Uuid:        testAccount.Uuid,
-			AccountId:   testAccount.AccountId,
-			AccountType: testAccount.AccountType,
-		},
+	nodeRequest := models.CreateComputeNodeRequest{
+		Name:           "Test Node",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
 		OrganizationId: "N:organization:123e4567-e89b-12d3-a456-426614174000",
 	}
 	requestBody, err := json.Marshal(nodeRequest)
@@ -440,14 +415,10 @@ func TestPostComputeNodesHandler_DifferentAccountTypes(t *testing.T) {
 			err := accountStore.Insert(ctx, testAccount)
 			require.NoError(t, err)
 
-			nodeRequest := models.Node{
-				Name:        "Test " + tc.name,
-				Description: "Test Description",
-				Account: models.NodeAccount{
-					Uuid:        testAccount.Uuid,
-					AccountId:   testAccount.AccountId,
-					AccountType: testAccount.AccountType,
-				},
+			nodeRequest := models.CreateComputeNodeRequest{
+				Name:           "Test " + tc.name,
+				Description:    "Test Description",
+				AccountId:      testAccount.Uuid,
 				OrganizationId: "", // Independent node
 			}
 			requestBody, err := json.Marshal(nodeRequest)
@@ -489,54 +460,38 @@ func TestPostComputeNodesHandler_NodeFieldValidation(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		nodeRequest models.Node
+		nodeRequest models.CreateComputeNodeRequest
 	}{
 		{
 			"EmptyName",
-			models.Node{
+			models.CreateComputeNodeRequest{
 				Name:        "", // Empty name
 				Description: "Test Description",
-				Account: models.NodeAccount{
-					Uuid:        testAccount.Uuid,
-					AccountId:   testAccount.AccountId,
-					AccountType: testAccount.AccountType,
-				},
+				AccountId:   testAccount.Uuid,
 			},
 		},
 		{
 			"EmptyDescription",
-			models.Node{
+			models.CreateComputeNodeRequest{
 				Name:        "Test Node",
 				Description: "", // Empty description
-				Account: models.NodeAccount{
-					Uuid:        testAccount.Uuid,
-					AccountId:   testAccount.AccountId,
-					AccountType: testAccount.AccountType,
-				},
+				AccountId:   testAccount.Uuid,
 			},
 		},
 		{
 			"LongName",
-			models.Node{
+			models.CreateComputeNodeRequest{
 				Name:        "Very-long-name-that-might-test-limits-of-node-name-field-validation-and-database-constraints",
 				Description: "Test Description",
-				Account: models.NodeAccount{
-					Uuid:        testAccount.Uuid,
-					AccountId:   testAccount.AccountId,
-					AccountType: testAccount.AccountType,
-				},
+				AccountId:   testAccount.Uuid,
 			},
 		},
 		{
 			"SpecialCharacters",
-			models.Node{
+			models.CreateComputeNodeRequest{
 				Name:        "Test-Node_With@Special#Characters",
 				Description: "Description with special characters: !@#$%^&*()",
-				Account: models.NodeAccount{
-					Uuid:        testAccount.Uuid,
-					AccountId:   testAccount.AccountId,
-					AccountType: testAccount.AccountType,
-				},
+				AccountId:   testAccount.Uuid,
 			},
 		},
 	}
@@ -584,14 +539,10 @@ func TestPostComputeNodesHandler_InitialPermissions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create node request
-	nodeRequest := models.Node{
-		Name:        "Test Node for Permissions",
-		Description: "Test Description",
-		Account: models.NodeAccount{
-			Uuid:        testAccount.Uuid,
-			AccountId:   testAccount.AccountId,
-			AccountType: testAccount.AccountType,
-		},
+	nodeRequest := models.CreateComputeNodeRequest{
+		Name:           "Test Node for Permissions",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
 		OrganizationId: "",
 	}
 	requestBody, err := json.Marshal(nodeRequest)
@@ -647,14 +598,10 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create node request for organization workspace
-	nodeRequest := models.Node{
-		Name:        "Test Public Workspace Node",
-		Description: "Test Description",
-		Account: models.NodeAccount{
-			Uuid:        testAccount.Uuid,
-			AccountId:   testAccount.AccountId,
-			AccountType: testAccount.AccountType,
-		},
+	nodeRequest := models.CreateComputeNodeRequest{
+		Name:           "Test Public Workspace Node",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
 		OrganizationId: orgId,
 	}
 	requestBody, err := json.Marshal(nodeRequest)

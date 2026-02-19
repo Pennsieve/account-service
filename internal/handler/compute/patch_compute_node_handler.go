@@ -171,12 +171,10 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Return updated node
 	m, err := json.Marshal(models.Node{
-		Uuid:                  node.Uuid,
-		Name:                  node.Name,
-		Description:           node.Description,
-		ComputeNodeGatewayUrl: node.ComputeNodeGatewayUrl,
-		EfsId:                 node.EfsId,
-		QueueUrl:              node.QueueUrl,
+		Uuid:        node.Uuid,
+		Name:        node.Name,
+		Description: node.Description,
+		QueueUrl:    node.QueueUrl,
 		Account: models.NodeAccount{
 			Uuid:        node.AccountUuid,
 			AccountId:   node.AccountId,

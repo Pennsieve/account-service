@@ -170,7 +170,7 @@ components:
       type: object
       required:
         - name
-        - account
+        - accountId
       properties:
         name:
           type: string
@@ -178,18 +178,9 @@ components:
         description:
           type: string
           description: Description of the compute node
-        account:
-          type: object
-          required:
-            - uuid
-          properties:
-            uuid:
-              type: string
-              description: UUID of the compute resource account to use
-        workflowManagerTag:
+        accountId:
           type: string
-          description: Docker tag for the workflow manager
-          default: latest
+          description: UUID of the compute resource account to use
         provisionerImage:
           type: string
           description: Docker image for the provisioner
@@ -219,12 +210,6 @@ components:
         description:
           type: string
           description: Description of the compute node
-        computeNodeGatewayUrl:
-          type: string
-          description: Gateway URL for the compute node
-        efsId:
-          type: string
-          description: EFS ID for the compute node storage
         queueUrl:
           type: string
           description: SQS Queue URL for the compute node
