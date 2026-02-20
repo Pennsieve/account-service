@@ -217,21 +217,8 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}
 	}
 
-	// Fetch access scope for all nodes
-	accessScopeMap := make(map[string]models.NodeAccessScope)
-	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-	permService := service.NewPermissionService(nodeAccessStore, nil)
-	for _, node := range dynamoNodes {
-		permissions, err := permService.GetNodePermissions(ctx, node.Uuid)
-		if err != nil {
-			log.Printf("Error getting permissions for node %s: %v", node.Uuid, err)
-			continue
-		}
-		accessScopeMap[node.Uuid] = permissions.AccessScope
-	}
-
-	// Apply account status override, owner info, and access scope to nodes
-	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, accountOwnerMap, accessScopeMap)
+	// Apply account status override and owner info to nodes
+	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, accountOwnerMap, nil)
 
 	m, err := json.Marshal(jsonNodes)
 	if err != nil {

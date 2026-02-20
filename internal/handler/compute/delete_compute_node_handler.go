@@ -111,6 +111,18 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
+	// Set node status to "Destroying" before launching the delete task
+	computeNode.Status = "Destroying"
+	err = dynamo_store.Put(ctx, computeNode)
+	if err != nil {
+		log.Printf("Error updating node status to Destroying: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}, nil
+	}
+	log.Printf("Set node %s status to Destroying", uuid)
+
 	client := ecs.NewFromConfig(cfg)
 	log.Println("Initiating new Provisioning Fargate Task.")
 	computeNodeIdKey := "COMPUTE_NODE_ID"

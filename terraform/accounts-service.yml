@@ -254,13 +254,9 @@ components:
           type: string
           enum: ["basic", "secure", "compliant"]
           description: Deployment mode controlling the infrastructure networking tier
-        accessScope:
-          type: string
-          enum: ["private", "workspace", "shared"]
-          description: Current access scope level of the compute node
         status:
           type: string
-          enum: ["Enabled", "Paused", "Pending"]
+          enum: ["Enabled", "Paused", "Pending", "Destroying"]
           description: Current status of the compute node
     computeNodeUpdateRequest:
       type: object
