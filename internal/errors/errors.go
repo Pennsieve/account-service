@@ -49,6 +49,7 @@ var ErrOnlyAccountOwnerCanDetachNodes = errors.New("only the account owner can d
 var ErrOrganizationNotFound = errors.New("organization not found")
 var ErrInvalidOrganizationIdFormat = errors.New("invalid organization ID format - expected format: N:organization:uuid")
 var ErrBadRequest = errors.New("bad request")
+var ErrLLMBaaRequired = errors.New("LLM access in secure/compliant mode requires llmBaaAcknowledged: true (confirming an AWS BAA is in place)")
 
 // Common errors used across handlers
 var ErrMarshaling = errors.New("error marshaling item")

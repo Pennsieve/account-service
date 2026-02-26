@@ -14,6 +14,8 @@ type CreateComputeNodeRequest struct {
 	ProvisionerImage    string `json:"provisionerImage,omitempty"`
 	ProvisionerImageTag string `json:"provisionerImageTag,omitempty"`
 	DeploymentMode      string `json:"deploymentMode,omitempty"`
+	EnableLLMAccess     bool   `json:"enableLLMAccess,omitempty"`
+	LlmBaaAcknowledged  bool   `json:"llmBaaAcknowledged,omitempty"`
 }
 
 // Node is the response representation of a compute node
@@ -31,6 +33,8 @@ type Node struct {
 	ProvisionerImage      string          `json:"provisionerImage,omitempty"`
 	ProvisionerImageTag   string          `json:"provisionerImageTag,omitempty"`
 	DeploymentMode        string          `json:"deploymentMode,omitempty"`
+	EnableLLMAccess       bool            `json:"enableLLMAccess,omitempty"`
+	LlmBaaAcknowledged    bool            `json:"llmBaaAcknowledged,omitempty"`
 	AccessScope           NodeAccessScope `json:"accessScope,omitempty"`
 	Status                string          `json:"status"`
 }
@@ -73,6 +77,8 @@ type DynamoDBNode struct {
 	Identifier            string `dynamodbav:"identifier"`
 	WorkflowManagerTag    string `dynamodbav:"workflowManagerTag"`
 	DeploymentMode        string `dynamodbav:"deploymentMode"`
+	EnableLLMAccess       bool   `dynamodbav:"enableLLMAccess"`
+	LlmBaaAcknowledged    bool   `dynamodbav:"llmBaaAcknowledged"`
 	Status                string `dynamodbav:"status"`
 }
 

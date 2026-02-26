@@ -191,6 +191,8 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		Identifier:         computeNode.Identifier,
 		WorkflowManagerTag: computeNode.WorkflowManagerTag,
 		DeploymentMode:     computeNode.DeploymentMode,
+		EnableLLMAccess:    computeNode.EnableLLMAccess,
+		LlmBaaAcknowledged: computeNode.LlmBaaAcknowledged,
 		AccessScope:        accessScope,
 		Status:             nodeStatus,
 	})
