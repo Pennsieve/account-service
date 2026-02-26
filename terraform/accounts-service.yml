@@ -198,6 +198,16 @@ components:
           enum: ["basic", "secure", "compliant"]
           description: Deployment mode controlling the infrastructure networking tier
           default: basic
+        enableLLMAccess:
+          type: boolean
+          description: Enable LLM/Bedrock access for processors via the cost governor Lambda
+          default: false
+        llmBaaAcknowledged:
+          type: boolean
+          description: >
+            Confirms that an AWS Business Associate Agreement (BAA) is in place for the target account.
+            Required when enableLLMAccess is true and deploymentMode is "secure" or "compliant".
+          default: false
     computeNodeResponse:
       type: object
       properties:
@@ -254,6 +264,12 @@ components:
           type: string
           enum: ["basic", "secure", "compliant"]
           description: Deployment mode controlling the infrastructure networking tier
+        enableLLMAccess:
+          type: boolean
+          description: Whether LLM/Bedrock access is enabled for processors on this node
+        llmBaaAcknowledged:
+          type: boolean
+          description: Whether a BAA acknowledgement was provided when the node was created
         status:
           type: string
           enum: ["Enabled", "Paused", "Pending", "Destroying"]
