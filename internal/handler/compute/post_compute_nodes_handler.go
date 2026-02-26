@@ -281,6 +281,17 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		req.DeploymentMode = "basic"
 	}
 
+	// In secure/compliant modes, LLM access requires BAA acknowledgement
+	if req.EnableLLMAccess && (req.DeploymentMode == "secure" || req.DeploymentMode == "compliant") {
+		if !req.LlmBaaAcknowledged {
+			log.Printf("LLM access requested in %s mode without BAA acknowledgement", req.DeploymentMode)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrLLMBaaRequired),
+			}, nil
+		}
+	}
+
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
@@ -442,6 +453,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			Identifier:            nodeIdentifier,
 			WorkflowManagerTag:    req.ProvisionerImageTag,
 			DeploymentMode:        req.DeploymentMode,
+			EnableLLMAccess:       req.EnableLLMAccess,
+			LlmBaaAcknowledged:    req.LlmBaaAcknowledged,
 			Status:                "Pending", // New Pending status
 		}
 
@@ -500,6 +513,11 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		provisionerImageTagValue := req.ProvisionerImageTag
 		deploymentModeKey := "DEPLOYMENT_MODE"
 		deploymentModeValue := req.DeploymentMode
+		enableLLMAccessKey := "ENABLE_LLM_ACCESS"
+		enableLLMAccessValue := "false"
+		if req.EnableLLMAccess {
+			enableLLMAccessValue = "true"
+		}
 
 		computeNodeIdKey := "COMPUTE_NODE_ID"
 		computeNodeIdValue := nodeUuid
@@ -589,6 +607,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 								Name:  &deploymentModeKey,
 								Value: &deploymentModeValue,
 							},
+							{
+								Name:  &enableLLMAccessKey,
+								Value: &enableLLMAccessValue,
+							},
 						},
 					},
 				},
@@ -649,6 +671,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			OwnerId:            userId,
 			WorkflowManagerTag: req.ProvisionerImageTag,
 			DeploymentMode:     req.DeploymentMode,
+			EnableLLMAccess:    req.EnableLLMAccess,
+			LlmBaaAcknowledged: req.LlmBaaAcknowledged,
 			Status:             "Pending",
 		}
 

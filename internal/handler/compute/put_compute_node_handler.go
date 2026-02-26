@@ -237,6 +237,11 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	if deploymentModeValue == "" {
 		deploymentModeValue = "basic"
 	}
+	enableLLMAccessKey := "ENABLE_LLM_ACCESS"
+	enableLLMAccessValue := "false"
+	if computeNode.EnableLLMAccess {
+		enableLLMAccessValue = "true"
+	}
 
 	// Create a dynamic task definition with the custom provisioner image (using function from post_compute_nodes_handler.go)
 	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
@@ -335,6 +340,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &deploymentModeKey,
 							Value: &deploymentModeValue,
+						},
+						{
+							Name:  &enableLLMAccessKey,
+							Value: &enableLLMAccessValue,
 						},
 					},
 				},
