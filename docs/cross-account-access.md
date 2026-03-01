@@ -8,9 +8,9 @@ To do this, Pennsieve needs temporary, scoped access to your AWS account through
 
 ## How it works
 
-1. **You create a role in your account.** During compute node setup, a role named `Pennsieve-Compute-{env}` (e.g., `Pennsieve-Compute-Dev` or `Pennsieve-Compute-Prod`) is created in your AWS account. This role trusts the Pennsieve provisioner account, allowing it to temporarily "assume" the role.
+1. **You create a role in your account.** During compute node setup, a role named `Pennsieve-Compute-{env}-{id}` (e.g., `Pennsieve-Compute-dev-a3f1b20c`) is created in your AWS account. This role trusts the Pennsieve provisioner account, allowing it to temporarily "assume" the role.
 
-2. **Pennsieve assumes the role.** When we need to create, update, or remove infrastructure, our provisioner assumes the cross-account role. This gives it temporary credentials (valid for up to 2 hours) that are scoped to the permissions defined on the role.
+2. **Pennsieve assumes the role.** When we need to create, update, or remove infrastructure, our provisioner assumes the cross-account role. This gives it temporary credentials (valid for up to 1 hour) that are scoped to the permissions defined on the role.
 
 3. **Terraform runs with those credentials.** We use Terraform (an infrastructure-as-code tool) to manage all resources. Every change is deterministic and reproducible — no manual actions are taken in your account.
 
@@ -131,17 +131,23 @@ A single AWS account can host multiple compute nodes. Deleting one node does not
 
 ### Fully removing Pennsieve access
 
-To completely revoke Pennsieve's access to your AWS account, use the agent's **remove account** action. This deletes the cross-account role (`Pennsieve-Compute-{env}`) and removes all Pennsieve access. You should only do this after all compute nodes on the account have been deleted.
+To completely revoke Pennsieve's access to your AWS account, run:
 
-You can also manually delete the `Pennsieve-Compute-{env}` role in the IAM console at any time for an immediate revocation. Note that this will prevent Pennsieve from managing or cleaning up any remaining compute nodes — you would need to remove those resources yourself.
+```bash
+pennsieve account deregister --profile <aws-profile>
+```
+
+This deletes the Pennsieve account record (and any workspace enablements), then removes the cross-account IAM role (`Pennsieve-Compute-{env}-{id}`) from your AWS account. If you still have active compute nodes, the command will warn you and require the `--force` flag.
+
+You can also manually delete the `Pennsieve-Compute-{env}-{id}` role in the IAM console at any time for an immediate revocation. Note that this will prevent Pennsieve from managing or cleaning up any remaining compute nodes — you would need to remove those resources yourself.
 
 ## Frequently asked questions
 
 **Can I see exactly what permissions the cross-account role has?**
-Yes. The role's inline policy is visible in the IAM console under the role name `Pennsieve-Compute-{env}`. You can also inspect the permissions boundary policy named `pennsieve-boundary-<node-identifier>` attached to every child role.
+Yes. The role's inline policy is visible in the IAM console under the role name `Pennsieve-Compute-{env}-{id}`. You can also inspect the permissions boundary policy named `pennsieve-boundary-<node-identifier>` attached to every child role.
 
 **Can I revoke access at any time?**
-Yes. Use the agent's remove account action to cleanly delete the cross-account role after all compute nodes have been removed. Alternatively, you can delete the `Pennsieve-Compute-{env}` role directly in the IAM console for immediate revocation — but this will prevent Pennsieve from managing or cleaning up any remaining compute nodes.
+Yes. Run `pennsieve account deregister` to cleanly delete the cross-account role after all compute nodes have been removed. Alternatively, you can delete the `Pennsieve-Compute-{env}-{id}` role directly in the IAM console for immediate revocation — but this will prevent Pennsieve from managing or cleaning up any remaining compute nodes.
 
 **Does Pennsieve store my AWS credentials?**
 No. Pennsieve uses AWS STS (Security Token Service) to obtain temporary credentials by assuming the cross-account role. These credentials expire automatically and are never persisted.

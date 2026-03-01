@@ -712,6 +712,46 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete a compute resource account
+      description: |
+        Delete a compute resource account and its workspace enablements. Must be the account owner.
+        If the account has active compute nodes, the request will fail with a 409 Conflict unless
+        the force query parameter is set to true.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteAccount
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The uuid of the compute resource account
+        - in: query
+          name: force
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+          description: If true, delete even if account has active compute nodes
+      responses:
+        '200':
+          description: The deleted account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountsGetResponse'
+        '409':
+          description: Account has active compute nodes
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
   /compute-nodes:
     post:
       summary: Create a new compute node
