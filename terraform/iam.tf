@@ -245,23 +245,6 @@ data "aws_iam_policy_document" "provisioner_fargate_iam_policy_document" {
     resources = ["*"]
   }
 
-  statement {
-    sid    = "EFSTerraformCachePermissions"
-    effect = "Allow"
-
-    actions = [
-      "elasticfilesystem:ClientRootAccess",
-      "elasticfilesystem:ClientWrite",
-      "elasticfilesystem:ClientMount",
-      "elasticfilesystem:DescribeMountTargets"
-    ]
-
-    resources = [
-      aws_efs_file_system.terraform_cache.arn,
-      aws_efs_access_point.terraform_cache.arn
-    ]
-  }
-
 }
 
 # EventBridge Handler Lambda IAM Role

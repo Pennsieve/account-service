@@ -1318,3 +1318,29 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+  /role-policy:
+    get:
+      summary: Get IAM role policy
+      description: |
+        Returns the scoped IAM permission policy document that agents use when
+        creating cross-account roles. This is the single source of truth for
+        the set of AWS actions the provisioner requires.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getRolePolicy
+      security:
+        - token_auth: [ ]
+      tags:
+        - Account
+      responses:
+        '200':
+          description: The IAM permission policy document
+          content:
+            application/json:
+              schema:
+                type: object
+                description: An IAM policy document with Version and Statement fields
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'

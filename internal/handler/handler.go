@@ -54,5 +54,8 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.POST("/compute-nodes/{id}/organization", computeHandler.AttachNodeToOrganizationHandler)
     router.DELETE("/compute-nodes/{id}/organization", computeHandler.DetachNodeFromOrganizationHandler)
 
+    // Role policy endpoint
+    router.GET("/role-policy", computeHandler.GetRolePolicyHandler)
+
     return router.Start(ctx, request)
 }
