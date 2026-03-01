@@ -24,7 +24,7 @@ var ErrAccountAlreadyEnabledForWorkspace = errors.New("account already enabled f
 var ErrInvalidStatus = errors.New("invalid status value")
 
 // Compute-specific errors
-var ErrRunningFargateTask = errors.New("error running Rehydrate fargate task")
+var ErrRunningFargateTask = errors.New("error running Fargate task")
 var ErrCreatingNode = errors.New("error creating node in database")
 var ErrMissingNodeUuid = errors.New("missing node uuid")
 var ErrMissingUserId = errors.New("missing user id")
