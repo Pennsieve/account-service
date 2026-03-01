@@ -24,12 +24,12 @@ variable "lambda_bucket" {
 
 // Fargate Task Image
 variable "image_url" {
-  default = "pennsieve/compute-node-aws-provisioner"
+  default = "pennsieve/compute-node-aws-provisioner-v2"
 }
 
 variable "provisioner_image" {
   description = "Docker image for the compute node provisioner Fargate task"
-  default     = "pennsieve/compute-node-aws-provisioner"
+  default     = "pennsieve/compute-node-aws-provisioner-v2"
 }
 
 variable "provisioner_image_tag" {

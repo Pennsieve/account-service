@@ -271,7 +271,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Set defaults for provisioner image and tag if not provided
 	if req.ProvisionerImage == "" {
-		req.ProvisionerImage = "pennsieve/compute-node-aws-provisioner"
+		req.ProvisionerImage = "pennsieve/compute-node-aws-provisioner-v2"
 	}
 	if req.ProvisionerImageTag == "" {
 		req.ProvisionerImageTag = "latest"
@@ -453,6 +453,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			UserId:                userId,
 			Identifier:            nodeIdentifier,
 			WorkflowManagerTag:    req.ProvisionerImageTag,
+			ProvisionerImage:      req.ProvisionerImage,
+			ProvisionerImageTag:   req.ProvisionerImageTag,
 			DeploymentMode:        req.DeploymentMode,
 			EnableLLMAccess:       req.EnableLLMAccess,
 			LlmBaaAcknowledged:    req.LlmBaaAcknowledged,
@@ -668,10 +670,12 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				AccountId:   account.AccountId,
 				AccountType: account.AccountType,
 			},
-			OrganizationId:     responseOrganizationId,
-			OwnerId:            userId,
-			WorkflowManagerTag: req.ProvisionerImageTag,
-			DeploymentMode:     req.DeploymentMode,
+			OrganizationId:      responseOrganizationId,
+			OwnerId:             userId,
+			WorkflowManagerTag:  req.ProvisionerImageTag,
+			ProvisionerImage:    req.ProvisionerImage,
+			ProvisionerImageTag: req.ProvisionerImageTag,
+			DeploymentMode:      req.DeploymentMode,
 			EnableLLMAccess:    req.EnableLLMAccess,
 			LlmBaaAcknowledged: req.LlmBaaAcknowledged,
 			Status:             "Pending",

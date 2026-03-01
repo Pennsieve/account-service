@@ -62,7 +62,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 
 	// Set defaults for provisioner image and tag if not provided
 	if updateRequest.ProvisionerImage == "" {
-		updateRequest.ProvisionerImage = "pennsieve/compute-node-aws-provisioner"
+		updateRequest.ProvisionerImage = "pennsieve/compute-node-aws-provisioner-v2"
 	}
 	if updateRequest.ProvisionerImageTag == "" {
 		updateRequest.ProvisionerImageTag = "latest"

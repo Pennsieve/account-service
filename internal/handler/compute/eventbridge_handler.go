@@ -23,6 +23,8 @@ type ComputeNodeEvent struct {
 	EfsId                 string `json:"efsId,omitempty"`
 	QueueUrl              string `json:"queueUrl,omitempty"`
 	WorkflowManagerTag    string `json:"workflowManagerTag,omitempty"`
+	ProvisionerImage      string `json:"provisionerImage,omitempty"`
+	ProvisionerImageTag   string `json:"provisionerImageTag,omitempty"`
 	CreatedAt             string `json:"createdAt,omitempty"`
 }
 
@@ -161,6 +163,14 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	// Update the workflow manager tag if provided
 	if event.WorkflowManagerTag != "" {
 		node.WorkflowManagerTag = event.WorkflowManagerTag
+	}
+
+	// Update provisioner image/tag if provided
+	if event.ProvisionerImage != "" {
+		node.ProvisionerImage = event.ProvisionerImage
+	}
+	if event.ProvisionerImageTag != "" {
+		node.ProvisionerImageTag = event.ProvisionerImageTag
 	}
 
 	// Ensure status is Enabled after successful update

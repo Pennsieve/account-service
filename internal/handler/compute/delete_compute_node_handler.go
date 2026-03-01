@@ -40,7 +40,6 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
-	TaskDefinitionArn := os.Getenv("TASK_DEF_ARN")
 	subIdStr := os.Getenv("SUBNET_IDS")
 	SubNetIds := strings.Split(subIdStr, ",")
 	cluster := os.Getenv("CLUSTER_ARN")
@@ -111,6 +110,25 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
+	// Validate provisioner image against whitelist from SSM (empty passes through)
+	if err := validateProvisionerImage(ctx, cfg, computeNode.ProvisionerImage); err != nil {
+		log.Printf("Invalid provisioner image: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+		}, nil
+	}
+
+	// Use provisioner image from the stored compute node, with defaults
+	provisionerImage := computeNode.ProvisionerImage
+	if provisionerImage == "" {
+		provisionerImage = "pennsieve/compute-node-aws-provisioner-v2"
+	}
+	provisionerImageTag := computeNode.ProvisionerImageTag
+	if provisionerImageTag == "" {
+		provisionerImageTag = "latest"
+	}
+
 	// Set node status to "Destroying" before launching the delete task
 	computeNode.Status = "Destroying"
 	err = dynamo_store.Put(ctx, computeNode)
@@ -123,8 +141,41 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	}
 	log.Printf("Set node %s status to Destroying", uuid)
 
+	// In test environment, skip ECS task execution and return mock response
+	if envValue == "DOCKER" || envValue == "TEST" {
+		log.Println("Test environment detected, skipping ECS task execution")
+
+		m, err := json.Marshal(models.NodeResponse{
+			Message: "Compute node deletion initiated",
+		})
+		if err != nil {
+			log.Println(err.Error())
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: 500,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
+			}, nil
+		}
+
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusAccepted,
+			Body:       string(m),
+		}, nil
+	}
+
 	client := ecs.NewFromConfig(cfg)
-	log.Println("Initiating new Provisioning Fargate Task.")
+	log.Printf("Initiating delete Fargate Task with image: %s:%s", provisionerImage, provisionerImageTag)
+
+	// Create a dynamic task definition with the provisioner image
+	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, provisionerImage, provisionerImageTag, envValue)
+	if err != nil {
+		log.Printf("Error creating dynamic task definition: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
+		}, nil
+	}
+	TaskDefinitionArn := *dynamicTaskDef.TaskDefinitionArn
+
 	computeNodeIdKey := "COMPUTE_NODE_ID"
 	envKey := "ENV"
 	organizationIdKey := "ORG_ID"
@@ -218,29 +269,8 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		LaunchType: types.LaunchTypeFargate,
 	}
 
-	// In test environment, skip ECS task execution and return mock response
-	if envValue == "DOCKER" || envValue == "TEST" {
-		log.Println("Test environment detected, skipping ECS task execution")
-
-		m, err := json.Marshal(models.NodeResponse{
-			Message: "Compute node deletion initiated",
-		})
-		if err != nil {
-			log.Println(err.Error())
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: 500,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
-			}, nil
-		}
-
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusAccepted,
-			Body:       string(m),
-		}, nil
-	}
-
-	runner := runner.NewECSTaskRunner(client, runTaskIn)
-	if err := runner.Run(ctx); err != nil {
+	ecsRunner := runner.NewECSTaskRunner(client, runTaskIn)
+	if err := ecsRunner.Run(ctx); err != nil {
 		log.Println(err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 500,

@@ -77,6 +77,8 @@ type DynamoDBNode struct {
 	Identifier            string `dynamodbav:"identifier"`
 	WorkflowManagerTag    string `dynamodbav:"workflowManagerTag"`
 	DeploymentMode        string `dynamodbav:"deploymentMode"`
+	ProvisionerImage      string `dynamodbav:"provisionerImage"`
+	ProvisionerImageTag   string `dynamodbav:"provisionerImageTag"`
 	EnableLLMAccess       bool   `dynamodbav:"enableLLMAccess"`
 	LlmBaaAcknowledged    bool   `dynamodbav:"llmBaaAcknowledged"`
 	Status                string `dynamodbav:"status"`
