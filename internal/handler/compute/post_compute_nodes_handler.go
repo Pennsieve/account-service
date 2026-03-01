@@ -109,7 +109,8 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 	}
 
 	// Create a unique family name for the dynamic task definition
-	familyName := fmt.Sprintf("%s-custom-%s-%s", *baseDef.Family, strings.ReplaceAll(image, "/", "-"), tag)
+	sanitizedTag := strings.ReplaceAll(tag, ".", "-")
+	familyName := fmt.Sprintf("%s-custom-%s-%s", *baseDef.Family, strings.ReplaceAll(image, "/", "-"), sanitizedTag)
 
 	// Check if a valid task definition for this image already exists
 	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName, baseDef)
