@@ -69,38 +69,29 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
-	// Check delete permissions: only node owner or account owner can delete
-	canDelete := false
-
-	// Check if user is the node owner
-	if computeNode.UserId == userId {
-		canDelete = true
-	} else {
-		// Check if user is the account owner
-		accountsTable := os.Getenv("ACCOUNTS_TABLE")
-		if accountsTable == "" {
-			log.Println("ACCOUNTS_TABLE environment variable not set")
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusInternalServerError,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
-			}, nil
-		}
-
-		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
-		account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
-		if err != nil {
-			log.Printf("Error fetching account %s: %v", computeNode.AccountUuid, err)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusInternalServerError,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
-			}, nil
-		}
-
-		// Check if account exists and user is the account owner
-		if (store_dynamodb.Account{}) != account && account.UserId == userId {
-			canDelete = true
-		}
+	// Load account (needed for permission check and RoleName for Fargate task)
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	if accountsTable == "" {
+		log.Println("ACCOUNTS_TABLE environment variable not set")
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
 	}
+
+	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	account, err := accountStore.GetById(ctx, computeNode.AccountUuid)
+	if err != nil {
+		log.Printf("Error fetching account %s: %v", computeNode.AccountUuid, err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}, nil
+	}
+
+	// Check delete permissions: only node owner or account owner can delete
+	canDelete := computeNode.UserId == userId ||
+		((store_dynamodb.Account{}) != account && account.UserId == userId)
 
 	if !canDelete {
 		log.Printf("User %s does not have permission to delete node %s (node owner: %s)", userId, uuid, computeNode.UserId)
@@ -198,6 +189,8 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	nodeIdentifierValue := computeNode.Identifier
 	nodeNameKey := "NODE_NAME"
 	nodeNameValue := computeNode.Name
+	roleNameKey := "ROLE_NAME"
+	roleNameValue := account.RoleName
 
 	runTaskIn := &ecs.RunTaskInput{
 		TaskDefinition: aws.String(TaskDefinitionArn),
@@ -261,6 +254,10 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 						{
 							Name:  &nodeNameKey,
 							Value: &nodeNameValue,
+						},
+						{
+							Name:  &roleNameKey,
+							Value: &roleNameValue,
 						},
 					},
 				},

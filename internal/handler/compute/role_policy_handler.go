@@ -2,7 +2,11 @@ package compute
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 )
@@ -114,13 +118,38 @@ const rolePolicyDocument = `{
 	]
 }`
 
-// GetRolePolicyHandler returns the scoped IAM permission policy document
+// roleConfigResponse is the JSON envelope returned by the role-policy endpoint.
+type roleConfigResponse struct {
+	RoleName       string          `json:"roleName"`
+	PolicyDocument json.RawMessage `json:"policyDocument"`
+}
+
+// GetRolePolicyHandler returns the role configuration (name + permission policy)
 // that agents use when creating cross-account roles.
 // GET /role-policy
 func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	env := strings.ToLower(os.Getenv("ENV"))
+	if env == "" {
+		env = "dev"
+	}
+	roleName := fmt.Sprintf("Pennsieve-Compute-%s", env)
+
+	resp := roleConfigResponse{
+		RoleName:       roleName,
+		PolicyDocument: json.RawMessage(rolePolicyDocument),
+	}
+
+	body, err := json.Marshal(resp)
+	if err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to marshal role config"}`,
+		}, nil
+	}
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
 		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       rolePolicyDocument,
+		Body:       string(body),
 	}, nil
 }

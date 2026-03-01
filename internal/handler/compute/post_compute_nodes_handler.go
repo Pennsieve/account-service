@@ -522,6 +522,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			enableLLMAccessValue = "true"
 		}
 
+		roleNameKey := "ROLE_NAME"
+		roleNameValue := account.RoleName
 		computeNodeIdKey := "COMPUTE_NODE_ID"
 		computeNodeIdValue := nodeUuid
 		nodeIdentifierKey := "NODE_IDENTIFIER"
@@ -613,6 +615,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 							{
 								Name:  &enableLLMAccessKey,
 								Value: &enableLLMAccessValue,
+							},
+							{
+								Name:  &roleNameKey,
+								Value: &roleNameValue,
 							},
 						},
 					},
