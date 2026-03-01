@@ -29,6 +29,7 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.GET("/accounts", accountHandler.GetAccountsHandler)
     router.GET("/accounts/{id}", accountHandler.GetAccountHandler)
     router.PATCH("/accounts/{id}", accountHandler.PatchAccountHandler)
+    router.DELETE("/accounts/{id}", accountHandler.DeleteAccountHandler)
 
     // Workspace Enabling Routes
     router.POST("/accounts/{uuid}/workspaces", accountHandler.PostAccountWorkspaceEnablementHandler)

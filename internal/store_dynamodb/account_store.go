@@ -15,6 +15,7 @@ type DynamoDBStore interface {
 	GetById(context.Context, string) (Account, error)
 	Get(context.Context, string, map[string]string) ([]Account, error)
 	Update(context.Context, Account) error
+	Delete(context.Context, string) error
 }
 
 type AccountDatabaseStore struct {
@@ -137,14 +138,26 @@ func (r *AccountDatabaseStore) Update(ctx context.Context, account Account) erro
 	if err != nil {
 		return fmt.Errorf("error marshaling account: %w", err)
 	}
-	
+
 	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(r.TableName), 
+		TableName: aws.String(r.TableName),
 		Item: item,
 	})
 	if err != nil {
 		return fmt.Errorf("error updating account: %w", err)
 	}
 
+	return nil
+}
+
+func (r *AccountDatabaseStore) Delete(ctx context.Context, uuid string) error {
+	account := Account{Uuid: uuid}
+	_, err := r.DB.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		Key:       account.GetKey(),
+		TableName: aws.String(r.TableName),
+	})
+	if err != nil {
+		return fmt.Errorf("error deleting account: %w", err)
+	}
 	return nil
 }

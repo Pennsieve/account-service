@@ -21,6 +21,7 @@ var ErrAccountNotFound = errors.New("account not found")
 var ErrAccountDoesNotBelongToUser = errors.New("account does not belong to user")
 var ErrWorkspaceEnablementNotFound = errors.New("workspace enablement not found")
 var ErrAccountAlreadyEnabledForWorkspace = errors.New("account already enabled for workspace")
+var ErrAccountHasActiveNodes = errors.New("account has active compute nodes")
 var ErrInvalidStatus = errors.New("invalid status value")
 
 // Compute-specific errors
