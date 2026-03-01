@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/pennsieve/account-service/internal/utils"
 )
 
 // rolePolicyDocument is the scoped IAM permission policy served to agents
@@ -122,12 +124,13 @@ const rolePolicyDocument = `{
 
 // roleConfigResponse is the JSON envelope returned by the role-policy endpoint.
 type roleConfigResponse struct {
-	RoleName       string          `json:"roleName"`
-	PolicyDocument json.RawMessage `json:"policyDocument"`
+	RoleName            string          `json:"roleName"`
+	PolicyDocument      json.RawMessage `json:"policyDocument"`
+	TrustPolicyDocument json.RawMessage `json:"trustPolicyDocument"`
 }
 
-// GetRolePolicyHandler returns the role configuration (name + permission policy)
-// that agents use when creating cross-account roles.
+// GetRolePolicyHandler returns the role configuration (name + permission policy +
+// trust policy) that agents use when creating cross-account roles.
 // GET /role-policy
 func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	env := strings.ToLower(os.Getenv("ENV"))
@@ -143,9 +146,40 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 	}
 	roleName := fmt.Sprintf("Pennsieve-Compute-%s-%s", env, hex.EncodeToString(suffix))
 
+	// Get the Pennsieve provisioner account ID to build the trust policy
+	cfg, err := utils.LoadAWSConfig(ctx)
+	if err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to load AWS config"}`,
+		}, nil
+	}
+	stsClient := sts.NewFromConfig(cfg)
+	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to get provisioner account ID"}`,
+		}, nil
+	}
+
+	trustPolicyDocument := fmt.Sprintf(`{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"AWS": "%s"
+			},
+			"Action": "sts:AssumeRole"
+		}
+	]
+}`, *identity.Account)
+
 	resp := roleConfigResponse{
-		RoleName:       roleName,
-		PolicyDocument: json.RawMessage(rolePolicyDocument),
+		RoleName:            roleName,
+		PolicyDocument:      json.RawMessage(rolePolicyDocument),
+		TrustPolicyDocument: json.RawMessage(trustPolicyDocument),
 	}
 
 	body, err := json.Marshal(resp)

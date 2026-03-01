@@ -24,7 +24,6 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 
     router := NewLambdaRouter()
     // Account management routes
-    router.GET("/pennsieve-accounts/{accountType}", accountHandler.GetPennsieveAccountsHandler)
     router.POST("/accounts", accountHandler.PostAccountsHandler)
     router.GET("/accounts", accountHandler.GetAccountsHandler)
     router.GET("/accounts/{id}", accountHandler.GetAccountHandler)

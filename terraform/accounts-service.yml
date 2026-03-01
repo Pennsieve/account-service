@@ -95,15 +95,6 @@ components:
         description:
           type: string
           description: optional description for the account
-    pennsieveAccountsGetResponse:
-      type: object
-      properties:
-        accountId:
-          type: string
-          description: the accountId of the Pennsieve Account
-        accountType:
-          type: string
-          description: the account type of Pennsieve Account
     postAccountsResponse:
       type: object
       properties:
@@ -444,36 +435,6 @@ components:
               message:
                 type: string
 paths:
-  /pennsieve-accounts/{accountType}:
-    get:
-      summary: Get Pennsieve Accounts
-      description: |
-        Gets Pennsieve Accounts by accountType
-      x-amazon-apigateway-integration:
-        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
-      operationId: getPennsieveAccounts
-      security:
-        - token_auth: [ ]
-      tags:
-        - Account
-      parameters:
-        - in: path
-          name: accountType
-          required: true
-          schema:
-            type: string
-          description: The Pennsieve account type.
-      responses:
-        '200':
-          description: The requested account
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/pennsieveAccountsGetResponse'
-        '4XX':
-          $ref: '#/components/responses/Unauthorized'
-        '5XX':
-          $ref: '#/components/responses/Error'
   /accounts/{uuid}/workspaces:
     post:
       summary: Enable a workspace for an account

@@ -26,7 +26,6 @@ This service is built as a serverless application using:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/pennsieve-accounts/{accountType}` | Retrieve Pennsieve AWS account information |
 | `POST` | `/accounts` | Create a new account registration |
 | `GET` | `/accounts` | List accounts for the authenticated user |
 | `GET` | `/accounts/{id}` | Retrieve specific account by ID |
