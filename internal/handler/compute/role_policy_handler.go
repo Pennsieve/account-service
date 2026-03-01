@@ -2,6 +2,8 @@ package compute
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -132,7 +134,14 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 	if env == "" {
 		env = "dev"
 	}
-	roleName := fmt.Sprintf("Pennsieve-Compute-%s", env)
+	suffix := make([]byte, 4)
+	if _, err := rand.Read(suffix); err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to generate role name"}`,
+		}, nil
+	}
+	roleName := fmt.Sprintf("Pennsieve-Compute-%s-%s", env, hex.EncodeToString(suffix))
 
 	resp := roleConfigResponse{
 		RoleName:       roleName,
