@@ -148,7 +148,18 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
 		}, nil
 	}
-	
+
+	// Update provisioner image and tag in DynamoDB to match what the Fargate task will use
+	computeNode.ProvisionerImage = updateRequest.ProvisionerImage
+	computeNode.ProvisionerImageTag = updateRequest.ProvisionerImageTag
+	if err := dynamo_store.Put(ctx, computeNode); err != nil {
+		log.Printf("Error updating provisioner image/tag for node %s: %v", uuid, err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}, nil
+	}
+
 	// In test environment, skip ECS task execution and return mock response
 	if envValue == "DOCKER" || envValue == "TEST" {
 		log.Println("Test environment detected, skipping ECS task execution")
