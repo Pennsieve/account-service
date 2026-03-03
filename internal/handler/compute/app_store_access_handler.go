@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -57,11 +56,7 @@ func PostAppStoreAccessHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 
-	// Extract repo name from URL (format: <account>.dkr.ecr.<region>.amazonaws.com/<name>)
-	repoName := repoURL
-	if idx := strings.LastIndex(repoURL, "/"); idx >= 0 {
-		repoName = repoURL[idx+1:]
-	}
+	repoName := utils.ExtractRepoName(repoURL)
 
 	// Skip ECR calls in test environments
 	envValue := os.Getenv("ENV")

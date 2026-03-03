@@ -7,6 +7,7 @@ import (
     "net/http"
     "os"
     "regexp"
+    "strings"
 
     "github.com/aws/aws-lambda-go/events"
     "github.com/aws/aws-sdk-go-v2/aws"
@@ -46,6 +47,17 @@ func GetUserIdFromRequest(request events.APIGatewayV2HTTPRequest) (string, error
     }
 
     return userId, nil
+}
+
+// ExtractRepoName extracts the repository name from an ECR repository URL or ARN.
+//
+//	URL: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-repo  →  my-repo
+//	ARN: arn:aws:ecr:us-east-1:123456789012:repository/my-repo  →  my-repo
+func ExtractRepoName(urlOrArn string) string {
+    if idx := strings.LastIndex(urlOrArn, "/"); idx >= 0 {
+        return urlOrArn[idx+1:]
+    }
+    return urlOrArn
 }
 
 // LoadAWSConfig loads AWS configuration with test-aware settings
