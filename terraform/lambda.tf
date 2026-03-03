@@ -35,6 +35,7 @@ resource "aws_lambda_function" "service_lambda" {
       SUBNET_IDS = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
       SECURITY_GROUP = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
       TASK_DEF_CONTAINER_NAME = var.tier
+      APP_STORE_ECR_REPOSITORY = data.terraform_remote_state.platform_infrastructure.outputs.appstore_private_ecr_repository_url
     }
   }
 }
