@@ -47,36 +47,53 @@ func NewAppStorePolicy(client *ecr.Client, repoName string) AppStorePolicy {
 	return &appStorePolicy{client: client, repoName: repoName}
 }
 
+// maxRetries is the number of times EnsureAccess will retry after detecting
+// that a concurrent write overwrote our principal.
+const maxRetries = 3
+
 // EnsureAccess adds the given AWS account as a cross-account pull principal
 // on the repository policy. It is a no-op if the account already has access.
+// It retries if a concurrent update overwrites the principal (read-modify-write race).
 func (p *appStorePolicy) EnsureAccess(ctx context.Context, accountId string) error {
 	principal := fmt.Sprintf("arn:aws:iam::%s:root", accountId)
 
-	policy, err := p.getPolicy(ctx)
-	if err != nil {
-		return fmt.Errorf("error getting ECR repository policy: %w", err)
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		policy, err := p.getPolicy(ctx)
+		if err != nil {
+			return fmt.Errorf("error getting ECR repository policy: %w", err)
+		}
+
+		if ContainsPrincipal(policy, principal) {
+			return nil
+		}
+
+		AddPrincipal(&policy, principal)
+
+		policyJSON, err := json.Marshal(policy)
+		if err != nil {
+			return fmt.Errorf("error marshaling ECR policy: %w", err)
+		}
+
+		_, err = p.client.SetRepositoryPolicy(ctx, &ecr.SetRepositoryPolicyInput{
+			RepositoryName: aws.String(p.repoName),
+			PolicyText:     aws.String(string(policyJSON)),
+		})
+		if err != nil {
+			return fmt.Errorf("error setting ECR repository policy: %w", err)
+		}
+
+		// Re-read the policy to verify our principal survived (another writer may have overwritten it).
+		policy, err = p.getPolicy(ctx)
+		if err != nil {
+			return fmt.Errorf("error verifying ECR repository policy: %w", err)
+		}
+
+		if ContainsPrincipal(policy, principal) {
+			return nil
+		}
 	}
 
-	if ContainsPrincipal(policy, principal) {
-		return nil
-	}
-
-	AddPrincipal(&policy, principal)
-
-	policyJSON, err := json.Marshal(policy)
-	if err != nil {
-		return fmt.Errorf("error marshaling ECR policy: %w", err)
-	}
-
-	_, err = p.client.SetRepositoryPolicy(ctx, &ecr.SetRepositoryPolicyInput{
-		RepositoryName: aws.String(p.repoName),
-		PolicyText:     aws.String(string(policyJSON)),
-	})
-	if err != nil {
-		return fmt.Errorf("error setting ECR repository policy: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("failed to add principal %s to ECR policy after %d retries: concurrent modification", principal, maxRetries)
 }
 
 func (p *appStorePolicy) getPolicy(ctx context.Context) (PolicyDocument, error) {
