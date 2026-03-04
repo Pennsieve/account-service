@@ -54,6 +54,9 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.POST("/compute-nodes/{id}/organization", computeHandler.AttachNodeToOrganizationHandler)
     router.DELETE("/compute-nodes/{id}/organization", computeHandler.DetachNodeFromOrganizationHandler)
 
+    // App Store access endpoint
+    router.POST("/app-store/access", computeHandler.PostAppStoreAccessHandler)
+
     // Role policy endpoint
     router.GET("/role-policy", computeHandler.GetRolePolicyHandler)
 

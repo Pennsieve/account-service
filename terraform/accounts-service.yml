@@ -1319,6 +1319,44 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+  /app-store/access:
+    post:
+      summary: Grant App Store ECR access
+      description: |
+        Grants all registered AWS accounts cross-account pull access to the
+        private App Store ECR repository. All account principals are consolidated
+        into a single repository policy statement.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: postAppStoreAccess
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      requestBody:
+        description: Account requesting App Store access
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountId
+                - accountType
+              properties:
+                accountId:
+                  type: string
+                  description: The AWS account ID requesting access
+                accountType:
+                  type: string
+                  description: The type of the account
+      responses:
+        '200':
+          description: Successfully updated ECR repository policy
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
   /role-policy:
     get:
       summary: Get IAM role policy

@@ -35,3 +35,4 @@ TEST_STRATEGY.md
 # local dynamodb test tables
 compute.test
 store_dynamodb.test
+.DS_Store

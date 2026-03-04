@@ -136,6 +136,16 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = [data.aws_kms_key.aws_ssm_kms_key.arn]
   }
 
+  statement {
+    sid    = "ECRAppStorePermissions"
+    effect = "Allow"
+    actions = [
+      "ecr:SetRepositoryPolicy",
+      "ecr:GetRepositoryPolicy"
+    ]
+    resources = [data.terraform_remote_state.platform_infrastructure.outputs.appstore_private_ecr_repository_arn]
+  }
+
 }
 
 
