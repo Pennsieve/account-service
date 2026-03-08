@@ -185,7 +185,7 @@ func TestEnrichAccessDetails(t *testing.T) {
 	}
 	mockStore.On("GetNodeAccess", ctx, response.NodeUuid).Return(accessList, nil)
 	
-	err := enrichAccessDetails(ctx, response, mockStore, nil, nil)
+	err := enrichAccessDetails(ctx, response, mockStore, nil)
 	
 	assert.NoError(t, err)
 	assert.Equal(t, string(models.AccessTypeOwner), response.AccessType)

@@ -388,6 +388,19 @@ components:
         entityId:
           type: string
           description: ID of the entity the action was performed on
+    secretsRequest:
+      type: object
+      required:
+        - secrets
+      properties:
+        secrets:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            Key-value map of secrets to store. Keys must match [A-Za-z_][A-Za-z0-9_]*.
+            Maximum 50 secrets, key max 256 chars, value max 10000 chars.
+            System-reserved key names (e.g. SESSION_TOKEN, DATASET_ID) are rejected.
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -1311,6 +1324,244 @@ paths:
                 $ref: '#/components/schemas/permissionActionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/secrets:
+    put:
+      summary: Store user secrets for a compute node
+      description: |
+        Stores user-scoped secrets for the specified compute node. These secrets
+        are private to the authenticated user and will be injected into workflow
+        executions on this node. Requires node access (owner, shared, or workspace).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putSecrets
+      security:
+        - token_auth: [ ]
+      tags:
+        - Secrets
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/secretsRequest'
+      responses:
+        '200':
+          description: Secrets updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get user secrets for a compute node
+      description: |
+        Retrieves the user-scoped secrets for the specified compute node.
+        Returns only secrets belonging to the authenticated user.
+        Requires node access (owner, shared, or workspace).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getSecrets
+      security:
+        - token_auth: [ ]
+      tags:
+        - Secrets
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: User secrets for the compute node
+          content:
+            application/json:
+              schema:
+                type: object
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete user secrets for a compute node
+      description: |
+        Deletes all user-scoped secrets for the specified compute node.
+        Only removes secrets belonging to the authenticated user.
+        Requires node access (owner, shared, or workspace).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteSecrets
+      security:
+        - token_auth: [ ]
+      tags:
+        - Secrets
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Secrets deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/shared-secrets:
+    put:
+      summary: Store shared secrets for a compute node
+      description: |
+        Stores shared secrets for the specified compute node. These secrets
+        are visible to all users with access to the node. Only the node owner
+        can create or update shared secrets.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putSharedSecrets
+      security:
+        - token_auth: [ ]
+      tags:
+        - Secrets
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/secretsRequest'
+      responses:
+        '200':
+          description: Shared secrets updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get shared secrets for a compute node
+      description: |
+        Retrieves the shared secrets for the specified compute node.
+        Any user with access to the node can read shared secrets.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getSharedSecrets
+      security:
+        - token_auth: [ ]
+      tags:
+        - Secrets
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Shared secrets for the compute node
+          content:
+            application/json:
+              schema:
+                type: object
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete shared secrets for a compute node
+      description: |
+        Deletes all shared secrets for the specified compute node.
+        Only the node owner can delete shared secrets.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteSharedSecrets
+      security:
+        - token_auth: [ ]
+      tags:
+        - Secrets
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Shared secrets deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':

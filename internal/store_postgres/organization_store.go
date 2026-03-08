@@ -9,31 +9,15 @@ import (
 )
 
 const (
-	// Permission bit levels - 8 or higher means Collaborator or higher
-	MinimumCollaboratorPermission = 8
 	// Permission bit level for administrators (owners and admins)
 	MinimumAdminPermission = 16
 )
 
-type OrganizationUser struct {
-	UserId         int64 `json:"userId"`
-	OrganizationId int64 `json:"organizationId"`
-	PermissionBit  int   `json:"permissionBit"`
-}
-
 type OrganizationStore interface {
-	// CheckUserOrganizationAccess checks if a user has at least Collaborator access (permission_bit >= 8) to an organization
-	CheckUserOrganizationAccess(ctx context.Context, userId, organizationId int64) (bool, error)
-	// GetUserPermissionBit returns the permission bit for a user in an organization
-	GetUserPermissionBit(ctx context.Context, userId, organizationId int64) (int, error)
 	// CheckUserIsOrganizationAdmin checks if a user has admin access (permission_bit >= 16) to an organization
 	CheckUserIsOrganizationAdmin(ctx context.Context, userId, organizationId int64) (bool, error)
-	// CheckUserExists checks if a user exists in the platform
-	CheckUserExists(ctx context.Context, userId int64) (bool, error)
 	// CheckUserExistsByNodeId checks if a user exists by their node_id (e.g., "N:user:uuid")
 	CheckUserExistsByNodeId(ctx context.Context, nodeId string) (bool, error)
-	// GetUserIdByNodeId returns the numeric user ID for a given node_id
-	GetUserIdByNodeId(ctx context.Context, nodeId string) (int64, error)
 	// GetOrganizationIdByNodeId returns the numeric organization ID for a given node_id
 	GetOrganizationIdByNodeId(ctx context.Context, nodeId string) (int64, error)
 }
@@ -46,29 +30,8 @@ func NewPostgresOrganizationStore(db *sql.DB) OrganizationStore {
 	return &PostgresOrganizationStore{DB: db}
 }
 
-// CheckUserOrganizationAccess checks if a user has at least Collaborator access (permission_bit >= 8) to an organization
-func (s *PostgresOrganizationStore) CheckUserOrganizationAccess(ctx context.Context, userId, organizationId int64) (bool, error) {
-	query := `
-		SELECT permission_bit 
-		FROM pennsieve.organization_user 
-		WHERE user_id = $1 AND organization_id = $2`
-	
-	var permissionBit int
-	err := s.DB.QueryRowContext(ctx, query, userId, organizationId).Scan(&permissionBit)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// User is not a member of the organization
-			return false, nil
-		}
-		return false, fmt.Errorf("error checking user organization access: %w", err)
-	}
-	
-	// Check if user has Collaborator or higher permissions (permission_bit >= 8)
-	return permissionBit >= MinimumCollaboratorPermission, nil
-}
-
-// GetUserPermissionBit returns the permission bit for a user in an organization
-func (s *PostgresOrganizationStore) GetUserPermissionBit(ctx context.Context, userId, organizationId int64) (int, error) {
+// getUserPermissionBit returns the permission bit for a user in an organization
+func (s *PostgresOrganizationStore) getUserPermissionBit(ctx context.Context, userId, organizationId int64) (int, error) {
 	query := `
 		SELECT permission_bit 
 		FROM pennsieve.organization_user 
@@ -88,7 +51,7 @@ func (s *PostgresOrganizationStore) GetUserPermissionBit(ctx context.Context, us
 
 // CheckUserIsOrganizationAdmin checks if a user has admin access (permission_bit >= 16) to an organization
 func (s *PostgresOrganizationStore) CheckUserIsOrganizationAdmin(ctx context.Context, userId, organizationId int64) (bool, error) {
-	permissionBit, err := s.GetUserPermissionBit(ctx, userId, organizationId)
+	permissionBit, err := s.getUserPermissionBit(ctx, userId, organizationId)
 	if err != nil {
 		// If user is not a member, return false without error
 		if err == sql.ErrNoRows {
@@ -99,25 +62,6 @@ func (s *PostgresOrganizationStore) CheckUserIsOrganizationAdmin(ctx context.Con
 	
 	// Check if user has Admin or Owner permissions (permission_bit >= 16)
 	return permissionBit >= MinimumAdminPermission, nil
-}
-
-// CheckUserExists checks if a user exists in the platform
-func (s *PostgresOrganizationStore) CheckUserExists(ctx context.Context, userId int64) (bool, error) {
-	query := `
-		SELECT 1 
-		FROM pennsieve.users 
-		WHERE id = $1`
-	
-	var exists int
-	err := s.DB.QueryRowContext(ctx, query, userId).Scan(&exists)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		return false, fmt.Errorf("error checking if user exists: %w", err)
-	}
-	
-	return true, nil
 }
 
 // CheckUserExistsByNodeId checks if a user exists by their node_id (e.g., "N:user:uuid")
@@ -137,25 +81,6 @@ func (s *PostgresOrganizationStore) CheckUserExistsByNodeId(ctx context.Context,
 	}
 	
 	return true, nil
-}
-
-// GetUserIdByNodeId returns the numeric user ID for a given node_id
-func (s *PostgresOrganizationStore) GetUserIdByNodeId(ctx context.Context, nodeId string) (int64, error) {
-	query := `
-		SELECT id 
-		FROM pennsieve.users 
-		WHERE node_id = $1`
-	
-	var userId int64
-	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(&userId)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, fmt.Errorf("user with node_id %s not found", nodeId)
-		}
-		return 0, fmt.Errorf("error getting user ID by node_id: %w", err)
-	}
-	
-	return userId, nil
 }
 
 // GetOrganizationIdByNodeId returns the numeric organization ID for a given node_id

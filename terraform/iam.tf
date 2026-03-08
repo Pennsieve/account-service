@@ -146,6 +146,17 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = [data.terraform_remote_state.platform_infrastructure.outputs.appstore_private_ecr_repository_arn]
   }
 
+  statement {
+    sid    = "InvokeDirectAuthorizerLambda"
+    effect = "Allow"
+    actions = [
+      "lambda:InvokeFunction"
+    ]
+    resources = [
+      data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_arn
+    ]
+  }
+
 }
 
 
@@ -380,6 +391,27 @@ resource "aws_iam_role_policy" "check_access_lambda_dynamodb" {
         Resource = [
           aws_dynamodb_table.compute_node_access_table.arn,
           "${aws_dynamodb_table.compute_node_access_table.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Policy for invoking the direct authorizer Lambda
+resource "aws_iam_role_policy" "check_access_lambda_authorizer" {
+  name = "${var.environment_name}-${var.service_name}-check-access-authorizer-policy"
+  role = aws_iam_role.check_access_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = [
+          data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_arn
         ]
       }
     ]

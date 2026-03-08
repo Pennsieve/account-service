@@ -8,10 +8,11 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/store_postgres"
 	"github.com/pennsieve/account-service/internal/utils"
 )
 
@@ -75,24 +76,10 @@ func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccess
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 
-	// Initialize container to get PostgreSQL connection for team lookups
-	var teamStore store_postgres.TeamStore
-	var orgStore store_postgres.OrganizationStore
-	appContainer, err := utils.GetContainer(ctx, cfg)
-	if err == nil && appContainer != nil {
-		db := appContainer.PostgresDB()
-		if db != nil {
-			teamStore = store_postgres.NewPostgresTeamStore(db)
-			orgStore = store_postgres.NewPostgresOrganizationStore(db)
-		}
-	}
-	// Note: It's okay if stores are nil - it just means no team access checking
-
-	// Initialize permission service
-	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
-	if orgStore != nil {
-		permissionService.SetOrganizationStore(orgStore)
-	}
+	// Initialize permission service with Lambda client for direct authorizer
+	lambdaClient := lambda.NewFromConfig(cfg)
+	permissionService := service.NewPermissionService(nodeAccessStore, nil)
+	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
 
 	// Check access using the permission service
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, request.UserNodeId, request.NodeUuid, request.OrganizationId)
@@ -105,7 +92,7 @@ func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccess
 
 	// If user has access, get more details about the type of access
 	if hasAccess {
-		err = enrichAccessDetails(ctx, &response, nodeAccessStore, teamStore, orgStore)
+		err = enrichAccessDetails(ctx, &response, nodeAccessStore, lambdaClient)
 		if err != nil {
 			// Log but don't fail - we already know they have access
 			log.Printf("CheckUserNodeAccessHandler: Error enriching access details: %v", err)
@@ -120,8 +107,7 @@ func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccess
 
 // enrichAccessDetails adds information about how the user has access
 func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessResponse,
-	nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore,
-	orgStore store_postgres.OrganizationStore) error {
+	nodeAccessStore store_dynamodb.NodeAccessStore, lambdaClient *lambda.Client) error {
 
 	nodeId := models.FormatNodeId(response.NodeUuid)
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, response.UserNodeId)
@@ -153,34 +139,22 @@ func enrichAccessDetails(ctx context.Context, response *CheckUserNodeAccessRespo
 		}
 	}
 
-	// Check team access (if stores are available)
-	if teamStore != nil && orgStore != nil && response.OrganizationId != "" {
-		// Get numeric IDs from node IDs
-		userIdInt, err := orgStore.GetUserIdByNodeId(ctx, response.UserNodeId)
-		if err == nil {
-			orgIdInt, err := orgStore.GetOrganizationIdByNodeId(ctx, response.OrganizationId)
-			if err == nil {
-				// Get all teams the user belongs to
-				teams, err := teamStore.GetUserTeams(ctx, userIdInt, orgIdInt)
-				if err == nil {
-					// Check which team has access to the node
-					for _, team := range teams {
-						teamEntityId := models.FormatEntityId(models.EntityTypeTeam, team.TeamNodeId)
-						hasTeamAccess, err := nodeAccessStore.HasAccess(ctx, teamEntityId, nodeId)
-						if err == nil && hasTeamAccess {
-							response.AccessType = string(models.AccessTypeShared)
-							response.AccessSource = "team"
-							response.TeamId = team.TeamNodeId
-							return nil
-						}
-					}
+	// Check team access using direct authorizer
+	if lambdaClient != nil && response.OrganizationId != "" {
+		authResp, err := authclient.InvokeDirectAuthorizer(ctx, lambdaClient, response.UserNodeId, response.OrganizationId)
+		if err == nil && authResp.IsAuthorized {
+			teamNodeIds := authclient.ExtractTeamNodeIds(authResp.Claims)
+			for _, teamNodeId := range teamNodeIds {
+				teamEntityId := models.FormatEntityId(models.EntityTypeTeam, teamNodeId)
+				hasTeamAccess, err := nodeAccessStore.HasAccess(ctx, teamEntityId, nodeId)
+				if err == nil && hasTeamAccess {
+					response.AccessType = string(models.AccessTypeShared)
+					response.AccessSource = "team"
+					response.TeamId = teamNodeId
+					return nil
 				}
 			}
 		}
-
-		// If we get here, we know they have team access but couldn't identify the specific team
-		response.AccessType = string(models.AccessTypeShared)
-		response.AccessSource = "team"
 	}
 
 	return nil

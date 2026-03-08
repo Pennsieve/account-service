@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
@@ -53,33 +55,14 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 	
-	// Initialize container to get PostgreSQL connection
-	appContainer, err := utils.GetContainer(ctx, cfg)
-	if err != nil {
-		log.Printf("Error getting container: %v", err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
-		}, nil
-	}
-
-	db := appContainer.PostgresDB()
-	if db == nil {
-		log.Printf("PostgreSQL connection required but unavailable for permission operations (handler=%s, nodeId=%s)", 
-			handlerName, nodeUuid)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
-		}, nil
-	}
-	
 	// Initialize stores
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
+	lambdaClient := lambda.NewFromConfig(cfg)
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
-	
+
 	// Get the node to validate organization context
 	node, err := nodeStore.GetById(ctx, nodeUuid)
 	if err != nil {
@@ -122,13 +105,10 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 		}
 	}
 	
-	teamStore := store_postgres.NewPostgresTeamStore(db)
-	orgStore := store_postgres.NewPostgresOrganizationStore(db)
-	
-	permissionService := service.NewPermissionService(nodeAccessStore, teamStore)
+	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetNodeStore(nodeStore)
-	permissionService.SetOrganizationStore(orgStore)
-	
+	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+
 	// Check if user has access to the node
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
 	if err != nil {
@@ -146,6 +126,16 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 	
+	// Set up Postgres stores for GetNodePermissions (stale permission cleanup)
+	appContainer, err := utils.GetContainer(ctx, cfg)
+	if err == nil {
+		db := appContainer.PostgresDB()
+		if db != nil {
+			permissionService.TeamStore = store_postgres.NewPostgresTeamStore(db)
+			permissionService.SetOrganizationStore(store_postgres.NewPostgresOrganizationStore(db))
+		}
+	}
+
 	// Get permissions
 	permissions, err := permissionService.GetNodePermissions(ctx, nodeUuid)
 	if err != nil {

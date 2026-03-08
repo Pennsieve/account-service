@@ -139,7 +139,49 @@ pennsieve account deregister --profile <aws-profile>
 
 This deletes the Pennsieve account record (and any workspace enablements), then removes the cross-account IAM role (`Pennsieve-Compute-{env}-{id}`) from your AWS account. If you still have active compute nodes, the command will warn you and require the `--force` flag.
 
+The CLI uses the `--profile` flag to determine your AWS account ID (via STS), then looks up the matching Pennsieve registration for your user and deletes it by its internal UUID. This means deregistering only removes **your** registration — if other Pennsieve users have also registered the same AWS account, their registrations and cross-account roles are unaffected.
+
 You can also manually delete the `Pennsieve-Compute-{env}-{id}` role in the IAM console at any time for an immediate revocation. Note that this will prevent Pennsieve from managing or cleaning up any remaining compute nodes — you would need to remove those resources yourself.
+
+## How Pennsieve handles secrets
+
+If your workflows need API keys, database passwords, or other sensitive credentials, Pennsieve lets you store them as **secrets** on your compute node. Here's how it works and — just as importantly — where your secrets actually live.
+
+### Secrets are stored in your AWS account, not ours
+
+When you save a secret through Pennsieve, it is written to **AWS Secrets Manager in your AWS account**. Pennsieve does not copy, cache, or store your secret values on any Pennsieve-owned infrastructure. There is no Pennsieve database, S3 bucket, or log that contains your secrets.
+
+The flow looks like this:
+
+1. You submit a secret (e.g., an API key) through the Pennsieve API.
+2. Pennsieve forwards the request to a **compute gateway** — a Lambda function running inside your AWS account.
+3. The gateway stores the secret in AWS Secrets Manager in your account, encrypted with your account's KMS key.
+4. When a workflow runs, the processors in your account retrieve the secrets directly from Secrets Manager — Pennsieve is not in the middle.
+
+### Does Pennsieve have access to my secrets?
+
+Pennsieve acts as a **pass-through** when you create or update a secret. The secret value travels through the Pennsieve API on its way to your account, but it is not persisted anywhere on our side. Once the request is forwarded to your compute gateway, Pennsieve's involvement ends.
+
+The cross-account role that Pennsieve uses has permission to call the compute gateway (a Lambda function URL in your account). The gateway itself manages Secrets Manager — Pennsieve does not have direct `secretsmanager:GetSecretValue` or `secretsmanager:PutSecret` permissions on your account's secrets.
+
+At runtime, only the processor roles in your account (the ECS task role or Lambda execution role) can read secrets — and only the secrets for their specific compute node.
+
+### Two types of secrets
+
+| Type | Who can manage them | Who can read them at runtime |
+|------|-------------------|------------------------------|
+| **User secrets** | The individual user who created them | Only that user's workflow runs |
+| **Shared secrets** | The compute node owner | All workflow runs on that compute node |
+
+User secrets are scoped per-user, so two users on the same compute node cannot see each other's secrets. Shared secrets are available to all users who have access to the compute node.
+
+### Summary
+
+- Your secrets live in **AWS Secrets Manager in your account**.
+- Pennsieve **does not store** secret values on Pennsieve infrastructure.
+- Pennsieve **does not have direct access** to read your secrets from Secrets Manager.
+- Secret values pass through the Pennsieve API during create/update, but are not logged or persisted.
+- At runtime, only your own processor roles can retrieve secrets.
 
 ## Frequently asked questions
 
@@ -154,3 +196,9 @@ No. Pennsieve uses AWS STS (Security Token Service) to obtain temporary credenti
 
 **What happens if a workflow is running when I revoke access?**
 Running ECS tasks and Lambda functions will continue to execute (they use their own roles), but Pennsieve will no longer be able to monitor, update, or clean up the workflow.
+
+**Are my secrets stored on Pennsieve?**
+No. Secrets are stored in AWS Secrets Manager in your own AWS account. Pennsieve forwards your secrets to a gateway function in your account and does not persist them on any Pennsieve-owned infrastructure.
+
+**Can Pennsieve read my secrets?**
+Pennsieve does not have `secretsmanager:GetSecretValue` permissions on your account. Only the processor roles within your account can read secrets at runtime. Secret values do pass through the Pennsieve API during create and update operations, but they are not logged or stored.

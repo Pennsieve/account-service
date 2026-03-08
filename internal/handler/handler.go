@@ -54,6 +54,16 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.POST("/compute-nodes/{id}/organization", computeHandler.AttachNodeToOrganizationHandler)
     router.DELETE("/compute-nodes/{id}/organization", computeHandler.DetachNodeFromOrganizationHandler)
 
+    // Compute node secrets routes (user secrets)
+    router.PUT("/compute-nodes/{id}/secrets", computeHandler.PutSecretsHandler)
+    router.GET("/compute-nodes/{id}/secrets", computeHandler.GetSecretsHandler)
+    router.DELETE("/compute-nodes/{id}/secrets", computeHandler.DeleteSecretsHandler)
+
+    // Compute node secrets routes (shared secrets — owner only for PUT/DELETE)
+    router.PUT("/compute-nodes/{id}/shared-secrets", computeHandler.PutSharedSecretsHandler)
+    router.GET("/compute-nodes/{id}/shared-secrets", computeHandler.GetSharedSecretsHandler)
+    router.DELETE("/compute-nodes/{id}/shared-secrets", computeHandler.DeleteSharedSecretsHandler)
+
     // App Store access endpoint
     router.POST("/app-store/access", computeHandler.PostAppStoreAccessHandler)
 

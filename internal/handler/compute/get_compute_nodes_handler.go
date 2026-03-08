@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
@@ -116,7 +118,9 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	} else {
 		// Permission-based access control (existing logic)
 		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+		lambdaClient := lambda.NewFromConfig(cfg)
 		permissionService := service.NewPermissionService(nodeAccessStore, nil)
+		permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
 
 		if organizationId == "" {
 			// No organization_id provided: return nodes owned by the user
