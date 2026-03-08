@@ -157,6 +157,15 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     ]
   }
 
+  statement {
+    sid    = "InvokeComputeGatewayUrl"
+    effect = "Allow"
+    actions = [
+      "lambda:InvokeFunctionUrl"
+    ]
+    resources = ["arn:aws:lambda:*:*:function:compute-gateway-*"]
+  }
+
 }
 
 
