@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -44,7 +45,7 @@ func (c *ProvisionerClient) Delete(ctx context.Context, path string) ([]byte, er
 }
 
 func (c *ProvisionerClient) doRequest(ctx context.Context, method, path string, body []byte) ([]byte, error) {
-	url := c.GatewayURL + path
+	url := strings.TrimRight(c.GatewayURL, "/") + path
 
 	var bodyReader io.Reader
 	if body != nil {
@@ -94,7 +95,7 @@ func (c *ProvisionerClient) doRequest(ctx context.Context, method, path string, 
 	}
 
 	if resp.StatusCode >= 400 {
-		log.Printf("Provisioner %s %s returned %d", method, path, resp.StatusCode)
+		log.Printf("Provisioner %s %s returned %d: %s", method, path, resp.StatusCode, string(respBody))
 		return respBody, fmt.Errorf("provisioner returned status %d", resp.StatusCode)
 	}
 
