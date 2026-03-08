@@ -90,7 +90,7 @@ func PutSecretsHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 	path := fmt.Sprintf("/secrets?computeNodeId=%s&userId=%s&scope=user",
 		url.QueryEscape(sctx.NodeUuid), url.QueryEscape(sctx.UserID))
 
-	if _, err := sctx.ProvisionerClient.Put(ctx, path, payload); err != nil {
+	if _, err := sctx.ProvisionerClient.Patch(ctx, path, payload); err != nil {
 		log.Printf("Error putting user secrets: %v", err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,

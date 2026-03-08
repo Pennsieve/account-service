@@ -64,7 +64,7 @@ func PutSharedSecretsHandler(ctx context.Context, request events.APIGatewayV2HTT
 	path := fmt.Sprintf("/secrets?computeNodeId=%s&scope=shared",
 		url.QueryEscape(sctx.NodeUuid))
 
-	if _, err := sctx.ProvisionerClient.Put(ctx, path, payload); err != nil {
+	if _, err := sctx.ProvisionerClient.Patch(ctx, path, payload); err != nil {
 		log.Printf("Error putting shared secrets: %v", err)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,

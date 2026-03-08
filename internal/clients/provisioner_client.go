@@ -32,8 +32,8 @@ func NewProvisionerClient(gatewayURL, region string, cfg aws.Config) *Provisione
 	}
 }
 
-func (c *ProvisionerClient) Put(ctx context.Context, path string, body []byte) ([]byte, error) {
-	return c.doRequest(ctx, http.MethodPut, path, body)
+func (c *ProvisionerClient) Patch(ctx context.Context, path string, body []byte) ([]byte, error) {
+	return c.doRequest(ctx, http.MethodPatch, path, body)
 }
 
 func (c *ProvisionerClient) Get(ctx context.Context, path string) ([]byte, error) {

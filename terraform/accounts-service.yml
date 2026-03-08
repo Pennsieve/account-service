@@ -1333,15 +1333,17 @@ paths:
         '5XX':
           $ref: '#/components/responses/Error'
   /compute-nodes/{id}/secrets:
-    put:
-      summary: Store user secrets for a compute node
+    patch:
+      summary: Add or update user secrets for a compute node
       description: |
-        Stores user-scoped secrets for the specified compute node. These secrets
-        are private to the authenticated user and will be injected into workflow
-        executions on this node. Requires node access (owner, shared, or workspace).
+        Merges user-scoped secrets for the specified compute node. New keys are
+        added and existing keys are updated; keys not included in the request
+        are left unchanged. These secrets are private to the authenticated user
+        and will be injected into workflow executions on this node. Requires
+        node access (owner, shared, or workspace). Use DELETE to remove secrets.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
-      operationId: putSecrets
+      operationId: patchSecrets
       security:
         - token_auth: [ ]
       tags:
@@ -1453,15 +1455,17 @@ paths:
         '5XX':
           $ref: '#/components/responses/Error'
   /compute-nodes/{id}/shared-secrets:
-    put:
-      summary: Store shared secrets for a compute node
+    patch:
+      summary: Add or update shared secrets for a compute node
       description: |
-        Stores shared secrets for the specified compute node. These secrets
-        are visible to all users with access to the node. Only the node owner
-        can create or update shared secrets.
+        Merges shared secrets for the specified compute node. New keys are
+        added and existing keys are updated; keys not included in the request
+        are left unchanged. These secrets are visible to all users with access
+        to the node. Only the node owner can create or update shared secrets.
+        Use DELETE to remove secrets.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
-      operationId: putSharedSecrets
+      operationId: patchSharedSecrets
       security:
         - token_auth: [ ]
       tags:
