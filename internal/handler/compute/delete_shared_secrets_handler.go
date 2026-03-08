@@ -19,8 +19,24 @@ func DeleteSharedSecretsHandler(ctx context.Context, request events.APIGatewayV2
 		return *errResp, nil
 	}
 
+	key := request.QueryStringParameters["key"]
+	deleteAll := request.QueryStringParameters["deleteAll"] == "true"
+
+	if key == "" && !deleteAll {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, fmt.Errorf("must specify 'key' or 'deleteAll=true'")),
+		}, nil
+	}
+
 	path := fmt.Sprintf("/secrets?computeNodeId=%s&scope=shared",
 		url.QueryEscape(sctx.NodeUuid))
+	if key != "" {
+		path += "&key=" + url.QueryEscape(key)
+	}
+	if deleteAll {
+		path += "&deleteAll=true"
+	}
 
 	if _, err := sctx.ProvisionerClient.Delete(ctx, path); err != nil {
 		log.Printf("Error deleting shared secrets: %v", err)
@@ -30,8 +46,15 @@ func DeleteSharedSecretsHandler(ctx context.Context, request events.APIGatewayV2
 		}, nil
 	}
 
+	if deleteAll {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       `{"message":"all shared secrets deleted"}`,
+		}, nil
+	}
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
-		Body:       `{"message":"shared secrets deleted"}`,
+		Body:       fmt.Sprintf(`{"message":"shared secret '%s' deleted"}`, key),
 	}, nil
 }

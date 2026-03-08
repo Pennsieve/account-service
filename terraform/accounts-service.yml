@@ -1419,9 +1419,9 @@ paths:
     delete:
       summary: Delete user secrets for a compute node
       description: |
-        Deletes all user-scoped secrets for the specified compute node.
-        Only removes secrets belonging to the authenticated user.
-        Requires node access (owner, shared, or workspace).
+        Deletes a specific user-scoped secret by key, or all user secrets
+        when deleteAll=true. Only removes secrets belonging to the
+        authenticated user. Requires node access (owner, shared, or workspace).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteSecrets
@@ -1436,9 +1436,22 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: key
+          required: false
+          schema:
+            type: string
+          description: The key of the specific secret to delete
+        - in: query
+          name: deleteAll
+          required: false
+          schema:
+            type: string
+            enum: ["true"]
+          description: Set to "true" to delete all user secrets
       responses:
         '200':
-          description: Secrets deleted successfully
+          description: Secret(s) deleted successfully
           content:
             application/json:
               schema:
@@ -1540,8 +1553,8 @@ paths:
     delete:
       summary: Delete shared secrets for a compute node
       description: |
-        Deletes all shared secrets for the specified compute node.
-        Only the node owner can delete shared secrets.
+        Deletes a specific shared secret by key, or all shared secrets
+        when deleteAll=true. Only the node owner can delete shared secrets.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteSharedSecrets
@@ -1556,9 +1569,22 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
+        - in: query
+          name: key
+          required: false
+          schema:
+            type: string
+          description: The key of the specific shared secret to delete
+        - in: query
+          name: deleteAll
+          required: false
+          schema:
+            type: string
+            enum: ["true"]
+          description: Set to "true" to delete all shared secrets
       responses:
         '200':
-          description: Shared secrets deleted successfully
+          description: Shared secret(s) deleted successfully
           content:
             application/json:
               schema:
