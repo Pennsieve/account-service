@@ -24,6 +24,7 @@ resource "aws_lambda_function" "service_lambda" {
       ACCOUNT_WORKSPACE_TABLE = aws_dynamodb_table.account_workspace_table.name
       COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
       NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
+      DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
       # PostgreSQL Configuration
       POSTGRES_HOST    = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
       POSTGRES_PORT    = "5432"
@@ -123,6 +124,7 @@ resource "aws_lambda_function" "check_user_node_access" {
     variables = {
       ENV                = var.environment_name
       NODE_ACCESS_TABLE  = aws_dynamodb_table.compute_node_access_table.name
+      DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
       # PostgreSQL Configuration via RDS Proxy with IAM auth
       POSTGRES_HOST      = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
       POSTGRES_PORT      = "5432"

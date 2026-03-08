@@ -7,6 +7,7 @@ import (
     "testing"
     "time"
 
+    "github.com/pennsieve/account-service/internal/authorizer"
     "github.com/pennsieve/account-service/internal/models"
     "github.com/pennsieve/account-service/internal/service"
     "github.com/pennsieve/account-service/internal/store_dynamodb"
@@ -14,6 +15,17 @@ import (
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
+
+// alwaysAuthorizedAuthorizer is a mock that always returns authorized with no teams.
+// Used in integration tests where we only need DynamoDB-based access checks.
+type alwaysAuthorizedAuthorizer struct{}
+
+func (a *alwaysAuthorizedAuthorizer) Authorize(ctx context.Context, userNodeId, organizationId string) (*authorizer.DirectAuthorizeResponse, error) {
+    return &authorizer.DirectAuthorizeResponse{
+        IsAuthorized: true,
+        Claims:       map[string]interface{}{},
+    }, nil
+}
 
 // Integration tests for permission workflows
 // These tests validate the complete permission system end-to-end
@@ -55,7 +67,8 @@ func setupPermissionIntegrationTest(t *testing.T) (*service.PermissionService, *
     })
 
     nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, tableName)
-    permissionService := service.NewPermissionService(nodeAccessStore, nil) // No team store for simplicity
+    permissionService := service.NewPermissionService(nodeAccessStore, nil)
+    permissionService.SetAuthorizer(&alwaysAuthorizedAuthorizer{})
 
     return permissionService, nodeAccessStore.(*store_dynamodb.NodeAccessDatabaseStore), testId
 }

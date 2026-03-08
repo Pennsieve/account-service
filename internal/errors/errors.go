@@ -50,6 +50,10 @@ var ErrOnlyAccountOwnerCanDetachNodes = errors.New("only the account owner can d
 var ErrOrganizationNotFound = errors.New("organization not found")
 var ErrInvalidOrganizationIdFormat = errors.New("invalid organization ID format - expected format: N:organization:uuid")
 var ErrBadRequest = errors.New("bad request")
+var ErrTooManySecrets = errors.New("too many secrets (max 50)")
+var ErrSecretKeyTooLong = errors.New("secret key exceeds max length (256)")
+var ErrSecretValueTooLong = errors.New("secret value exceeds max length (10000)")
+var ErrProvisionerRequest = errors.New("failed to communicate with provisioner")
 var ErrLLMBaaRequired = errors.New("LLM access in secure/compliant mode requires llmBaaAcknowledged: true (confirming an AWS BAA is in place)")
 
 // Common errors used across handlers

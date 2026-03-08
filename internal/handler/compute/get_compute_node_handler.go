@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
@@ -111,7 +113,9 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	}
 
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+	lambdaClient := lambda.NewFromConfig(cfg)
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
+	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
 
 	// Check if the user has access to this node
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, computeNode.Uuid, organizationId)

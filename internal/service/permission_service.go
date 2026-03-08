@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
-	
+
+	"github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
@@ -17,6 +17,7 @@ type PermissionService struct {
 	TeamStore          store_postgres.TeamStore
 	OrganizationStore  store_postgres.OrganizationStore
 	NodeStore          store_dynamodb.NodeStore
+	Authorizer         authorizer.DirectAuthorizer
 }
 
 func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore) *PermissionService {
@@ -26,6 +27,11 @@ func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamSt
 		OrganizationStore: nil, // Optional - set via SetOrganizationStore if needed for user validation
 		NodeStore:         nil, // Optional - set via SetNodeStore if needed
 	}
+}
+
+// SetAuthorizer sets the direct authorizer used for org/team membership checks
+func (s *PermissionService) SetAuthorizer(auth authorizer.DirectAuthorizer) {
+	s.Authorizer = auth
 }
 
 // SetOrganizationStore allows setting the organization store for user validation and cleanup functionality
@@ -38,11 +44,13 @@ func (s *PermissionService) SetNodeStore(nodeStore store_dynamodb.NodeStore) {
 	s.NodeStore = nodeStore
 }
 
-// CheckNodeAccess checks if a user has access to a compute node
-// For organization-independent nodes, only direct user access (owner) is checked
+// CheckNodeAccess checks if a user has access to a compute node.
+// For organization-independent nodes, only direct user access (owner) is checked.
+// For organization-bound nodes, it uses the direct authorizer Lambda to verify
+// org membership and retrieve team memberships.
 func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUuid, organizationId string) (bool, error) {
 	nodeId := models.FormatNodeId(nodeUuid)
-	
+
 	// 1. Check direct user access (owner or shared)
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 	hasAccess, err := s.NodeAccessStore.HasAccess(ctx, userEntityId, nodeId)
@@ -52,12 +60,26 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 	if hasAccess {
 		return true, nil
 	}
-	
+
 	// For organization-independent nodes, stop here (only owner access allowed)
 	if organizationId == "" {
 		return false, nil
 	}
-	
+
+	// Use direct authorizer to verify org membership and get team claims
+	if s.Authorizer == nil {
+		slog.Warn("LambdaClient not set, cannot check org/team access")
+		return false, nil
+	}
+
+	authResp, err := s.Authorizer.Authorize(ctx,userId, organizationId)
+	if err != nil {
+		return false, fmt.Errorf("error invoking direct authorizer: %w", err)
+	}
+	if !authResp.IsAuthorized {
+		return false, nil
+	}
+
 	// 2. Check workspace-wide access (only for organization-bound nodes)
 	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
 	hasAccess, err = s.NodeAccessStore.HasAccess(ctx, workspaceEntityId, nodeId)
@@ -67,58 +89,31 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 	if hasAccess {
 		return true, nil
 	}
-	
-	// 3. Check team access (only for organization-bound nodes)
-	if s.TeamStore != nil && s.OrganizationStore != nil {
-		// Get numeric IDs from node IDs
-		userIdInt, err := s.OrganizationStore.GetUserIdByNodeId(ctx, userId)
+
+	// 3. Check team access using team claims from the authorizer response
+	teamNodeIds := authorizer.ExtractTeamNodeIds(authResp.Claims)
+	if len(teamNodeIds) > 0 {
+		teamEntityIds := make([]string, len(teamNodeIds))
+		for i, teamNodeId := range teamNodeIds {
+			teamEntityIds[i] = models.FormatEntityId(models.EntityTypeTeam, teamNodeId)
+		}
+
+		hasTeamAccess, err := s.NodeAccessStore.BatchCheckAccess(ctx, teamEntityIds, nodeId)
 		if err != nil {
-			// Log error but continue - user ID lookup failure shouldn't block access
-			slog.Warn("Failed to get numeric user ID",
-				"userNodeId", userId,
-				"error", err)
-		} else {
-			orgIdInt, err := s.OrganizationStore.GetOrganizationIdByNodeId(ctx, organizationId)
-			if err != nil {
-				// Log error but continue - org ID lookup failure shouldn't block access
-				slog.Warn("Failed to get numeric org ID",
-					"orgNodeId", organizationId,
-					"error", err)
-			} else {
-				teams, err := s.TeamStore.GetUserTeams(ctx, userIdInt, orgIdInt)
-				if err != nil {
-					// Log error but continue - team lookup failure shouldn't block access
-					slog.Warn("Failed to get user teams",
-						"userId", userIdInt,
-						"orgId", orgIdInt,
-						"error", err)
-				} else {
-					// Check if any of the user's teams have access
-					teamEntityIds := make([]string, len(teams))
-					for i, team := range teams {
-						// Use TeamNodeId instead of converting TeamId
-						teamEntityIds[i] = models.FormatEntityId(models.EntityTypeTeam, team.TeamNodeId)
-					}
-					
-					hasTeamAccess, err := s.NodeAccessStore.BatchCheckAccess(ctx, teamEntityIds, nodeId)
-					if err != nil {
-						return false, fmt.Errorf("error checking team access: %w", err)
-					}
-					if hasTeamAccess {
-						return true, nil
-					}
-				}
-			}
+			return false, fmt.Errorf("error checking team access: %w", err)
+		}
+		if hasTeamAccess {
+			return true, nil
 		}
 	}
-	
+
 	return false, nil
 }
 
 // GetAccessibleNodes returns all nodes a user can access
 func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, organizationId string) ([]string, error) {
 	nodeUuids := make(map[string]bool)
-	
+
 	// 1. Get direct user access
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 	userAccess, err := s.NodeAccessStore.GetEntityAccess(ctx, userEntityId)
@@ -128,7 +123,7 @@ func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, orga
 	for _, access := range userAccess {
 		nodeUuids[access.NodeUuid] = true
 	}
-	
+
 	// 2. Get workspace-wide accessible nodes
 	workspaceNodes, err := s.NodeAccessStore.GetWorkspaceNodes(ctx, organizationId)
 	if err != nil {
@@ -137,16 +132,19 @@ func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, orga
 	for _, access := range workspaceNodes {
 		nodeUuids[access.NodeUuid] = true
 	}
-	
-	// 3. Get team-accessible nodes
-	if s.TeamStore != nil {
-		userIdInt, _ := strconv.ParseInt(userId, 10, 64)
-		orgIdInt, _ := strconv.ParseInt(organizationId, 10, 64)
-		
-		teams, err := s.TeamStore.GetUserTeams(ctx, userIdInt, orgIdInt)
-		if err == nil {
-			for _, team := range teams {
-				teamEntityId := models.FormatEntityId(models.EntityTypeTeam, strconv.FormatInt(team.TeamId, 10))
+
+	// 3. Get team-accessible nodes using direct authorizer for team membership
+	if s.Authorizer != nil && organizationId != "" {
+		authResp, err := s.Authorizer.Authorize(ctx,userId, organizationId)
+		if err != nil {
+			slog.Warn("Failed to get team claims from direct authorizer",
+				"userId", userId,
+				"orgId", organizationId,
+				"error", err)
+		} else if authResp.IsAuthorized {
+			teamNodeIds := authorizer.ExtractTeamNodeIds(authResp.Claims)
+			for _, teamNodeId := range teamNodeIds {
+				teamEntityId := models.FormatEntityId(models.EntityTypeTeam, teamNodeId)
 				teamAccess, err := s.NodeAccessStore.GetEntityAccess(ctx, teamEntityId)
 				if err == nil {
 					for _, access := range teamAccess {
@@ -156,13 +154,13 @@ func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, orga
 			}
 		}
 	}
-	
+
 	// Convert map to slice
 	result := make([]string, 0, len(nodeUuids))
 	for uuid := range nodeUuids {
 		result = append(result, uuid)
 	}
-	
+
 	return result, nil
 }
 
