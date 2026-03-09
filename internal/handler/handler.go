@@ -64,6 +64,10 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.GET("/compute-nodes/{id}/shared-secrets", computeHandler.GetSharedSecretsHandler)
     router.DELETE("/compute-nodes/{id}/shared-secrets", computeHandler.DeleteSharedSecretsHandler)
 
+    // Compute node allowed processors (whitelist — owner only for PUT)
+    router.PUT("/compute-nodes/{id}/allowed-processors", computeHandler.PutAllowedProcessorsHandler)
+    router.GET("/compute-nodes/{id}/allowed-processors", computeHandler.GetAllowedProcessorsHandler)
+
     // App Store access endpoint
     router.POST("/app-store/access", computeHandler.PostAppStoreAccessHandler)
 

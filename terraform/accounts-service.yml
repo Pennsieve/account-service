@@ -401,6 +401,20 @@ components:
             Key-value map of secrets to store. Keys must match [A-Za-z_][A-Za-z0-9_]*.
             Maximum 50 secrets, key max 256 chars, value max 10000 chars.
             System-reserved key names (e.g. SESSION_TOKEN, DATASET_ID) are rejected.
+    allowedProcessorsRequest:
+      type: object
+      required:
+        - processors
+      properties:
+        processors:
+          type: array
+          items:
+            type: string
+          description: |
+            List of allowed processor image patterns. Each entry is an ECR image
+            reference: "repo/name:tag" matches exactly, "repo/name" (without tag)
+            matches any tag. An empty array means all processors are allowed (open mode).
+            Data targets and service processors are always allowed regardless of this list.
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -1592,6 +1606,98 @@ paths:
                 properties:
                   message:
                     type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/allowed-processors:
+    put:
+      summary: Set allowed processors for a compute node
+      description: |
+        Replaces the processor whitelist for the specified compute node.
+        When the list is non-empty, only the listed processor images may be
+        executed on this node. An empty list allows all processors (open mode).
+        Only the node owner can update the whitelist.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putAllowedProcessors
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/allowedProcessorsRequest'
+      responses:
+        '200':
+          description: Allowed processors updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get allowed processors for a compute node
+      description: |
+        Returns the processor whitelist for the specified compute node.
+        An empty list means all processors are allowed (open mode).
+        Requires node access (owner, shared, or workspace).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getAllowedProcessors
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Allowed processors list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  processors:
+                    type: array
+                    items:
+                      type: string
+                    description: |
+                      List of allowed processor image patterns. Each entry is an ECR
+                      image reference: "repo/name:tag" matches exactly, "repo/name"
+                      matches any tag. Empty list means all processors are allowed.
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':

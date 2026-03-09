@@ -40,6 +40,10 @@ func (c *ProvisionerClient) Get(ctx context.Context, path string) ([]byte, error
 	return c.doRequest(ctx, http.MethodGet, path, nil)
 }
 
+func (c *ProvisionerClient) Put(ctx context.Context, path string, body []byte) ([]byte, error) {
+	return c.doRequest(ctx, http.MethodPut, path, body)
+}
+
 func (c *ProvisionerClient) Delete(ctx context.Context, path string) ([]byte, error) {
 	return c.doRequest(ctx, http.MethodDelete, path, nil)
 }
