@@ -411,9 +411,10 @@ components:
           items:
             type: string
           description: |
-            List of allowed processor image patterns. Each entry is an ECR image
-            reference: "repo/name:tag" matches exactly, "repo/name" (without tag)
-            matches any tag. An empty array means all processors are allowed (open mode).
+            List of allowed processor source URL patterns. Each entry is a source
+            URL (e.g. "git://github.com/org/repo:v1"). Exact match, or omit the
+            tag to allow any version (e.g. "git://github.com/org/repo").
+            An empty array means all processors are allowed (open mode).
             Data targets and service processors are always allowed regardless of this list.
   responses:
     Unauthorized:
@@ -1619,8 +1620,8 @@ paths:
       summary: Set allowed processors for a compute node
       description: |
         Replaces the processor whitelist for the specified compute node.
-        When the list is non-empty, only the listed processor images may be
-        executed on this node. An empty list allows all processors (open mode).
+        When the list is non-empty, only processors whose source URLs match
+        may be executed on this node. An empty list allows all processors (open mode).
         Only the node owner can update the whitelist.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
@@ -1695,9 +1696,10 @@ paths:
                     items:
                       type: string
                     description: |
-                      List of allowed processor image patterns. Each entry is an ECR
-                      image reference: "repo/name:tag" matches exactly, "repo/name"
-                      matches any tag. Empty list means all processors are allowed.
+                      List of allowed processor source URL patterns. Each entry is a
+                      source URL (e.g. "git://github.com/org/repo:v1"). Exact match,
+                      or omit the tag to allow any version. Empty list means all
+                      processors are allowed.
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
