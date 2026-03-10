@@ -13,6 +13,7 @@ import (
 type DynamoDBStore interface {
 	Insert(context.Context, Account) error
 	GetById(context.Context, string) (Account, error)
+	GetByAccountId(context.Context, string) ([]Account, error)
 	Get(context.Context, string, map[string]string) ([]Account, error)
 	Update(context.Context, Account) error
 	Delete(context.Context, string) error
@@ -60,6 +61,34 @@ func (r *AccountDatabaseStore) GetById(ctx context.Context, uuid string) (Accoun
 	}
 
 	return account, nil
+}
+
+func (r *AccountDatabaseStore) GetByAccountId(ctx context.Context, accountId string) ([]Account, error) {
+	accounts := []Account{}
+
+	expr, err := expression.NewBuilder().WithFilter(
+		expression.Name("accountId").Equal(expression.Value(accountId)),
+	).Build()
+	if err != nil {
+		return accounts, fmt.Errorf("error building expression: %w", err)
+	}
+
+	response, err := r.DB.Scan(ctx, &dynamodb.ScanInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		FilterExpression:          expr.Filter(),
+		TableName:                 aws.String(r.TableName),
+	})
+	if err != nil {
+		return accounts, fmt.Errorf("error getting account by accountId: %w", err)
+	}
+
+	err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
+	if err != nil {
+		return accounts, fmt.Errorf("error unmarshaling accounts: %w", err)
+	}
+
+	return accounts, nil
 }
 
 func (r *AccountDatabaseStore) Get(ctx context.Context, organizationId string, params map[string]string) ([]Account, error) {
