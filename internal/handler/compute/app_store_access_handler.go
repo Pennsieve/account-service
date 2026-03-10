@@ -8,9 +8,11 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	appStoreEcr "github.com/pennsieve/account-service/internal/ecr"
 	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 )
 
@@ -44,6 +46,59 @@ func PostAppStoreAccessHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 
+	cfg, err := utils.LoadAWSConfig(ctx)
+	if err != nil {
+		log.Println(err.Error())
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}, nil
+	}
+
+	// Verify the caller owns the account before granting ECR access
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		log.Printf("Error getting user ID: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusUnauthorized,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnauthorized),
+		}, nil
+	}
+
+	dynamoDBClient := dynamodb.NewFromConfig(cfg)
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	accountsStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	accounts, err := accountsStore.GetByAccountId(ctx, req.AccountId)
+	if err != nil {
+		log.Printf("Error looking up account %s: %v", req.AccountId, err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}, nil
+	}
+	if len(accounts) == 0 {
+		log.Printf("Account %s is not registered", req.AccountId)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrAccountNotRegistered),
+		}, nil
+	}
+
+	owned := false
+	for _, account := range accounts {
+		if account.UserId == userId {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		log.Printf("User %s does not own account %s", userId, req.AccountId)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrAccountDoesNotBelongToUser),
+		}, nil
+	}
+
 	repoURL := os.Getenv("APP_STORE_ECR_REPOSITORY")
 	if repoURL == "" {
 		log.Println("APP_STORE_ECR_REPOSITORY environment variable not set")
@@ -61,15 +116,6 @@ func PostAppStoreAccessHandler(ctx context.Context, request events.APIGatewayV2H
 		log.Printf("Skipping ECR policy update in test environment for account %s", req.AccountId)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusOK,
-		}, nil
-	}
-
-	cfg, err := utils.LoadAWSConfig(ctx)
-	if err != nil {
-		log.Println(err.Error())
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
 

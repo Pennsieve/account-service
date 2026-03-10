@@ -49,6 +49,7 @@ var ErrOnlyWorkspaceAdminsCanCreateNodes = errors.New("only workspace administra
 var ErrOnlyAccountOwnerCanDetachNodes = errors.New("only the account owner can detach nodes")
 var ErrOrganizationNotFound = errors.New("organization not found")
 var ErrInvalidOrganizationIdFormat = errors.New("invalid organization ID format - expected format: N:organization:uuid")
+var ErrAccountNotRegistered = errors.New("account is not registered")
 var ErrBadRequest = errors.New("bad request")
 var ErrTooManySecrets = errors.New("too many secrets (max 50)")
 var ErrSecretKeyTooLong = errors.New("secret key exceeds max length (256)")
