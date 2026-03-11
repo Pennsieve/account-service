@@ -1,6 +1,7 @@
 package ecr
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,43 @@ func TestAddPrincipal_AppendsToExistingStatement(t *testing.T) {
 	AddPrincipal(&policy, "arn:aws:iam::222222222222:root")
 
 	assert.Len(t, policy.Statement, 1)
+	assert.Equal(t, []string{
+		"arn:aws:iam::111111111111:root",
+		"arn:aws:iam::222222222222:root",
+	}, policy.Statement[0].Principal.AWS)
+}
+
+func TestPolicyPrincipal_UnmarshalJSON_SingleString(t *testing.T) {
+	policyJSON := `{
+		"Version": "2012-10-17",
+		"Statement": [{
+			"Sid": "AllowCrossAccountPull",
+			"Effect": "Allow",
+			"Principal": {"AWS": "arn:aws:iam::111111111111:root"},
+			"Action": ["ecr:GetDownloadUrlForLayer"]
+		}]
+	}`
+
+	var policy PolicyDocument
+	err := json.Unmarshal([]byte(policyJSON), &policy)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"arn:aws:iam::111111111111:root"}, policy.Statement[0].Principal.AWS)
+}
+
+func TestPolicyPrincipal_UnmarshalJSON_Array(t *testing.T) {
+	policyJSON := `{
+		"Version": "2012-10-17",
+		"Statement": [{
+			"Sid": "AllowCrossAccountPull",
+			"Effect": "Allow",
+			"Principal": {"AWS": ["arn:aws:iam::111111111111:root", "arn:aws:iam::222222222222:root"]},
+			"Action": ["ecr:GetDownloadUrlForLayer"]
+		}]
+	}`
+
+	var policy PolicyDocument
+	err := json.Unmarshal([]byte(policyJSON), &policy)
+	assert.NoError(t, err)
 	assert.Equal(t, []string{
 		"arn:aws:iam::111111111111:root",
 		"arn:aws:iam::222222222222:root",
