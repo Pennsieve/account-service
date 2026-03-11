@@ -275,6 +275,19 @@ data "aws_iam_policy_document" "provisioner_fargate_iam_policy_document" {
     resources = ["*"]
   }
 
+  statement {
+    sid    = "AllowAssumeComputeRole"
+    effect = "Allow"
+
+    actions = [
+      "sts:AssumeRole",
+    ]
+
+    resources = [
+      "arn:aws:iam::*:role/Pennsieve-Compute-*",
+    ]
+  }
+
 }
 
 # EventBridge Handler Lambda IAM Role
