@@ -28,8 +28,34 @@ type PolicyStatement struct {
 }
 
 // PolicyPrincipal represents the principal block in a policy statement.
+// AWS may return the AWS field as a single string or as an array of strings,
+// so we use a custom unmarshaler to handle both forms.
 type PolicyPrincipal struct {
 	AWS []string `json:"AWS"`
+}
+
+func (p *PolicyPrincipal) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		AWS json.RawMessage `json:"AWS"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.AWS) == 0 {
+		p.AWS = []string{}
+		return nil
+	}
+	// Try array first
+	if raw.AWS[0] == '[' {
+		return json.Unmarshal(raw.AWS, &p.AWS)
+	}
+	// Single string
+	var single string
+	if err := json.Unmarshal(raw.AWS, &single); err != nil {
+		return err
+	}
+	p.AWS = []string{single}
+	return nil
 }
 
 // AppStorePolicy manages cross-account pull access on an ECR repository.
