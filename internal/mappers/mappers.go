@@ -64,6 +64,8 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			ProvisionerImage:    c.ProvisionerImage,
 			ProvisionerImageTag: c.ProvisionerImageTag,
 			DeploymentMode:      c.DeploymentMode,
+			EnableLLMAccess:     c.EnableLLMAccess,
+			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
 			AccessScope:         accessScope,
 			Status:              nodeStatus,
 		})
@@ -100,6 +102,8 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			ProvisionerImage:    c.ProvisionerImage,
 			ProvisionerImageTag: c.ProvisionerImageTag,
 			DeploymentMode:      c.DeploymentMode,
+			EnableLLMAccess:     c.EnableLLMAccess,
+			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
 			Status:              c.Status,
 		})
 	}

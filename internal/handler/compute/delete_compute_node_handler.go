@@ -187,6 +187,10 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	wmTagValue := computeNode.WorkflowManagerTag
 	nodeIdentifierKey := "NODE_IDENTIFIER"
 	nodeIdentifierValue := computeNode.Identifier
+	// For nodes that don't have a stored Identifier, derive from UUID
+	if nodeIdentifierValue == "" {
+		nodeIdentifierValue = uuid[:8]
+	}
 	nodeNameKey := "NODE_NAME"
 	nodeNameValue := computeNode.Name
 	roleNameKey := "ROLE_NAME"

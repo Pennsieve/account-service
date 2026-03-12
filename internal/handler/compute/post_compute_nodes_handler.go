@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"log"
 	"net/http"
 	"os"
@@ -425,11 +424,9 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// Generate a UUID for the new node
 	nodeUuid := uuid.New().String()
 
-	// Generate node identifier hash.
-	// Node identifier is used in Terraform for Id of the node instead of the nodeID.
-	h := fnv.New32a()
-	h.Write([]byte(fmt.Sprintf("%s-%s-%s", organizationId, accountUuid, nodeUuid)))
-	nodeIdentifier := fmt.Sprint(h.Sum32())
+	// Node identifier is used in Terraform for infrastructure resource naming.
+	// Use the first 8 characters of the UUID (32 bits of randomness).
+	nodeIdentifier := nodeUuid[:8]
 
 	// Create the node in DynamoDB with PENDING status before starting the task
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
@@ -526,8 +523,6 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		roleNameValue := account.RoleName
 		computeNodeIdKey := "COMPUTE_NODE_ID"
 		computeNodeIdValue := nodeUuid
-		nodeIdentifierKey := "NODE_IDENTIFIER"
-		nodeIdentifierValue := nodeIdentifier
 
 		runTaskIn := &ecs.RunTaskInput{
 			TaskDefinition: aws.String(TaskDefinitionArn),
@@ -595,10 +590,6 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 							{
 								Name:  &computeNodeIdKey,
 								Value: &computeNodeIdValue,
-							},
-							{
-								Name:  &nodeIdentifierKey,
-								Value: &nodeIdentifierValue,
 							},
 							{
 								Name:  &provisionerImageKey,

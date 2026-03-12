@@ -33,6 +33,7 @@ const rolePolicyDocument = `{
 			"Effect": "Allow",
 			"Action": [
 				"ec2:*",
+				"ecr:*",
 				"ecs:*",
 				"elasticfilesystem:*",
 				"lambda:*",
@@ -45,6 +46,7 @@ const rolePolicyDocument = `{
 				"ssm:PutParameter",
 				"ssm:DeleteParameter",
 				"ssm:GetParameters",
+				"ssm:DescribeParameters",
 				"ssm:AddTagsToResource",
 				"ssm:RemoveTagsFromResource",
 				"ssm:ListTagsForResource",
