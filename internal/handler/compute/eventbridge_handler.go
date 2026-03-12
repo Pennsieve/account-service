@@ -160,6 +160,17 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 		return fmt.Errorf("node %s not found", event.ComputeNodeId)
 	}
 
+	// Update infrastructure details if provided
+	if event.ComputeNodeGatewayUrl != "" {
+		node.ComputeNodeGatewayUrl = event.ComputeNodeGatewayUrl
+	}
+	if event.EfsId != "" {
+		node.EfsId = event.EfsId
+	}
+	if event.QueueUrl != "" {
+		node.QueueUrl = event.QueueUrl
+	}
+
 	// Update the workflow manager tag if provided
 	if event.WorkflowManagerTag != "" {
 		node.WorkflowManagerTag = event.WorkflowManagerTag
