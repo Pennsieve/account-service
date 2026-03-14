@@ -175,10 +175,11 @@ resource "aws_lambda_function" "health_checker_lambda" {
 
   environment {
     variables = {
-      ENV                    = var.environment_name
-      REGION                 = var.aws_region
-      COMPUTE_NODES_TABLE    = aws_dynamodb_table.compute_resource_nodes_table.name
-      HEALTH_CHECK_LOG_TABLE = aws_dynamodb_table.health_check_log_table.name
+      ENV                       = var.environment_name
+      REGION                    = var.aws_region
+      COMPUTE_NODES_TABLE       = aws_dynamodb_table.compute_resource_nodes_table.name
+      HEALTH_CHECK_LOG_TABLE    = aws_dynamodb_table.health_check_log_table.name
+      COMPUTE_NODE_LAYERS_TABLE = data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_name
     }
   }
 }

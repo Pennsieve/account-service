@@ -266,6 +266,20 @@ data "aws_iam_policy_document" "health_checker_iam_policy_document" {
     resources = ["arn:aws:lambda:*:*:function:compute-gateway-*"]
   }
 
+  statement {
+    sid    = "HealthCheckerLayersTablePermissions"
+    effect = "Allow"
+    actions = [
+      "dynamodb:Query",
+      "dynamodb:GetItem",
+      "dynamodb:PutItem"
+    ]
+    resources = [
+      data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_arn,
+      "${data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_arn}/*"
+    ]
+  }
+
 }
 
 # PROVISIONER RUNNER FARGATE TASK

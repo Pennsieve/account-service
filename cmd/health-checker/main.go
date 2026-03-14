@@ -20,6 +20,7 @@ func handler(ctx context.Context) error {
 	region := os.Getenv("REGION")
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	healthLogTable := os.Getenv("HEALTH_CHECK_LOG_TABLE")
+	layersTable := os.Getenv("COMPUTE_NODE_LAYERS_TABLE")
 
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -31,6 +32,8 @@ func handler(ctx context.Context) error {
 	h := &healthchecker.Handler{
 		NodeStore:      store_dynamodb.NewNodeDatabaseStore(ddbClient, nodesTable),
 		HealthLogStore: store_dynamodb.NewHealthCheckLogDatabaseStore(ddbClient, healthLogTable),
+		DDBClient:      ddbClient,
+		LayersTable:    layersTable,
 		Config: healthchecker.Config{
 			Region: region,
 			AWSCfg: cfg,
