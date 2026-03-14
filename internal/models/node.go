@@ -37,6 +37,8 @@ type Node struct {
 	LlmBaaAcknowledged    bool            `json:"llmBaaAcknowledged,omitempty"`
 	AccessScope           NodeAccessScope `json:"accessScope,omitempty"`
 	Status                string          `json:"status"`
+	HealthStatus          string          `json:"healthStatus,omitempty"`
+	LastHealthCheck       string          `json:"lastHealthCheck,omitempty"`
 }
 
 type NodeAccount struct {
@@ -82,6 +84,8 @@ type DynamoDBNode struct {
 	EnableLLMAccess       bool   `dynamodbav:"enableLLMAccess"`
 	LlmBaaAcknowledged    bool   `dynamodbav:"llmBaaAcknowledged"`
 	Status                string `dynamodbav:"status"`
+	HealthStatus          string `dynamodbav:"healthStatus"`
+	LastHealthCheck       string `dynamodbav:"lastHealthCheck"`
 }
 
 func (i DynamoDBNode) GetKey() map[string]types.AttributeValue {

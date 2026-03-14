@@ -169,6 +169,105 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
 }
 
 
+# Health Checker Lambda IAM Role
+resource "aws_iam_role" "health_checker_lambda_role" {
+  name = "${var.environment_name}-${var.service_name}-health-checker-lambda-role-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "health_checker_lambda_iam_policy_attachment" {
+  role       = aws_iam_role.health_checker_lambda_role.name
+  policy_arn = aws_iam_policy.health_checker_lambda_iam_policy.arn
+}
+
+resource "aws_iam_policy" "health_checker_lambda_iam_policy" {
+  name   = "${var.environment_name}-${var.service_name}-health-checker-lambda-iam-policy-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  path   = "/"
+  policy = data.aws_iam_policy_document.health_checker_iam_policy_document.json
+}
+
+data "aws_iam_policy_document" "health_checker_iam_policy_document" {
+
+  statement {
+    sid     = "HealthCheckerLambdaLogsPermissions"
+    effect  = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid     = "HealthCheckerLambdaEC2Permissions"
+    effect  = "Allow"
+    actions = [
+      "ec2:CreateNetworkInterface",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DeleteNetworkInterface",
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "HealthCheckerNodesTablePermissions"
+    effect = "Allow"
+
+    actions = [
+      "dynamodb:Scan",
+      "dynamodb:GetItem",
+      "dynamodb:UpdateItem"
+    ]
+
+    resources = [
+      aws_dynamodb_table.compute_resource_nodes_table.arn,
+      "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*"
+    ]
+  }
+
+  statement {
+    sid    = "HealthCheckerLogTablePermissions"
+    effect = "Allow"
+
+    actions = [
+      "dynamodb:PutItem"
+    ]
+
+    resources = [
+      aws_dynamodb_table.health_check_log_table.arn,
+      "${aws_dynamodb_table.health_check_log_table.arn}/*"
+    ]
+  }
+
+  statement {
+    sid    = "HealthCheckerInvokeComputeGatewayUrl"
+    effect = "Allow"
+    actions = [
+      "lambda:InvokeFunctionUrl"
+    ]
+    resources = ["arn:aws:lambda:*:*:function:compute-gateway-*"]
+  }
+
+}
+
 # PROVISIONER RUNNER FARGATE TASK
 resource "aws_iam_role" "provisioner_fargate_task_iam_role" {
   name = "${var.environment_name}-${var.service_name}-provisioner-task-role-${data.terraform_remote_state.region.outputs.aws_region_shortname}"

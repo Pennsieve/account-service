@@ -154,3 +154,54 @@ resource "aws_lambda_permission" "allow_same_account_lambdas" {
   function_name = aws_lambda_function.check_user_node_access.function_name
   principal     = data.aws_caller_identity.current.account_id
 }
+
+# Health Checker Lambda Function
+resource "aws_lambda_function" "health_checker_lambda" {
+  description   = "Account Service Health Checker"
+  function_name = "${var.environment_name}-${var.service_name}-health-checker-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  handler       = "bootstrap"
+  runtime       = "provided.al2"
+  architectures = ["arm64"]
+  role          = aws_iam_role.health_checker_lambda_role.arn
+  timeout       = 300
+  memory_size   = 256
+  s3_bucket     = var.lambda_bucket
+  s3_key        = "${var.service_name}/${var.service_name}-health-checker-${var.image_tag}.zip"
+
+  vpc_config {
+    subnet_ids         = tolist(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
+    security_group_ids = [data.terraform_remote_state.platform_infrastructure.outputs.upload_v2_security_group_id]
+  }
+
+  environment {
+    variables = {
+      ENV                    = var.environment_name
+      REGION                 = var.aws_region
+      COMPUTE_NODES_TABLE    = aws_dynamodb_table.compute_resource_nodes_table.name
+      HEALTH_CHECK_LOG_TABLE = aws_dynamodb_table.health_check_log_table.name
+    }
+  }
+}
+
+# EventBridge Rule - run health checker every 30 minutes
+resource "aws_cloudwatch_event_rule" "health_checker_schedule" {
+  name                = "${var.environment_name}-compute-health-checker-schedule"
+  description         = "Run compute node health checker every 30 minutes"
+  schedule_expression = "rate(30 minutes)"
+}
+
+# EventBridge Target - Health Checker Lambda
+resource "aws_cloudwatch_event_target" "health_checker_lambda" {
+  rule      = aws_cloudwatch_event_rule.health_checker_schedule.name
+  target_id = "ComputeHealthChecker"
+  arn       = aws_lambda_function.health_checker_lambda.arn
+}
+
+# Lambda Permission for EventBridge to invoke the health checker
+resource "aws_lambda_permission" "health_checker_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.health_checker_lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.health_checker_schedule.arn
+}

@@ -119,6 +119,37 @@ tags = merge(
   )
 }
 
+resource "aws_dynamodb_table" "health_check_log_table" {
+  name           = "${var.environment_name}-compute-health-check-log-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "nodeId"
+  range_key      = "timestamp"
+
+  attribute {
+    name = "nodeId"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+tags = merge(
+  local.common_tags,
+  {
+    "Name"         = "${var.environment_name}-compute-health-check-log-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+    "name"         = "${var.environment_name}-compute-health-check-log-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+    "service_name" = var.service_name
+  },
+  )
+}
+
 resource "aws_dynamodb_table" "compute_node_access_table" {
   name           = "${var.environment_name}-compute-node-access-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
   billing_mode   = "PAY_PER_REQUEST"

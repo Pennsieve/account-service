@@ -68,6 +68,8 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
 			AccessScope:         accessScope,
 			Status:              nodeStatus,
+			HealthStatus:        c.HealthStatus,
+			LastHealthCheck:     c.LastHealthCheck,
 		})
 	}
 
@@ -105,6 +107,8 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			EnableLLMAccess:     c.EnableLLMAccess,
 			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
 			Status:              c.Status,
+			HealthStatus:        c.HealthStatus,
+			LastHealthCheck:     c.LastHealthCheck,
 		})
 	}
 

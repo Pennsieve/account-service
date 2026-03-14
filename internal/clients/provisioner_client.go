@@ -16,6 +16,16 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 )
 
+// ProvisionerHTTPError is returned when the provisioner responds with an HTTP error status.
+type ProvisionerHTTPError struct {
+	StatusCode int
+	Body       []byte
+}
+
+func (e *ProvisionerHTTPError) Error() string {
+	return fmt.Sprintf("provisioner returned status %d", e.StatusCode)
+}
+
 // ProvisionerClient makes IAM SigV4-signed HTTP requests to a compute-gateway
 // Lambda function URL in the customer's AWS account.
 type ProvisionerClient struct {
@@ -100,7 +110,7 @@ func (c *ProvisionerClient) doRequest(ctx context.Context, method, path string, 
 
 	if resp.StatusCode >= 400 {
 		log.Printf("Provisioner %s %s returned %d: %s", method, path, resp.StatusCode, string(respBody))
-		return respBody, fmt.Errorf("provisioner returned status %d", resp.StatusCode)
+		return respBody, &ProvisionerHTTPError{StatusCode: resp.StatusCode, Body: respBody}
 	}
 
 	return respBody, nil

@@ -154,6 +154,16 @@ func (m *MockNodeStore) Delete(ctx context.Context, uuid string) error {
 	return args.Error(0)
 }
 
+func (m *MockNodeStore) GetAllEnabled(ctx context.Context) ([]models.DynamoDBNode, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]models.DynamoDBNode), args.Error(1)
+}
+
+func (m *MockNodeStore) UpdateHealthStatus(ctx context.Context, uuid string, healthStatus string, lastHealthCheck string) error {
+	args := m.Called(ctx, uuid, healthStatus, lastHealthCheck)
+	return args.Error(0)
+}
+
 func TestPermissionService_CheckNodeAccess_DirectUserAccess(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)
 	service := NewPermissionService(mockNodeStore, nil)

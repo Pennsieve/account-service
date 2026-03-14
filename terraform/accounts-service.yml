@@ -401,6 +401,24 @@ components:
             Key-value map of secrets to store. Keys must match [A-Za-z_][A-Za-z0-9_]*.
             Maximum 50 secrets, key max 256 chars, value max 10000 chars.
             System-reserved key names (e.g. SESSION_TOKEN, DATASET_ID) are rejected.
+    nodeConfigRequest:
+      type: object
+      properties:
+        stuckTaskThresholdHours:
+          type: integer
+          description: |
+            Number of hours after which a running ECS task is flagged as
+            potentially stuck in health checks. Default: 8.
+          example: 8
+    nodeConfigResponse:
+      type: object
+      properties:
+        stuckTaskThresholdHours:
+          type: integer
+          description: |
+            Number of hours after which a running ECS task is flagged as
+            potentially stuck in health checks.
+          example: 8
     allowedProcessorsRequest:
       type: object
       required:
@@ -1607,6 +1625,86 @@ paths:
                 properties:
                   message:
                     type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/config:
+    get:
+      summary: Get compute node runtime configuration
+      description: |
+        Returns the runtime configuration for the specified compute node,
+        such as health check thresholds. The account-service proxies this
+        request to the compute node's gateway.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getComputeNodeConfig
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Current runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/nodeConfigResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    patch:
+      summary: Update compute node runtime configuration
+      description: |
+        Partially updates the runtime configuration for the specified compute
+        node. Only fields present in the request body are updated; omitted
+        fields retain their current values. The account-service proxies this
+        request to the compute node's gateway.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: patchComputeNodeConfig
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/nodeConfigRequest'
+      responses:
+        '200':
+          description: Updated runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/nodeConfigResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':

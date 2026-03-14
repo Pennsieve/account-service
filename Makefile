@@ -6,6 +6,7 @@ SERVICE_NAME  ?= "account-service"
 PACKAGE_NAME  ?= "${SERVICE_NAME}-${IMAGE_TAG}.zip"
 EVENTBRIDGE_PACKAGE_NAME ?= "${SERVICE_NAME}-eventbridge-handler-${IMAGE_TAG}.zip"
 CHECK_ACCESS_PACKAGE_NAME ?= "${SERVICE_NAME}-check-access-${IMAGE_TAG}.zip"
+HEALTH_CHECKER_PACKAGE_NAME ?= "${SERVICE_NAME}-health-checker-${IMAGE_TAG}.zip"
 
 .DEFAULT: help
 
@@ -62,6 +63,10 @@ package:
 	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/check-access/bootstrap $(WORKING_DIR)/cmd/check-access; \
 	cd $(WORKING_DIR)/bin/check-access/; \
 		zip -r $(WORKING_DIR)/bin/check-access/$(CHECK_ACCESS_PACKAGE_NAME) .
+	@echo "Building Health Checker Lambda..."
+	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/health-checker/bootstrap $(WORKING_DIR)/cmd/health-checker; \
+	cd $(WORKING_DIR)/bin/health-checker/; \
+		zip -r $(WORKING_DIR)/bin/health-checker/$(HEALTH_CHECKER_PACKAGE_NAME) .
 
 # Copy Service lambdas to S3 location
 publish:
@@ -77,9 +82,12 @@ publish:
 	aws s3 cp $(WORKING_DIR)/bin/eventbridge/$(EVENTBRIDGE_PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
 	@echo "Publishing Check Access Lambda..."
 	aws s3 cp $(WORKING_DIR)/bin/check-access/$(CHECK_ACCESS_PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
+	@echo "Publishing Health Checker Lambda..."
+	aws s3 cp $(WORKING_DIR)/bin/health-checker/$(HEALTH_CHECKER_PACKAGE_NAME) s3://$(LAMBDA_BUCKET)/$(SERVICE_NAME)/ --output json
 	rm -rf $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) $(WORKING_DIR)/bin/api/bootstrap
 	rm -rf $(WORKING_DIR)/bin/eventbridge/$(EVENTBRIDGE_PACKAGE_NAME) $(WORKING_DIR)/bin/eventbridge/bootstrap
 	rm -rf $(WORKING_DIR)/bin/check-access/$(CHECK_ACCESS_PACKAGE_NAME) $(WORKING_DIR)/bin/check-access/bootstrap
+	rm -rf $(WORKING_DIR)/bin/health-checker/$(HEALTH_CHECKER_PACKAGE_NAME) $(WORKING_DIR)/bin/health-checker/bootstrap
 
 # Run go mod tidy on modules
 tidy:
