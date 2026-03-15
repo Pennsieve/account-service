@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -455,6 +456,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			DeploymentMode:        req.DeploymentMode,
 			EnableLLMAccess:       req.EnableLLMAccess,
 			LlmBaaAcknowledged:    req.LlmBaaAcknowledged,
+			MaxGpuInstances:       resolveIntPtr(req.MaxGpuInstances, 2),
+			GpuTier:               resolveStringPtr(req.GpuTier, "small"),
 			Status:                "Pending", // New Pending status
 		}
 
@@ -518,6 +521,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		if req.EnableLLMAccess {
 			enableLLMAccessValue = "true"
 		}
+		maxGpuInstancesKey := "MAX_GPU_INSTANCES"
+		maxGpuInstancesValue := strconv.Itoa(resolveIntPtr(req.MaxGpuInstances, 2))
+		gpuTierKey := "GPU_TIER"
+		gpuTierValue := resolveStringPtr(req.GpuTier, "small")
 
 		roleNameKey := "ROLE_NAME"
 		roleNameValue := account.RoleName
@@ -608,6 +615,14 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 								Value: &enableLLMAccessValue,
 							},
 							{
+								Name:  &maxGpuInstancesKey,
+								Value: &maxGpuInstancesValue,
+							},
+							{
+								Name:  &gpuTierKey,
+								Value: &gpuTierValue,
+							},
+							{
 								Name:  &roleNameKey,
 								Value: &roleNameValue,
 							},
@@ -675,6 +690,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			DeploymentMode:      req.DeploymentMode,
 			EnableLLMAccess:    req.EnableLLMAccess,
 			LlmBaaAcknowledged: req.LlmBaaAcknowledged,
+			MaxGpuInstances:    resolveIntPtr(req.MaxGpuInstances, 2),
+			GpuTier:            resolveStringPtr(req.GpuTier, "small"),
 			Status:             "Pending",
 		}
 
@@ -709,4 +726,20 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		StatusCode: http.StatusAccepted,
 		Body:       string(m),
 	}, nil
+}
+
+// resolveIntPtr returns the dereferenced pointer value, or the default if nil.
+func resolveIntPtr(p *int, defaultVal int) int {
+	if p != nil {
+		return *p
+	}
+	return defaultVal
+}
+
+// resolveStringPtr returns the dereferenced pointer value, or the default if nil.
+func resolveStringPtr(p *string, defaultVal string) string {
+	if p != nil {
+		return *p
+	}
+	return defaultVal
 }

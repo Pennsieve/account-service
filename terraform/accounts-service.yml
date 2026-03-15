@@ -199,6 +199,16 @@ components:
             Confirms that an AWS Business Associate Agreement (BAA) is in place for the target account.
             Required when enableLLMAccess is true and deploymentMode is "secure" or "compliant".
           default: false
+        maxGpuInstances:
+          type: integer
+          description: Maximum number of GPU EC2 instances in the Auto Scaling Group. Set to 0 to disable GPU support.
+          default: 2
+          minimum: 0
+        gpuTier:
+          type: string
+          description: "GPU instance tier: small (T4 16GB), medium (L4 24GB), large (A10G 24GB), xlarge (L40S 48GB)"
+          default: small
+          enum: [small, medium, large, xlarge]
     computeNodeResponse:
       type: object
       properties:
@@ -261,6 +271,13 @@ components:
         llmBaaAcknowledged:
           type: boolean
           description: Whether a BAA acknowledgement was provided when the node was created
+        maxGpuInstances:
+          type: integer
+          description: Maximum number of GPU EC2 instances (0 = GPU disabled)
+        gpuTier:
+          type: string
+          description: "GPU instance tier: small (T4 16GB), medium (L4 24GB), large (A10G 24GB), xlarge (L40S 48GB)"
+          enum: [small, medium, large, xlarge]
         status:
           type: string
           enum: ["Enabled", "Paused", "Pending", "Destroying"]
@@ -291,6 +308,21 @@ components:
           type: string
           enum: ["basic", "secure", "compliant"]
           description: Deployment mode controlling the infrastructure networking tier (optional)
+    updateConfigRequest:
+      type: object
+      description: Infrastructure configuration update. At least one field must be provided. Triggers re-provisioning.
+      properties:
+        maxGpuInstances:
+          type: integer
+          description: Maximum number of GPU EC2 instances. Set to 0 to disable GPU support.
+          minimum: 0
+        gpuTier:
+          type: string
+          description: "GPU instance tier: small (T4 16GB), medium (L4 24GB), large (A10G 24GB), xlarge (L40S 48GB)"
+          enum: [small, medium, large, xlarge]
+        enableLLMAccess:
+          type: boolean
+          description: Enable or disable LLM/Bedrock access for processors
     computeNodePermissionsRequest:
       type: object
       required:
@@ -481,6 +513,48 @@ components:
               message:
                 type: string
 paths:
+  /gpu-tiers:
+    get:
+      summary: List available GPU instance tiers
+      description: Returns the available GPU instance tiers with specs and pricing. Use this to populate tier selection UI when creating or updating compute nodes.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getGPUTiers
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Compute Nodes
+      responses:
+        '200':
+          description: List of GPU tiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    tier:
+                      type: string
+                      description: Tier label used in API requests
+                    instanceType:
+                      type: string
+                      description: AWS EC2 instance type
+                    gpu:
+                      type: string
+                      description: GPU model name
+                    gpuMemoryGB:
+                      type: integer
+                      description: GPU VRAM in GB
+                    vcpus:
+                      type: integer
+                      description: Number of vCPUs
+                    memoryGB:
+                      type: integer
+                      description: Instance RAM in GB
+                    pricePerHour:
+                      type: number
+                      description: On-demand price per hour (USD, us-east-1)
   /accounts/{uuid}/workspaces:
     post:
       summary: Enable a workspace for an account
@@ -1014,6 +1088,42 @@ paths:
           $ref: '#/components/responses/NotFound'
         '4XX':
           $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/update-config:
+    post:
+      summary: Update compute node infrastructure configuration
+      description: |
+        Updates infrastructure-affecting configuration (GPU settings, LLM access) and triggers
+        re-provisioning. Only fields included in the request body are changed. The node's status
+        must be "Enabled" or "Paused" (not "Pending" or "Destroying").
+      operationId: postUpdateConfig
+      tags:
+        - compute-nodes
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/updateConfigRequest'
+      responses:
+        '202':
+          description: Config updated, re-provisioning initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Bad request (invalid values or node in wrong state)
+        '403':
+          description: Forbidden (not node owner or account owner)
+        '404':
+          description: Compute node not found
         '5XX':
           $ref: '#/components/responses/Error'
   /compute-nodes/{id}/permissions:

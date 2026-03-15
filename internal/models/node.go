@@ -16,6 +16,8 @@ type CreateComputeNodeRequest struct {
 	DeploymentMode      string `json:"deploymentMode,omitempty"`
 	EnableLLMAccess     bool   `json:"enableLLMAccess,omitempty"`
 	LlmBaaAcknowledged  bool   `json:"llmBaaAcknowledged,omitempty"`
+	MaxGpuInstances     *int    `json:"maxGpuInstances,omitempty"`
+	GpuTier             *string `json:"gpuTier,omitempty"`
 }
 
 // Node is the response representation of a compute node
@@ -35,6 +37,8 @@ type Node struct {
 	DeploymentMode        string          `json:"deploymentMode,omitempty"`
 	EnableLLMAccess       bool            `json:"enableLLMAccess,omitempty"`
 	LlmBaaAcknowledged    bool            `json:"llmBaaAcknowledged,omitempty"`
+	MaxGpuInstances       int             `json:"maxGpuInstances"`
+	GpuTier               string          `json:"gpuTier"`
 	AccessScope           NodeAccessScope `json:"accessScope,omitempty"`
 	Status                string          `json:"status"`
 	HealthStatus          string          `json:"healthStatus,omitempty"`
@@ -83,6 +87,8 @@ type DynamoDBNode struct {
 	ProvisionerImageTag   string `dynamodbav:"provisionerImageTag"`
 	EnableLLMAccess       bool   `dynamodbav:"enableLLMAccess"`
 	LlmBaaAcknowledged    bool   `dynamodbav:"llmBaaAcknowledged"`
+	MaxGpuInstances       int    `dynamodbav:"maxGpuInstances"`
+	GpuTier               string `dynamodbav:"gpuTier"`
 	Status                string `dynamodbav:"status"`
 	HealthStatus          string `dynamodbav:"healthStatus"`
 	LastHealthCheck       string `dynamodbav:"lastHealthCheck"`

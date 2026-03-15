@@ -41,7 +41,8 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.PUT("/compute-nodes/{id}", computeHandler.PutComputeNodeHandler)
     router.PATCH("/compute-nodes/{id}", computeHandler.PatchComputeNodeHandler)
     router.DELETE("/compute-nodes/{id}", computeHandler.DeleteComputeNodeHandler)
-    
+    router.POST("/compute-nodes/{id}/update-config", computeHandler.PostUpdateConfigHandler)
+
     // Compute node permission routes
     router.GET("/compute-nodes/{id}/permissions", computeHandler.GetNodePermissionsHandler)
     router.PUT("/compute-nodes/{id}/permissions", computeHandler.SetNodeAccessScopeHandler)
@@ -70,6 +71,9 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 
     // App Store access endpoint
     router.POST("/app-store/access", computeHandler.PostAppStoreAccessHandler)
+
+    // GPU tier reference endpoint
+    router.GET("/gpu-tiers", computeHandler.GetGPUTiersHandler)
 
     // Role policy endpoint
     router.GET("/role-policy", computeHandler.GetRolePolicyHandler)

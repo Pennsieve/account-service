@@ -248,6 +248,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	if computeNode.EnableLLMAccess {
 		enableLLMAccessValue = "true"
 	}
+	maxGpuInstancesKey := "MAX_GPU_INSTANCES"
+	maxGpuInstancesValue := strconv.Itoa(computeNode.MaxGpuInstances)
+	gpuTierKey := "GPU_TIER"
+	gpuTierValue := computeNode.GpuTier
 	roleNameKey := "ROLE_NAME"
 	roleNameValue := account.RoleName
 
@@ -352,6 +356,14 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &enableLLMAccessKey,
 							Value: &enableLLMAccessValue,
+						},
+						{
+							Name:  &maxGpuInstancesKey,
+							Value: &maxGpuInstancesValue,
+						},
+						{
+							Name:  &gpuTierKey,
+							Value: &gpuTierValue,
 						},
 						{
 							Name:  &roleNameKey,

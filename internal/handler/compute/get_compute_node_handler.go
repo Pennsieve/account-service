@@ -199,6 +199,8 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		DeploymentMode:      computeNode.DeploymentMode,
 		EnableLLMAccess:     computeNode.EnableLLMAccess,
 		LlmBaaAcknowledged:  computeNode.LlmBaaAcknowledged,
+		MaxGpuInstances:     computeNode.MaxGpuInstances,
+		GpuTier:             computeNode.GpuTier,
 		AccessScope:        accessScope,
 		Status:             nodeStatus,
 	})
