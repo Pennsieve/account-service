@@ -81,9 +81,6 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
 
-	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
-	organizationId := request.QueryStringParameters["organization_id"]
-
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 
@@ -103,21 +100,9 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// If organization_id parameter is provided, validate it
-	if organizationId != "" {
-		// Validate that provided organization_id matches the compute node's existing organization
-		if computeNode.OrganizationId != organizationId {
-			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, computeNode.OrganizationId)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
-			}, nil
-		}
-		
-		// Validate user is a member of the provided organization
-		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
-			return *validationResponse, nil
-		}
+	organizationId := ""
+	if computeNode.OrganizationId != "" && computeNode.OrganizationId != "INDEPENDENT" {
+		organizationId = computeNode.OrganizationId
 	}
 
 	// Load account (needed for permission check and RoleName for Fargate task)

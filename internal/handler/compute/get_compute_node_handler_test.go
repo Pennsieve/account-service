@@ -279,8 +279,9 @@ func TestGetComputeNodeHandler_NoAccess(t *testing.T) {
 	ctx := context.Background()
 	testId := test.GenerateTestId()
 
-	// Create and insert test node
+	// Create an INDEPENDENT test node (no org-based access checks, only direct user access)
 	testNode := createTestNode(testId)
+	testNode.OrganizationId = "INDEPENDENT"
 	err := nodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
 
@@ -293,7 +294,7 @@ func TestGetComputeNodeHandler_NoAccess(t *testing.T) {
 			"id": testNode.Uuid,
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(unauthorizedUserId, testNode.OrganizationId),
+			Authorizer: test.CreateTestAuthorizer(unauthorizedUserId, "some-org"),
 		},
 	}
 
@@ -370,54 +371,6 @@ func TestGetComputeNodeHandler_DifferentStatuses(t *testing.T) {
 	}
 }
 
-func TestGetComputeNodeHandler_OrganizationMismatch(t *testing.T) {
-	nodeStore, accessStore := setupGetComputeNodeHandlerTest(t)
-	ctx := context.Background()
-	testId := test.GenerateTestId()
-
-	// Create test node belonging to one organization
-	testNode := createTestNode(testId)
-	testNode.OrganizationId = "org-" + testId
-	err := nodeStore.Put(ctx, testNode)
-	require.NoError(t, err)
-
-	// Grant user access to the node
-	accessRecord := models.NodeAccess{
-		NodeId:         models.FormatNodeId(testNode.Uuid),
-		NodeUuid:       testNode.Uuid,
-		EntityId:       models.FormatEntityId(models.EntityTypeUser, testNode.UserId),
-		EntityType:     models.EntityTypeUser,
-		EntityRawId:    testNode.UserId,
-		AccessType:     models.AccessTypeOwner,
-		OrganizationId: testNode.OrganizationId,
-		GrantedAt:      time.Now(),
-		GrantedBy:      testNode.UserId,
-	}
-	err = accessStore.GrantAccess(ctx, accessRecord)
-	require.NoError(t, err)
-
-	// Create request with different organization in query parameters
-	differentOrgId := "different-org-" + testId
-	request := events.APIGatewayV2HTTPRequest{
-		PathParameters: map[string]string{
-			"id": testNode.Uuid,
-		},
-		QueryStringParameters: map[string]string{
-			"organization_id": differentOrgId,
-		},
-		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(testNode.UserId, ""),
-		},
-	}
-
-	// Call the handler
-	response, err := compute.GetComputeNodeHandler(ctx, request)
-	assert.NoError(t, err)
-
-	// Should return 403 Forbidden due to organization mismatch
-	assert.Equal(t, 403, response.StatusCode)
-	assert.Contains(t, response.Body, "forbidden")
-}
 
 func TestGetComputeNodeHandler_UserOwnedNode_NoOrgClaim(t *testing.T) {
 	nodeStore, accessStore := setupGetComputeNodeHandlerTest(t)

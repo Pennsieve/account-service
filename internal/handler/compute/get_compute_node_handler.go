@@ -54,9 +54,6 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
-	organizationId := request.QueryStringParameters["organization_id"]
-
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 
@@ -76,30 +73,10 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// If organization_id parameter is provided, validate it
-	if organizationId != "" {
-		// If the node is INDEPENDENT, organization_id parameter is not allowed
-		if computeNode.OrganizationId == "INDEPENDENT" {
-			log.Printf("Cannot access INDEPENDENT node %s with organization_id %s", uuid, organizationId)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
-			}, nil
-		}
-		
-		// Validate that provided organization_id matches the compute node's existing organization
-		if computeNode.OrganizationId != organizationId {
-			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, computeNode.OrganizationId)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusForbidden,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
-			}, nil
-		}
-		
-		// Validate user is a member of the provided organization
-		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
-			return *validationResponse, nil
-		}
+	// Use the node's own organization for access checks (empty for INDEPENDENT nodes)
+	organizationId := ""
+	if computeNode.OrganizationId != "" && computeNode.OrganizationId != "INDEPENDENT" {
+		organizationId = computeNode.OrganizationId
 	}
 
 	// Check if user has access to the node

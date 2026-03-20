@@ -42,9 +42,6 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
 	
-	// Get organization ID from query parameters (optional - empty means INDEPENDENT node)
-	organizationId := request.QueryStringParameters["organization_id"]
-	
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -54,7 +51,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
+
 	// Initialize stores
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	lambdaClient := lambda.NewFromConfig(cfg)
@@ -63,7 +60,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 
-	// Get the node to validate organization context
+	// Get the node
 	node, err := nodeStore.GetById(ctx, nodeUuid)
 	if err != nil {
 		log.Printf("Error fetching node %s: %v", nodeUuid, err)
@@ -78,31 +75,11 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNoRecordsFound),
 		}, nil
 	}
-	
-	// If organization_id parameter is provided, validate it
-	if organizationId != "" {
-		// If the node is INDEPENDENT, organization_id parameter is not allowed
-		if node.OrganizationId == "INDEPENDENT" {
-			log.Printf("Cannot access INDEPENDENT node %s with organization_id %s", nodeUuid, organizationId)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusBadRequest,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
-			}, nil
-		}
-		
-		// Validate that provided organization_id matches the compute node's existing organization
-		if node.OrganizationId != organizationId {
-			log.Printf("Provided organization_id %s does not match compute node's organization %s", organizationId, node.OrganizationId)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusForbidden,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
-			}, nil
-		}
-		
-		// Validate user is a member of the provided organization
-		if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
-			return *validationResponse, nil
-		}
+
+	// Use the node's own organization for access checks
+	organizationId := ""
+	if node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
+		organizationId = node.OrganizationId
 	}
 	
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)

@@ -954,12 +954,6 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
-        - in: query
-          name: organization_id
-          schema:
-            type: string
-          required: false
-          description: Organization ID for workspace context. Required for organization-bound nodes, omit for organization-independent nodes.
       responses:
         '200':
           description: Compute node details
@@ -994,12 +988,6 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
-        - in: query
-          name: organization_id
-          schema:
-            type: string
-          required: false
-          description: Organization ID for workspace context. Required for organization-bound nodes, omit for organization-independent nodes.
       requestBody:
         description: Compute node update configuration
         required: true
@@ -1167,12 +1155,6 @@ paths:
           schema:
             type: string
           description: The UUID of the compute node
-        - in: query
-          name: organization_id
-          schema:
-            type: string
-          required: false
-          description: Organization ID for workspace context. Required for organization-bound nodes, omit for organization-independent nodes.
       responses:
         '200':
           description: Current permission settings
