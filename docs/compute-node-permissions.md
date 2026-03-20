@@ -95,3 +95,11 @@ For write endpoints (PUT, PATCH, DELETE, etc.), the handler checks:
 1. **Node owner** (`node.UserId == userId`)
 2. **Account owner** (`account.UserId == userId`) — for PUT/DELETE node and update-config only
 3. **Org admin + IsPublic** — via `IsAdminWithManageAccess()` if the above checks fail
+
+## Account Visibility
+
+`GET /accounts?workspace={orgId}` returns accounts enabled for a workspace:
+
+- **Account owners** always see their own enabled accounts
+- **Admins** (Role >= 16) also see accounts with `IsPublic=true` that they don't own, so they can create and manage compute nodes on those accounts
+- **Collaborators** only see their own accounts

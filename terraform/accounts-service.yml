@@ -681,6 +681,10 @@ paths:
       description: |
         Get account details for compute resources belonging to the authenticated user.
         Optionally filter by workspace or include workspace enablement details.
+
+        When filtering by workspace, workspace administrators (permission_bit >= 16) will also
+        see accounts with isPublic=true that they don't own, enabling them to create and manage
+        compute nodes on those accounts.
       parameters:
         - in: query
           name: workspace

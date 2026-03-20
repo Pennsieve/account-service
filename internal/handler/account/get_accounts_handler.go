@@ -8,12 +8,14 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/utils"
 )
 
 // GetAccountsHandler retrieves all accounts owned by the current user
@@ -75,19 +77,54 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			}, nil
 		}
 
-		// Create map for quick lookup
+		// Create maps for quick lookup
 		enabledAccountUuids := make(map[string]bool)
+		publicAccountUuids := make(map[string]bool)
 		for _, enablement := range workspaceEnablements {
 			enabledAccountUuids[enablement.AccountUuid] = true
+			if enablement.IsPublic {
+				publicAccountUuids[enablement.AccountUuid] = true
+			}
 		}
 
-		// Filter user accounts by enabled accounts
+		// Filter user's own accounts by enabled accounts
 		var filteredAccounts []store_dynamodb.Account
+		ownedUuids := make(map[string]bool)
 		for _, account := range userAccounts {
 			if enabledAccountUuids[account.Uuid] {
 				filteredAccounts = append(filteredAccounts, account)
+				ownedUuids[account.Uuid] = true
 			}
 		}
+
+		// If there are public accounts the user doesn't own, check if user is an org admin
+		if len(publicAccountUuids) > 0 {
+			hasPublicNotOwned := false
+			for uuid := range publicAccountUuids {
+				if !ownedUuids[uuid] {
+					hasPublicNotOwned = true
+					break
+				}
+			}
+
+			if hasPublicNotOwned {
+				lambdaClient := lambda.NewFromConfig(cfg)
+				auth := authclient.NewLambdaDirectAuthorizer(lambdaClient)
+				authResp, err := auth.Authorize(ctx, userId, workspaceFilter)
+				if err == nil && authResp.IsAuthorized && authclient.IsOrgAdmin(authResp.Claims) {
+					// Admin can see public accounts they don't own
+					for uuid := range publicAccountUuids {
+						if !ownedUuids[uuid] {
+							account, err := accountStore.GetById(ctx, uuid)
+							if err == nil && account.Uuid != "" {
+								filteredAccounts = append(filteredAccounts, account)
+							}
+						}
+					}
+				}
+			}
+		}
+
 		userAccounts = filteredAccounts
 	}
 
