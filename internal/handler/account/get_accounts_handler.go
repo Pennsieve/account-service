@@ -64,7 +64,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	}
 
 	// If workspace filter is provided, filter accounts by workspace enablement
-	if workspaceFilter, ok := queryParams["workspace"]; ok && workspaceFilter != "" {
+	if workspaceFilter, ok := queryParams["organization_id"]; ok && workspaceFilter != "" {
 		enablementStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
 
 		// Get all enablements for the workspace

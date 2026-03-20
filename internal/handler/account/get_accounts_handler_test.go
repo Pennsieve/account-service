@@ -196,7 +196,7 @@ func TestGetAccountsHandler_Success_WorkspaceFilter(t *testing.T) {
 	// Create request with workspace filter and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
-			"workspace": workspaceId,
+			"organization_id": workspaceId,
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
 			Authorizer: test.CreateTestAuthorizer(testId, ""),
@@ -349,7 +349,7 @@ func TestGetAccountsHandler_Success_CombinedFilters(t *testing.T) {
 	// Create request with both workspace filter and includeWorkspaces and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
-			"workspace":         workspaceId,
+			"organization_id":         workspaceId,
 			"includeWorkspaces": "true",
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
@@ -406,7 +406,7 @@ func TestGetAccountsHandler_Success_EmptyWorkspaceFilter(t *testing.T) {
 	// Create request with workspace filter for non-existent workspace and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
-			"workspace": "non-existent-workspace",
+			"organization_id": "non-existent-workspace",
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
 			Authorizer: test.CreateTestAuthorizer(testId, ""),

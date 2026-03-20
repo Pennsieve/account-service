@@ -687,11 +687,11 @@ paths:
         compute nodes on those accounts.
       parameters:
         - in: query
-          name: workspace
+          name: organization_id
           schema:
             type: string
           required: false
-          description: Filter accounts by workspace ID (only returns accounts enabled for this workspace)
+          description: Filter accounts by organization ID (only returns accounts enabled for this organization). Admins will also see public accounts (isPublic=true) they don't own.
         - in: query
           name: includeWorkspaces
           schema:
