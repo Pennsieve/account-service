@@ -108,6 +108,8 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetNodeStore(nodeStore)
 	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+	accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+	permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
 
 	// Check if user has access to the node
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)

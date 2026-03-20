@@ -86,6 +86,27 @@ func InvokeDirectAuthorizer(ctx context.Context, lambdaClient *lambda.Client, us
 	return &authResp, nil
 }
 
+// IsOrgAdmin checks if the user has admin permissions (Role >= 16) based on
+// the org_claim in the direct authorizer response claims.
+func IsOrgAdmin(claims map[string]interface{}) bool {
+	orgClaimRaw, ok := claims["org_claim"]
+	if !ok || orgClaimRaw == nil {
+		return false
+	}
+
+	orgClaim, ok := orgClaimRaw.(map[string]interface{})
+	if !ok {
+		return false
+	}
+
+	role, ok := orgClaim["Role"].(float64)
+	if !ok {
+		return false
+	}
+
+	return int(role) >= 16
+}
+
 // ExtractTeamNodeIds extracts team node IDs from direct authorizer claims.
 func ExtractTeamNodeIds(claims map[string]interface{}) []string {
 	teamClaimsRaw, ok := claims["team_claims"]

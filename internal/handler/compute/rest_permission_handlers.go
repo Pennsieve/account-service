@@ -10,6 +10,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
@@ -143,8 +145,19 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 		}, nil
 	}
 
-	// Only the owner can change access scope
-	if node.UserId != userId {
+	// Only the owner or org admin (if IsPublic) can change access scope
+	canManage := node.UserId == userId
+	if !canManage && node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
+		lambdaClient := lambda.NewFromConfig(cfg)
+		accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+		permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+		isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, node.OrganizationId, node.AccountUuid)
+		if err == nil && isAdmin {
+			canManage = true
+		}
+	}
+	if !canManage {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
@@ -393,8 +406,20 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 		}, nil
 	}
 
-	// Only the owner can grant access
-	if node.UserId != userId {
+	// Only the owner or org admin (if IsPublic) can grant access
+	canManage := node.UserId == userId
+	if !canManage && node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
+		lambdaClient := lambda.NewFromConfig(cfg)
+		accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		grantPermService := service.NewPermissionService(nodeAccessStore, nil)
+		grantPermService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+		grantPermService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+		isAdmin, err := grantPermService.IsAdminWithManageAccess(ctx, userId, node.OrganizationId, node.AccountUuid)
+		if err == nil && isAdmin {
+			canManage = true
+		}
+	}
+	if !canManage {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
@@ -595,8 +620,20 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		}, nil
 	}
 
-	// Only the owner can revoke access
-	if node.UserId != userId {
+	// Only the owner or org admin (if IsPublic) can revoke access
+	canManage := node.UserId == userId
+	if !canManage && node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
+		lambdaClient := lambda.NewFromConfig(cfg)
+		accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		revokePermService := service.NewPermissionService(nodeAccessStore, nil)
+		revokePermService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+		revokePermService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+		isAdmin, err := revokePermService.IsAdminWithManageAccess(ctx, userId, node.OrganizationId, node.AccountUuid)
+		if err == nil && isAdmin {
+			canManage = true
+		}
+	}
+	if !canManage {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),

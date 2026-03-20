@@ -13,11 +13,12 @@ import (
 )
 
 type PermissionService struct {
-	NodeAccessStore    store_dynamodb.NodeAccessStore
-	TeamStore          store_postgres.TeamStore
-	OrganizationStore  store_postgres.OrganizationStore
-	NodeStore          store_dynamodb.NodeStore
-	Authorizer         authorizer.DirectAuthorizer
+	NodeAccessStore         store_dynamodb.NodeAccessStore
+	TeamStore               store_postgres.TeamStore
+	OrganizationStore       store_postgres.OrganizationStore
+	NodeStore               store_dynamodb.NodeStore
+	AccountWorkspaceStore   store_dynamodb.AccountWorkspaceStore
+	Authorizer              authorizer.DirectAuthorizer
 }
 
 func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore) *PermissionService {
@@ -42,6 +43,38 @@ func (s *PermissionService) SetOrganizationStore(orgStore store_postgres.Organiz
 // SetNodeStore allows setting the node store for auto-healing functionality
 func (s *PermissionService) SetNodeStore(nodeStore store_dynamodb.NodeStore) {
 	s.NodeStore = nodeStore
+}
+
+// SetAccountWorkspaceStore allows setting the account workspace store for admin access checks
+func (s *PermissionService) SetAccountWorkspaceStore(awStore store_dynamodb.AccountWorkspaceStore) {
+	s.AccountWorkspaceStore = awStore
+}
+
+// IsAdminWithManageAccess checks if the user is an organization admin and the
+// account's workspace enablement has IsPublic=true, granting full management access.
+func (s *PermissionService) IsAdminWithManageAccess(ctx context.Context, userId, organizationId, accountUuid string) (bool, error) {
+	if organizationId == "" || s.Authorizer == nil {
+		return false, nil
+	}
+
+	authResp, err := s.Authorizer.Authorize(ctx, userId, organizationId)
+	if err != nil {
+		return false, fmt.Errorf("error invoking direct authorizer: %w", err)
+	}
+	if !authResp.IsAuthorized {
+		return false, nil
+	}
+
+	if !authorizer.IsOrgAdmin(authResp.Claims) {
+		return false, nil
+	}
+
+	enablement, err := s.AccountWorkspaceStore.Get(ctx, accountUuid, organizationId)
+	if err != nil {
+		return false, fmt.Errorf("error getting workspace enablement: %w", err)
+	}
+
+	return enablement.IsPublic, nil
 }
 
 // CheckNodeAccess checks if a user has access to a compute node.
@@ -80,7 +113,18 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 		return false, nil
 	}
 
-	// 2. Check workspace-wide access (only for organization-bound nodes)
+	// 2. Organization admins can access nodes on accounts with admin management enabled (IsPublic)
+	if authorizer.IsOrgAdmin(authResp.Claims) {
+		node, err := s.NodeStore.GetById(ctx, nodeUuid)
+		if err == nil && node.AccountUuid != "" {
+			enablement, err := s.AccountWorkspaceStore.Get(ctx, node.AccountUuid, organizationId)
+			if err == nil && enablement.IsPublic {
+				return true, nil
+			}
+		}
+	}
+
+	// 3. Check workspace-wide access (only for organization-bound nodes)
 	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
 	hasAccess, err = s.NodeAccessStore.HasAccess(ctx, workspaceEntityId, nodeId)
 	if err != nil {
@@ -90,7 +134,7 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 		return true, nil
 	}
 
-	// 3. Check team access using team claims from the authorizer response
+	// 4. Check team access using team claims from the authorizer response
 	teamNodeIds := authorizer.ExtractTeamNodeIds(authResp.Claims)
 	if len(teamNodeIds) > 0 {
 		teamEntityIds := make([]string, len(teamNodeIds))

@@ -9,8 +9,11 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 )
@@ -108,8 +111,22 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
-	// Only the owner can update the node
-	if node.UserId != userId {
+	// Only the owner or org admin (if IsPublic) can update the node
+	canUpdate := node.UserId == userId
+	if !canUpdate && node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
+		lambdaClient := lambda.NewFromConfig(cfg)
+		nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+		accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+		permissionService := service.NewPermissionService(nodeAccessStore, nil)
+		permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+		permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+		isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, node.OrganizationId, node.AccountUuid)
+		if err == nil && isAdmin {
+			canUpdate = true
+		}
+	}
+	if !canUpdate {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),

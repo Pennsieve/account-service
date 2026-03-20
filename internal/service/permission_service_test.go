@@ -11,6 +11,7 @@ import (
 	"github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -162,6 +163,35 @@ func (m *MockNodeStore) GetAllEnabled(ctx context.Context) ([]models.DynamoDBNod
 func (m *MockNodeStore) UpdateHealthStatus(ctx context.Context, uuid string, healthStatus string, lastHealthCheck string) error {
 	args := m.Called(ctx, uuid, healthStatus, lastHealthCheck)
 	return args.Error(0)
+}
+
+type MockAccountWorkspaceStore struct {
+	mock.Mock
+}
+
+func (m *MockAccountWorkspaceStore) Insert(ctx context.Context, aw store_dynamodb.AccountWorkspace) error {
+	args := m.Called(ctx, aw)
+	return args.Error(0)
+}
+
+func (m *MockAccountWorkspaceStore) Delete(ctx context.Context, accountUuid, organizationId string) error {
+	args := m.Called(ctx, accountUuid, organizationId)
+	return args.Error(0)
+}
+
+func (m *MockAccountWorkspaceStore) GetByAccount(ctx context.Context, accountUuid string) ([]store_dynamodb.AccountWorkspace, error) {
+	args := m.Called(ctx, accountUuid)
+	return args.Get(0).([]store_dynamodb.AccountWorkspace), args.Error(1)
+}
+
+func (m *MockAccountWorkspaceStore) GetByWorkspace(ctx context.Context, organizationId string) ([]store_dynamodb.AccountWorkspace, error) {
+	args := m.Called(ctx, organizationId)
+	return args.Get(0).([]store_dynamodb.AccountWorkspace), args.Error(1)
+}
+
+func (m *MockAccountWorkspaceStore) Get(ctx context.Context, accountUuid, organizationId string) (store_dynamodb.AccountWorkspace, error) {
+	args := m.Called(ctx, accountUuid, organizationId)
+	return args.Get(0).(store_dynamodb.AccountWorkspace), args.Error(1)
 }
 
 func TestPermissionService_CheckNodeAccess_DirectUserAccess(t *testing.T) {
@@ -341,6 +371,192 @@ func TestPermissionService_CheckNodeAccess_NoAccess(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, hasAccess)
 	mockNodeStore.AssertExpectations(t)
+	mockAuth.AssertExpectations(t)
+}
+
+func TestPermissionService_CheckNodeAccess_OrgAdminAccess(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockAuth := new(MockDirectAuthorizer)
+	mockComputeNodeStore := new(MockNodeStore)
+	mockAWStore := new(MockAccountWorkspaceStore)
+	svc := NewPermissionService(mockNodeAccessStore, nil)
+	svc.SetAuthorizer(mockAuth)
+	svc.SetNodeStore(mockComputeNodeStore)
+	svc.SetAccountWorkspaceStore(mockAWStore)
+
+	ctx := context.Background()
+	userId := "N:user:admin-user-uuid"
+	nodeUuid := "node-789"
+	organizationId := "N:organization:org-uuid"
+	accountUuid := "account-123"
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Admin user does NOT have direct access to the node
+	mockNodeAccessStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
+
+	// Authorizer returns authorized with admin role (Role >= 16)
+	mockAuth.On("Authorize", ctx, userId, organizationId).Return(&authorizer.DirectAuthorizeResponse{
+		IsAuthorized: true,
+		Claims: map[string]interface{}{
+			"org_claim": map[string]interface{}{
+				"Role":   float64(32), // Owner-level permission
+				"IntId":  float64(1),
+				"NodeId": organizationId,
+			},
+			"team_claims": nil,
+		},
+	}, nil)
+
+	// Node lookup returns the node with its account UUID
+	mockComputeNodeStore.On("GetById", ctx, nodeUuid).Return(models.DynamoDBNode{
+		Uuid:           nodeUuid,
+		AccountUuid:    accountUuid,
+		OrganizationId: organizationId,
+	}, nil)
+
+	// Workspace enablement has IsPublic=true (admin management enabled)
+	mockAWStore.On("Get", ctx, accountUuid, organizationId).Return(store_dynamodb.AccountWorkspace{
+		AccountUuid: accountUuid,
+		WorkspaceId: organizationId,
+		IsPublic:    true,
+	}, nil)
+
+	hasAccess, err := svc.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
+
+	assert.NoError(t, err)
+	assert.True(t, hasAccess, "Org admin should have access to nodes on public accounts")
+	mockNodeAccessStore.AssertExpectations(t)
+	mockAuth.AssertExpectations(t)
+	mockComputeNodeStore.AssertExpectations(t)
+	mockAWStore.AssertExpectations(t)
+}
+
+func TestPermissionService_CheckNodeAccess_OrgAdminDeniedOnPrivateAccount(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockAuth := new(MockDirectAuthorizer)
+	mockComputeNodeStore := new(MockNodeStore)
+	mockAWStore := new(MockAccountWorkspaceStore)
+	svc := NewPermissionService(mockNodeAccessStore, nil)
+	svc.SetAuthorizer(mockAuth)
+	svc.SetNodeStore(mockComputeNodeStore)
+	svc.SetAccountWorkspaceStore(mockAWStore)
+
+	ctx := context.Background()
+	userId := "N:user:admin-user-uuid"
+	nodeUuid := "node-789"
+	organizationId := "N:organization:org-uuid"
+	accountUuid := "account-123"
+	teamNodeId := "N:team:team-uuid"
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Admin user does NOT have direct access
+	mockNodeAccessStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
+	mockNodeAccessStore.On("HasAccess", ctx, workspaceEntityId, nodeId).Return(false, nil)
+
+	// Authorizer returns authorized with admin role
+	mockAuth.On("Authorize", ctx, userId, organizationId).Return(&authorizer.DirectAuthorizeResponse{
+		IsAuthorized: true,
+		Claims: map[string]interface{}{
+			"org_claim": map[string]interface{}{
+				"Role":   float64(32),
+				"IntId":  float64(1),
+				"NodeId": organizationId,
+			},
+			"team_claims": []interface{}{
+				map[string]interface{}{
+					"IntId":  float64(1),
+					"Name":   "Test Team",
+					"NodeId": teamNodeId,
+				},
+			},
+		},
+	}, nil)
+
+	// Node lookup returns the node
+	mockComputeNodeStore.On("GetById", ctx, nodeUuid).Return(models.DynamoDBNode{
+		Uuid:           nodeUuid,
+		AccountUuid:    accountUuid,
+		OrganizationId: organizationId,
+	}, nil)
+
+	// Workspace enablement has IsPublic=false (admin management NOT enabled)
+	mockAWStore.On("Get", ctx, accountUuid, organizationId).Return(store_dynamodb.AccountWorkspace{
+		AccountUuid: accountUuid,
+		WorkspaceId: organizationId,
+		IsPublic:    false,
+	}, nil)
+
+	// Falls through to workspace and team checks
+	teamEntityIds := []string{
+		models.FormatEntityId(models.EntityTypeTeam, teamNodeId),
+	}
+	mockNodeAccessStore.On("BatchCheckAccess", ctx, teamEntityIds, nodeId).Return(false, nil)
+
+	hasAccess, err := svc.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
+
+	assert.NoError(t, err)
+	assert.False(t, hasAccess, "Org admin should NOT have access to nodes on private accounts")
+	mockNodeAccessStore.AssertExpectations(t)
+	mockAuth.AssertExpectations(t)
+	mockComputeNodeStore.AssertExpectations(t)
+	mockAWStore.AssertExpectations(t)
+}
+
+func TestPermissionService_CheckNodeAccess_NonAdminNoAccess(t *testing.T) {
+	mockNodeAccessStore := new(MockNodeAccessStore)
+	mockAuth := new(MockDirectAuthorizer)
+	svc := NewPermissionService(mockNodeAccessStore, nil)
+	svc.SetAuthorizer(mockAuth)
+
+	ctx := context.Background()
+	userId := "N:user:regular-user-uuid"
+	nodeUuid := "node-789"
+	organizationId := "N:organization:org-uuid"
+	teamNodeId := "N:team:team-uuid"
+
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
+	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
+	nodeId := models.FormatNodeId(nodeUuid)
+
+	// Non-admin user has no direct access
+	mockNodeAccessStore.On("HasAccess", ctx, userEntityId, nodeId).Return(false, nil)
+	mockNodeAccessStore.On("HasAccess", ctx, workspaceEntityId, nodeId).Return(false, nil)
+
+	// Authorizer returns authorized but with non-admin role (Role < 16)
+	mockAuth.On("Authorize", ctx, userId, organizationId).Return(&authorizer.DirectAuthorizeResponse{
+		IsAuthorized: true,
+		Claims: map[string]interface{}{
+			"org_claim": map[string]interface{}{
+				"Role":   float64(8), // Collaborator - not admin
+				"IntId":  float64(1),
+				"NodeId": organizationId,
+			},
+			"team_claims": []interface{}{
+				map[string]interface{}{
+					"IntId":  float64(1),
+					"Name":   "Test Team",
+					"NodeId": teamNodeId,
+				},
+			},
+		},
+	}, nil)
+
+	// No team access either
+	teamEntityIds := []string{
+		models.FormatEntityId(models.EntityTypeTeam, teamNodeId),
+	}
+	mockNodeAccessStore.On("BatchCheckAccess", ctx, teamEntityIds, nodeId).Return(false, nil)
+
+	hasAccess, err := svc.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
+
+	assert.NoError(t, err)
+	assert.False(t, hasAccess, "Non-admin without explicit access should be denied")
+	mockNodeAccessStore.AssertExpectations(t)
 	mockAuth.AssertExpectations(t)
 }
 

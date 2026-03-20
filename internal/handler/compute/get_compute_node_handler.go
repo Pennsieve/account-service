@@ -116,6 +116,9 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	lambdaClient := lambda.NewFromConfig(cfg)
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+	permissionService.SetNodeStore(dynamo_store)
+	accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+	permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
 
 	// Check if the user has access to this node
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, computeNode.Uuid, organizationId)

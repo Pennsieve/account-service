@@ -108,7 +108,21 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	}
 
 	if requireOwner {
-		if node.UserId != userId {
+		canManage := node.UserId == userId
+		if !canManage && node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
+			lambdaClient := lambda.NewFromConfig(cfg)
+			nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+			accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+			nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+			permissionService := service.NewPermissionService(nodeAccessStore, nil)
+			permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+			permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+			isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, node.OrganizationId, node.AccountUuid)
+			if err == nil && isAdmin {
+				canManage = true
+			}
+		}
+		if !canManage {
 			resp := events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusForbidden,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyOwnerCanChangePermissions),
@@ -148,9 +162,14 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 func checkNodeAccess(ctx context.Context, lambdaClient *lambda.Client, dynamoDBClient *dynamodb.Client, handlerName, userId, nodeUuid, organizationId string) *events.APIGatewayV2HTTPResponse {
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
+
+	accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+	permissionService.SetNodeStore(store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable))
+	permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
 
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, userId, nodeUuid, organizationId)
 	if err != nil {

@@ -140,7 +140,7 @@ components:
       properties:
         isPublic:
           type: boolean
-          description: if true, workspace managers can create compute nodes on this account; if false, only the account owner can
+          description: If true, workspace administrators can create and fully manage compute nodes on this account. If false, only the account owner can create and manage nodes; administrators are treated as collaborators with read-only access.
     workspaceEnablementResponse:
       type: object
       properties:
@@ -152,7 +152,7 @@ components:
           description: the workspace ID
         isPublic:
           type: boolean
-          description: if true, workspace managers can create compute nodes on this account; if false, only the account owner can
+          description: If true, workspace administrators can create and fully manage compute nodes on this account. If false, only the account owner can create and manage nodes; administrators are treated as collaborators with read-only access.
         createdAt:
           type: string
           format: date-time
@@ -841,6 +841,9 @@ paths:
         infrastructure in the specified account including ECS tasks, API Gateway, EFS storage, and SQS queues.
         If organization_id is provided, the node will be created within that workspace context.
         If organization_id is omitted, an organization-independent (private) node will be created.
+
+        **Permissions:** Account owner can always create nodes. On public accounts (isPublic=true),
+        workspace administrators (permission_bit >= 16) can also create nodes.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: postComputeNodes
@@ -933,7 +936,10 @@ paths:
     get:
       summary: Get compute node details
       description: |
-        Retrieves detailed information about a specific compute node
+        Retrieves detailed information about a specific compute node.
+
+        **Permissions:** Accessible by node owner, users with shared access (direct, team, or workspace scope),
+        and workspace administrators on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getComputeNode
@@ -971,7 +977,9 @@ paths:
       summary: Update compute node configuration
       description: |
         Updates the configuration of an existing compute node, such as workflow manager settings
-        or authorization type
+        or authorization type.
+
+        **Permissions:** Node owner, account owner, or workspace administrator on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: putComputeNode
@@ -1015,8 +1023,10 @@ paths:
     patch:
       summary: Update compute node details
       description: |
-        Partially update the status, name, and/or description of a specific compute node. 
+        Partially update the status, name, and/or description of a specific compute node.
         Setting the status to PAUSED will disable the compute node for analytic workflows.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: patchComputeNode
@@ -1067,6 +1077,8 @@ paths:
       description: |
         Deletes a compute node and all its associated infrastructure. This will terminate running tasks,
         delete the API Gateway, EFS storage, and SQS queues.
+
+        **Permissions:** Node owner, account owner, or workspace administrator on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteComputeNode
@@ -1097,6 +1109,8 @@ paths:
         Updates infrastructure-affecting configuration (GPU settings, LLM access) and triggers
         re-provisioning. Only fields included in the request body are changed. The node's status
         must be "Enabled" or "Paused" (not "Pending" or "Destroying").
+
+        **Permissions:** Node owner, account owner, or workspace administrator on public accounts (isPublic=true).
       operationId: postUpdateConfig
       tags:
         - compute-nodes
@@ -1126,7 +1140,7 @@ paths:
         '400':
           description: Bad request (invalid values or node in wrong state)
         '403':
-          description: Forbidden (not node owner or account owner)
+          description: Forbidden (not node owner, account owner, or workspace administrator on public account)
         '404':
           description: Compute node not found
         '5XX':
@@ -1135,8 +1149,10 @@ paths:
     get:
       summary: Get compute node permissions
       description: |
-        Retrieves the current permission settings for a compute node. Only accessible by users
-        who have access to the node.
+        Retrieves the current permission settings for a compute node.
+
+        **Permissions:** Accessible by node owner, users with shared access (direct, team, or workspace scope),
+        and workspace administrators on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getComputeNodePermissions
@@ -1175,7 +1191,9 @@ paths:
     put:
       summary: Set compute node access scope
       description: |
-        Sets the access scope for a compute node. Only the owner of the node can modify the access scope.
+        Sets the access scope for a compute node.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
         
         Access scope levels:
         - **private**: Only the owner can access the node  
@@ -1224,7 +1242,9 @@ paths:
     post:
       summary: Grant access to a user
       description: |
-        Grants access to a specific user for a compute node. Only the owner of the node can grant access.
+        Grants access to a specific user for a compute node.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
         
         **Important**: This operation is only available for compute nodes that belong to a workspace (organization).
         Independent compute nodes cannot be shared with users or teams.
@@ -1270,7 +1290,9 @@ paths:
     delete:
       summary: Revoke access from a user
       description: |
-        Revokes access from a specific user for a compute node. Only the owner of the node can revoke access.
+        Revokes access from a specific user for a compute node.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
         Cannot revoke access from the node owner.
         
         **Note**: This operation only applies to compute nodes that belong to a workspace (organization).
@@ -1314,7 +1336,9 @@ paths:
     post:
       summary: Grant access to a team
       description: |
-        Grants access to a specific team for a compute node. Only the owner of the node can grant access.
+        Grants access to a specific team for a compute node.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
         
         **Important**: This operation is only available for compute nodes that belong to a workspace (organization).
         Independent compute nodes cannot be shared with users or teams.
@@ -1360,7 +1384,9 @@ paths:
     delete:
       summary: Revoke access from a team
       description: |
-        Revokes access from a specific team for a compute node. Only the owner of the node can revoke access.
+        Revokes access from a specific team for a compute node.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
         
         **Note**: This operation only applies to compute nodes that belong to a workspace (organization).
         Independent compute nodes do not support sharing.
@@ -1622,8 +1648,9 @@ paths:
         Merges shared secrets for the specified compute node. New keys are
         added and existing keys are updated; keys not included in the request
         are left unchanged. These secrets are visible to all users with access
-        to the node. Only the node owner can create or update shared secrets.
-        Use DELETE to remove secrets.
+        to the node. Use DELETE to remove secrets.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: patchSharedSecrets
@@ -1702,7 +1729,9 @@ paths:
       summary: Delete shared secrets for a compute node
       description: |
         Deletes a specific shared secret by key, or all shared secrets
-        when deleteAll=true. Only the node owner can delete shared secrets.
+        when deleteAll=true.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteSharedSecrets
@@ -1835,7 +1864,8 @@ paths:
         Replaces the processor whitelist for the specified compute node.
         When the list is non-empty, only processors whose source URLs match
         may be executed on this node. An empty list allows all processors (open mode).
-        Only the node owner can update the whitelist.
+
+        **Permissions:** Node owner or workspace administrator on public accounts (isPublic=true).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: putAllowedProcessors

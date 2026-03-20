@@ -13,9 +13,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/runner"
+	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
@@ -89,9 +92,23 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
-	// Check delete permissions: only node owner or account owner can delete
+	// Check delete permissions: node owner, account owner, or org admin (if IsPublic) can delete
 	canDelete := computeNode.UserId == userId ||
 		((store_dynamodb.Account{}) != account && account.UserId == userId)
+
+	if !canDelete && computeNode.OrganizationId != "" && computeNode.OrganizationId != "INDEPENDENT" {
+		lambdaClient := lambda.NewFromConfig(cfg)
+		nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+		accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+		permissionService := service.NewPermissionService(nodeAccessStore, nil)
+		permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+		permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+		isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, computeNode.OrganizationId, computeNode.AccountUuid)
+		if err == nil && isAdmin {
+			canDelete = true
+		}
+	}
 
 	if !canDelete {
 		log.Printf("User %s does not have permission to delete node %s (node owner: %s)", userId, uuid, computeNode.UserId)

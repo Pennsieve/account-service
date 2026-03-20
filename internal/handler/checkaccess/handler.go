@@ -78,8 +78,12 @@ func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccess
 
 	// Initialize permission service with Lambda client for direct authorizer
 	lambdaClient := lambda.NewFromConfig(cfg)
+	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
+	accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+	permissionService.SetNodeStore(store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable))
+	permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
 
 	// Check access using the permission service
 	hasAccess, err := permissionService.CheckNodeAccess(ctx, request.UserNodeId, request.NodeUuid, request.OrganizationId)
