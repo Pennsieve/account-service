@@ -25,6 +25,7 @@ import (
 // - Statement 3: Deny CreateRole without permissions boundary attached
 // - Statement 4: Deny removing permissions boundaries from roles
 // - Statement 5: Deny modifying the cross-account role itself (Pennsieve-Compute-* and legacy ROLE-*)
+// - Statement 6: Allow creating service-linked roles for AWS services (autoscaling, ecs)
 const rolePolicyDocument = `{
 	"Version": "2012-10-17",
 	"Statement": [
@@ -106,6 +107,20 @@ const rolePolicyDocument = `{
 			"Resource": "*"
 		},
 		{
+			"Sid": "AllowServiceLinkedRoles",
+			"Effect": "Allow",
+			"Action": "iam:CreateServiceLinkedRole",
+			"Resource": "arn:aws:iam::*:role/aws-service-role/*",
+			"Condition": {
+				"StringEquals": {
+					"iam:AWSServiceName": [
+						"autoscaling.amazonaws.com",
+						"ecs.amazonaws.com"
+					]
+				}
+			}
+		},
+		{
 			"Sid": "DenySelfModification",
 			"Effect": "Deny",
 			"Action": [
@@ -123,6 +138,11 @@ const rolePolicyDocument = `{
 		}
 	]
 }`
+
+// RolePolicyJSON returns the raw role policy document for testing.
+func RolePolicyJSON() string {
+	return rolePolicyDocument
+}
 
 // roleConfigResponse is the JSON envelope returned by the role-policy endpoint.
 type roleConfigResponse struct {
