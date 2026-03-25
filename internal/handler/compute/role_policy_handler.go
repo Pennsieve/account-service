@@ -20,7 +20,7 @@ import (
 // future roles.
 //
 // The policy uses permissions boundaries to prevent privilege escalation:
-// - Statement 1: Allow service actions (no IAM mutation)
+// - Statement 1: Allow service actions (no IAM mutation, plus iam:CreateServiceLinkedRole)
 // - Statement 2: Allow IAM role/policy management for Terraform
 // - Statement 3: Deny CreateRole without permissions boundary attached
 // - Statement 4: Deny removing permissions boundaries from roles
@@ -51,7 +51,8 @@ const rolePolicyDocument = `{
 				"ssm:RemoveTagsFromResource",
 				"ssm:ListTagsForResource",
 				"autoscaling:*",
-				"sts:GetCallerIdentity"
+				"sts:GetCallerIdentity",
+				"iam:CreateServiceLinkedRole"
 			],
 			"Resource": "*"
 		},
@@ -123,6 +124,11 @@ const rolePolicyDocument = `{
 		}
 	]
 }`
+
+// RolePolicyJSON returns the raw role policy document for testing.
+func RolePolicyJSON() string {
+	return rolePolicyDocument
+}
 
 // roleConfigResponse is the JSON envelope returned by the role-policy endpoint.
 type roleConfigResponse struct {
