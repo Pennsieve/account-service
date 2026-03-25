@@ -20,12 +20,11 @@ import (
 // future roles.
 //
 // The policy uses permissions boundaries to prevent privilege escalation:
-// - Statement 1: Allow service actions (no IAM mutation)
+// - Statement 1: Allow service actions (no IAM mutation, plus iam:CreateServiceLinkedRole)
 // - Statement 2: Allow IAM role/policy management for Terraform
 // - Statement 3: Deny CreateRole without permissions boundary attached
 // - Statement 4: Deny removing permissions boundaries from roles
 // - Statement 5: Deny modifying the cross-account role itself (Pennsieve-Compute-* and legacy ROLE-*)
-// - Statement 6: Allow creating service-linked roles for AWS services (autoscaling, ecs)
 const rolePolicyDocument = `{
 	"Version": "2012-10-17",
 	"Statement": [
@@ -52,7 +51,8 @@ const rolePolicyDocument = `{
 				"ssm:RemoveTagsFromResource",
 				"ssm:ListTagsForResource",
 				"autoscaling:*",
-				"sts:GetCallerIdentity"
+				"sts:GetCallerIdentity",
+				"iam:CreateServiceLinkedRole"
 			],
 			"Resource": "*"
 		},
@@ -105,20 +105,6 @@ const rolePolicyDocument = `{
 			"Effect": "Deny",
 			"Action": "iam:DeleteRolePermissionsBoundary",
 			"Resource": "*"
-		},
-		{
-			"Sid": "AllowServiceLinkedRoles",
-			"Effect": "Allow",
-			"Action": "iam:CreateServiceLinkedRole",
-			"Resource": "arn:aws:iam::*:role/aws-service-role/*",
-			"Condition": {
-				"StringEquals": {
-					"iam:AWSServiceName": [
-						"autoscaling.amazonaws.com",
-						"ecs.amazonaws.com"
-					]
-				}
-			}
 		},
 		{
 			"Sid": "DenySelfModification",

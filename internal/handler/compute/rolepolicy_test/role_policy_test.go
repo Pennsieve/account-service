@@ -43,22 +43,16 @@ func findStatement(t *testing.T, doc policyDocument, sid string) policyStatement
 func TestRolePolicyDocument_IsValidJSON(t *testing.T) {
 	doc := parsePolicy(t)
 	assert.Equal(t, "2012-10-17", doc.Version)
-	assert.Len(t, doc.Statement, 6)
+	assert.Len(t, doc.Statement, 5)
 }
 
-func TestRolePolicyDocument_AllowServiceLinkedRoles(t *testing.T) {
+func TestRolePolicyDocument_CreateServiceLinkedRoleInAllowServices(t *testing.T) {
 	doc := parsePolicy(t)
-	stmt := findStatement(t, doc, "AllowServiceLinkedRoles")
+	stmt := findStatement(t, doc, "AllowServices")
 
-	assert.Equal(t, "Allow", stmt.Effect)
-	assert.Equal(t, "iam:CreateServiceLinkedRole", stmt.Action)
-	assert.Equal(t, "arn:aws:iam::*:role/aws-service-role/*", stmt.Resource)
-
-	raw := stmt.Condition["StringEquals"]["iam:AWSServiceName"]
-	var names []string
-	require.NoError(t, json.Unmarshal(raw, &names))
-	assert.Contains(t, names, "autoscaling.amazonaws.com")
-	assert.Contains(t, names, "ecs.amazonaws.com")
+	actions, ok := stmt.Action.([]interface{})
+	require.True(t, ok)
+	assert.Contains(t, actions, "iam:CreateServiceLinkedRole")
 }
 
 func TestRolePolicyDocument_AllExpectedStatementsPresent(t *testing.T) {
@@ -67,7 +61,6 @@ func TestRolePolicyDocument_AllExpectedStatementsPresent(t *testing.T) {
 	expected := map[string]string{
 		"AllowServices":                 "Allow",
 		"AllowIAMRoleManagement":        "Allow",
-		"AllowServiceLinkedRoles":       "Allow",
 		"DenyCreateRoleWithoutBoundary": "Deny",
 		"DenyBoundaryStripping":         "Deny",
 		"DenySelfModification":          "Deny",
