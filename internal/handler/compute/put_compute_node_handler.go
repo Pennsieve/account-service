@@ -14,12 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/aws/aws-sdk-go-v2/service/lambda"
-	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/runner"
-	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
@@ -129,18 +126,8 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	canUpdate := computeNode.UserId == userId ||
 		((store_dynamodb.Account{}) != account && account.UserId == userId)
 
-	if !canUpdate && organizationId != "" {
-		lambdaClient := lambda.NewFromConfig(cfg)
-		nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-		accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
-		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-		permissionService := service.NewPermissionService(nodeAccessStore, nil)
-		permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
-		permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
-		isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, organizationId, computeNode.AccountUuid)
-		if err == nil && isAdmin {
-			canUpdate = true
-		}
+	if !canUpdate {
+		canUpdate = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, organizationId, computeNode.AccountUuid)
 	}
 
 	if !canUpdate {

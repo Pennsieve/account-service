@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/pennsieve/pennsieve-go-core/pkg/models/pgdb"
 )
 
 type DirectAuthorizeRequest struct {
@@ -104,7 +105,7 @@ func IsOrgAdmin(claims map[string]interface{}) bool {
 		return false
 	}
 
-	return int(role) >= 16
+	return pgdb.DbPermission(role) >= pgdb.Administer
 }
 
 // ExtractTeamNodeIds extracts team node IDs from direct authorizer claims.
