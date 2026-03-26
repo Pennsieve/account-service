@@ -26,7 +26,7 @@ func setupPatchAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabase
 	
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
-	os.Setenv("NODES_TABLE", TEST_NODES_TABLE)
+	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
 		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig

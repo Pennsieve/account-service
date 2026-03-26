@@ -90,7 +90,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 	
 	// Initialize node store for updating compute nodes
-	nodesTable := os.Getenv("NODES_TABLE")
+	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
 
 	// Get the account to verify ownership

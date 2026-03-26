@@ -55,7 +55,7 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
-	nodesTable := os.Getenv("NODES_TABLE")
+	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
 
 	accountsStore := &store_dynamodb.AccountDatabaseStore{
