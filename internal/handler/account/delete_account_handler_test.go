@@ -159,9 +159,10 @@ func TestDeleteAccountHandler_ConflictActiveNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	testNode := models.DynamoDBNode{
-		Uuid:        "node-" + testId,
-		AccountUuid: accountUuid,
-		Status:      "Enabled",
+		Uuid:           "node-" + testId,
+		AccountUuid:    accountUuid,
+		OrganizationId: "N:organization:conflict-" + testId,
+		Status:         "Enabled",
 	}
 	err = nodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -203,9 +204,10 @@ func TestDeleteAccountHandler_ForceDeleteWithNodes(t *testing.T) {
 	require.NoError(t, err)
 
 	testNode := models.DynamoDBNode{
-		Uuid:        "node-force-" + testId,
-		AccountUuid: accountUuid,
-		Status:      "Enabled",
+		Uuid:           "node-force-" + testId,
+		AccountUuid:    accountUuid,
+		OrganizationId: "N:organization:force-" + testId,
+		Status:         "Enabled",
 	}
 	err = nodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
