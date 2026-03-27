@@ -2002,3 +2002,292 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+  /storage-nodes:
+    post:
+      summary: Create a storage node
+      description: Creates a new storage node associated with an account.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: createStorageNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountUuid
+                - name
+                - storageLocation
+                - providerType
+              properties:
+                accountUuid:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                storageLocation:
+                  type: string
+                  description: S3 bucket name, Azure container URL, or local path
+                region:
+                  type: string
+                providerType:
+                  type: string
+                  enum: ["s3", "azure-blob", "local"]
+      responses:
+        '201':
+          description: Storage node created
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden
+    get:
+      summary: List storage nodes
+      description: Lists storage nodes filtered by organization_id or account_owner=true.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: listStorageNodes
+      security:
+        - token_workspace_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+        - name: account_owner
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of storage nodes
+        '400':
+          description: Bad request
+  /storage-nodes/{id}:
+    get:
+      summary: Get a storage node
+      description: Retrieves a single storage node by ID.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getStorageNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Storage node details
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    patch:
+      summary: Update a storage node
+      description: Updates storage node fields (name, description, storageLocation, region, status).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: updateStorageNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: ["Enabled", "Disabled"]
+      responses:
+        '200':
+          description: Storage node updated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    delete:
+      summary: Delete a storage node
+      description: Deletes a storage node. Account owner only.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteStorageNode
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Storage node deleted
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+  /storage-nodes/{id}/update-config:
+    post:
+      summary: Update storage node infrastructure config
+      description: |
+        Re-applies the provisioner terraform on an existing storage node to update
+        bucket configuration (CORS, lifecycle, encryption settings, etc.) without
+        touching bucket contents. The bucket has prevent_destroy=true in terraform.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: updateStorageNodeConfig
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Config update initiated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+  /storage-nodes/{id}/workspace:
+    post:
+      summary: Attach storage node to workspace
+      description: Attaches a storage node to a workspace. Account owner only.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: attachStorageNodeToWorkspace
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - workspaceId
+              properties:
+                workspaceId:
+                  type: string
+                isDefault:
+                  type: boolean
+      responses:
+        '201':
+          description: Storage node attached to workspace
+        '403':
+          description: Forbidden
+        '409':
+          description: Already attached
+    delete:
+      summary: Detach storage node from workspace
+      description: Detaches a storage node from a workspace. Account owner only.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: detachStorageNodeFromWorkspace
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - workspaceId
+              properties:
+                workspaceId:
+                  type: string
+      responses:
+        '200':
+          description: Storage node detached from workspace
+        '403':
+          description: Forbidden
+        '409':
+          description: Cannot detach - data exists
+  /storage-nodes/{id}/impact:
+    get:
+      summary: Get detach impact
+      description: Returns the impact of detaching a storage node (affected datasets, files, size).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getStorageNodeDetachImpact
+      security:
+        - token_auth: [ ]
+      tags:
+        - Storage Nodes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Impact analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  datasets:
+                    type: integer
+                  files:
+                    type: integer
+                  totalSizeBytes:
+                    type: integer
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found

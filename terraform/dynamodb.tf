@@ -150,6 +150,69 @@ tags = merge(
   )
 }
 
+resource "aws_dynamodb_table" "storage_nodes_table" {
+  name           = "${var.environment_name}-storage-nodes-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "uuid"
+
+  attribute {
+    name = "uuid"
+    type = "S"
+  }
+
+  attribute {
+    name = "accountUuid"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "accountUuid-index"
+    hash_key        = "accountUuid"
+    projection_type = "ALL"
+  }
+
+tags = merge(
+  local.common_tags,
+  {
+    "Name"         = "${var.environment_name}-storage-nodes-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+    "name"         = "${var.environment_name}-storage-nodes-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+    "service_name" = var.service_name
+  },
+  )
+}
+
+resource "aws_dynamodb_table" "storage_node_workspace_table" {
+  name           = "${var.environment_name}-storage-node-workspace-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "storageNodeUuid"
+  range_key      = "workspaceId"
+
+  attribute {
+    name = "storageNodeUuid"
+    type = "S"
+  }
+
+  attribute {
+    name = "workspaceId"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "workspaceId-index"
+    hash_key        = "workspaceId"
+    projection_type = "ALL"
+  }
+
+tags = merge(
+  local.common_tags,
+  {
+    "Name"         = "${var.environment_name}-storage-node-workspace-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+    "name"         = "${var.environment_name}-storage-node-workspace-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+    "service_name" = var.service_name
+  },
+  )
+}
+
 resource "aws_dynamodb_table" "compute_node_access_table" {
   name           = "${var.environment_name}-compute-node-access-table-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
   billing_mode   = "PAY_PER_REQUEST"

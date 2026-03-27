@@ -8,6 +8,7 @@ import (
     "github.com/aws/aws-lambda-go/lambdacontext"
     accountHandler "github.com/pennsieve/account-service/internal/handler/account"
     computeHandler "github.com/pennsieve/account-service/internal/handler/compute"
+    storageHandler "github.com/pennsieve/account-service/internal/handler/storage"
     "github.com/pennsieve/account-service/internal/logging"
 )
 
@@ -77,6 +78,17 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 
     // Role policy endpoint
     router.GET("/role-policy", computeHandler.GetRolePolicyHandler)
+
+    // Storage node routes
+    router.POST("/storage-nodes", storageHandler.PostStorageNodeHandler)
+    router.GET("/storage-nodes", storageHandler.GetStorageNodesHandler)
+    router.GET("/storage-nodes/{id}", storageHandler.GetStorageNodeHandler)
+    router.PATCH("/storage-nodes/{id}", storageHandler.PatchStorageNodeHandler)
+    router.DELETE("/storage-nodes/{id}", storageHandler.DeleteStorageNodeHandler)
+    router.POST("/storage-nodes/{id}/workspace", storageHandler.AttachToWorkspaceHandler)
+    router.DELETE("/storage-nodes/{id}/workspace", storageHandler.DetachFromWorkspaceHandler)
+    router.POST("/storage-nodes/{id}/update-config", storageHandler.PostUpdateConfigHandler)
+    router.GET("/storage-nodes/{id}/impact", storageHandler.GetDetachImpactHandler)
 
     return router.Start(ctx, request)
 }

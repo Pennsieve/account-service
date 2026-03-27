@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	authclient "github.com/pennsieve/account-service/internal/authorizer"
@@ -109,18 +110,8 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 
 	if requireOwner {
 		canManage := node.UserId == userId
-		if !canManage && node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
-			lambdaClient := lambda.NewFromConfig(cfg)
-			nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-			accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
-			nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-			permissionService := service.NewPermissionService(nodeAccessStore, nil)
-			permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
-			permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
-			isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, node.OrganizationId, node.AccountUuid)
-			if err == nil && isAdmin {
-				canManage = true
-			}
+		if !canManage {
+			canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
 		}
 		if !canManage {
 			resp := events.APIGatewayV2HTTPResponse{
@@ -189,4 +180,25 @@ func checkNodeAccess(ctx context.Context, lambdaClient *lambda.Client, dynamoDBC
 	}
 
 	return nil
+}
+
+// checkAdminManageAccess checks if the user is an org admin with manage access (IsPublic=true)
+// for the given node's organization and account. Returns true if the user has admin manage access.
+func checkAdminManageAccess(ctx context.Context, cfg aws.Config, dynamoDBClient *dynamodb.Client, userId, organizationId, accountUuid string) bool {
+	if organizationId == "" || organizationId == "INDEPENDENT" {
+		return false
+	}
+	lambdaClient := lambda.NewFromConfig(cfg)
+	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
+	accountWorkspaceTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
+	permissionService := service.NewPermissionService(nodeAccessStore, nil)
+	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
+	permissionService.SetAccountWorkspaceStore(store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, accountWorkspaceTable))
+	isAdmin, err := permissionService.IsAdminWithManageAccess(ctx, userId, organizationId, accountUuid)
+	if err != nil {
+		log.Printf("Error checking admin manage access: %v", err)
+		return false
+	}
+	return isAdmin
 }

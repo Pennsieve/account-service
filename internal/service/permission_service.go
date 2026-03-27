@@ -114,11 +114,15 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 	}
 
 	// 2. Organization admins can access nodes on accounts with admin management enabled (IsPublic)
-	if authorizer.IsOrgAdmin(authResp.Claims) {
+	if authorizer.IsOrgAdmin(authResp.Claims) && s.NodeStore != nil && s.AccountWorkspaceStore != nil {
 		node, err := s.NodeStore.GetById(ctx, nodeUuid)
-		if err == nil && node.AccountUuid != "" {
+		if err != nil {
+			slog.Warn("Failed to fetch node for admin access check", "nodeUuid", nodeUuid, "error", err)
+		} else if node.AccountUuid != "" {
 			enablement, err := s.AccountWorkspaceStore.Get(ctx, node.AccountUuid, organizationId)
-			if err == nil && enablement.IsPublic {
+			if err != nil {
+				slog.Warn("Failed to fetch workspace enablement for admin access check", "accountUuid", node.AccountUuid, "error", err)
+			} else if enablement.IsPublic {
 				return true, nil
 			}
 		}

@@ -57,6 +57,17 @@ variable "tier" {
   default = "provisioner"
 }
 
+# STORAGE PROVISIONER
+variable "storage_provisioner_image" {
+  description = "Docker image for the storage node provisioner Fargate task"
+  default     = "pennsieve/storage-node-aws-provisioner"
+}
+
+variable "storage_provisioner_image_tag" {
+  description = "Docker image tag for the storage node provisioner Fargate task"
+  default     = "latest"
+}
+
 locals {
   
   common_tags = {
