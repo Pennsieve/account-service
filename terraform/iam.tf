@@ -91,9 +91,28 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       aws_dynamodb_table.compute_resource_nodes_table.arn,
       "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*",
       aws_dynamodb_table.compute_node_access_table.arn,
-      "${aws_dynamodb_table.compute_node_access_table.arn}/*"
+      "${aws_dynamodb_table.compute_node_access_table.arn}/*",
+      aws_dynamodb_table.storage_nodes_table.arn,
+      "${aws_dynamodb_table.storage_nodes_table.arn}/*",
+      aws_dynamodb_table.storage_node_workspace_table.arn,
+      "${aws_dynamodb_table.storage_node_workspace_table.arn}/*"
     ]
 
+  }
+
+  statement {
+    sid    = "StoragePolicyManagement"
+    effect = "Allow"
+    actions = [
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:GetPolicy",
+      "iam:ListPolicyVersions"
+    ]
+    resources = [
+      aws_iam_policy.storage_read.arn,
+      aws_iam_policy.storage_write.arn
+    ]
   }
 
   statement {
@@ -469,12 +488,33 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
       "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
-      "dynamodb:DeleteItem"
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan"
     ]
 
     resources = [
       aws_dynamodb_table.compute_resource_nodes_table.arn,
-      "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*"
+      "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*",
+      aws_dynamodb_table.storage_nodes_table.arn,
+      "${aws_dynamodb_table.storage_nodes_table.arn}/*",
+      aws_dynamodb_table.storage_node_workspace_table.arn,
+      "${aws_dynamodb_table.storage_node_workspace_table.arn}/*"
+    ]
+  }
+
+  statement {
+    sid    = "EventBridgeHandlerStoragePolicyManagement"
+    effect = "Allow"
+    actions = [
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicyVersion",
+      "iam:GetPolicy",
+      "iam:ListPolicyVersions"
+    ]
+    resources = [
+      aws_iam_policy.storage_read.arn,
+      aws_iam_policy.storage_write.arn
     ]
   }
 
@@ -572,4 +612,56 @@ resource "aws_iam_role_policy" "check_access_lambda_rds" {
       }
     ]
   })
+}
+
+# Managed IAM Policies for storage bucket access
+# These policies are dynamically updated by Lambda when storage nodes are created/modified/deleted
+resource "aws_iam_policy" "storage_read" {
+  name = "${var.environment_name}-storage-bucket-read"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "StorageBucketRead"
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectAttributes", "s3:ListBucket", "s3:ListBucketVersions", "s3:GetObjectTagging"]
+      Resource = ["arn:aws:s3:::placeholder"]
+    }]
+  })
+
+  lifecycle {
+    ignore_changes = [policy]
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      "Name"         = "${var.environment_name}-storage-bucket-read"
+      "service_name" = var.service_name
+    },
+  )
+}
+
+resource "aws_iam_policy" "storage_write" {
+  name = "${var.environment_name}-storage-bucket-write"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "StorageBucketWrite"
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObjectTagging", "s3:AbortMultipartUpload"]
+      Resource = ["arn:aws:s3:::placeholder"]
+    }]
+  })
+
+  lifecycle {
+    ignore_changes = [policy]
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      "Name"         = "${var.environment_name}-storage-bucket-write"
+      "service_name" = var.service_name
+    },
+  )
 }

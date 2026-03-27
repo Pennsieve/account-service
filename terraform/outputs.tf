@@ -57,3 +57,30 @@ output "check_access_lambda_name" {
   value = aws_lambda_function.check_user_node_access.function_name
   description = "Name of the internal check access Lambda function"
 }
+
+# Storage node outputs
+output "storage_nodes_table_arn" {
+  value = aws_dynamodb_table.storage_nodes_table.arn
+}
+
+output "storage_nodes_table_name" {
+  value = aws_dynamodb_table.storage_nodes_table.name
+}
+
+output "storage_node_workspace_table_arn" {
+  value = aws_dynamodb_table.storage_node_workspace_table.arn
+}
+
+output "storage_node_workspace_table_name" {
+  value = aws_dynamodb_table.storage_node_workspace_table.name
+}
+
+output "storage_read_policy_arn" {
+  value       = aws_iam_policy.storage_read.arn
+  description = "ARN of the managed IAM policy for storage bucket read access"
+}
+
+output "storage_write_policy_arn" {
+  value       = aws_iam_policy.storage_write.arn
+  description = "ARN of the managed IAM policy for storage bucket write access"
+}
