@@ -24,6 +24,8 @@ const (
     TEST_NODES_TABLE               = "test-nodes-table"
     TEST_ACCESS_TABLE              = "test-access-table"
     TEST_WORKSPACE_TABLE           = "test-workspace-table"
+    TEST_STORAGE_NODES_TABLE       = "test-storage-nodes-table"
+    TEST_STORAGE_NODE_WORKSPACE_TABLE = "test-storage-node-workspace-table"
 )
 
 var globalTestClient *dynamodb.Client
@@ -57,6 +59,8 @@ func SetupPackageTables() error {
         {TEST_NODES_TABLE, createSharedNodesTable},
         {TEST_ACCESS_TABLE, createSharedAccessTable},
         {TEST_WORKSPACE_TABLE, createSharedWorkspaceTable},
+        {TEST_STORAGE_NODES_TABLE, createSharedStorageNodesTable},
+        {TEST_STORAGE_NODE_WORKSPACE_TABLE, createSharedStorageNodeWorkspaceTable},
     }
 
     for _, table := range tables {
@@ -76,6 +80,8 @@ func CleanupPackageTables() {
         TEST_NODES_TABLE,
         TEST_ACCESS_TABLE,
         TEST_WORKSPACE_TABLE,
+        TEST_STORAGE_NODES_TABLE,
+        TEST_STORAGE_NODE_WORKSPACE_TABLE,
     }
 
     for _, tableName := range tables {
@@ -93,6 +99,8 @@ func ClearTestData() error {
         TEST_NODES_TABLE,
         TEST_ACCESS_TABLE,
         TEST_WORKSPACE_TABLE,
+        TEST_STORAGE_NODES_TABLE,
+        TEST_STORAGE_NODE_WORKSPACE_TABLE,
     }
 
     for _, tableName := range tables {
@@ -297,6 +305,12 @@ func ClearStoreDynamoDBTable(client *dynamodb.Client, tableName string) error {
             key = map[string]types.AttributeValue{
                 "accountUuid": item["accountUuid"],
                 "workspaceId": item["workspaceId"],
+            }
+        case TEST_STORAGE_NODE_WORKSPACE_TABLE:
+            // Storage node workspace table has composite key: storageNodeUuid (hash) + workspaceId (range)
+            key = map[string]types.AttributeValue{
+                "storageNodeUuid": item["storageNodeUuid"],
+                "workspaceId":     item["workspaceId"],
             }
         default:
             // Accounts and nodes tables have single key: uuid
@@ -539,6 +553,86 @@ func GenerateTestId() string {
     // Use a short UUID suffix for readability
     id := uuid.New().String()
     return id[len(id)-8:]
+}
+
+func createSharedStorageNodesTable() error {
+    _, err := globalTestClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+        AttributeDefinitions: []types.AttributeDefinition{
+            {
+                AttributeName: aws.String("uuid"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
+            {
+                AttributeName: aws.String("accountUuid"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
+        },
+        KeySchema: []types.KeySchemaElement{
+            {
+                AttributeName: aws.String("uuid"),
+                KeyType:       types.KeyTypeHash,
+            },
+        },
+        GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
+            {
+                IndexName: aws.String("accountUuid-index"),
+                KeySchema: []types.KeySchemaElement{
+                    {
+                        AttributeName: aws.String("accountUuid"),
+                        KeyType:       types.KeyTypeHash,
+                    },
+                },
+                Projection: &types.Projection{
+                    ProjectionType: types.ProjectionTypeAll,
+                },
+            },
+        },
+        TableName:   aws.String(TEST_STORAGE_NODES_TABLE),
+        BillingMode: types.BillingModePayPerRequest,
+    })
+    return err
+}
+
+func createSharedStorageNodeWorkspaceTable() error {
+    _, err := globalTestClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+        AttributeDefinitions: []types.AttributeDefinition{
+            {
+                AttributeName: aws.String("storageNodeUuid"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
+            {
+                AttributeName: aws.String("workspaceId"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
+        },
+        KeySchema: []types.KeySchemaElement{
+            {
+                AttributeName: aws.String("storageNodeUuid"),
+                KeyType:       types.KeyTypeHash,
+            },
+            {
+                AttributeName: aws.String("workspaceId"),
+                KeyType:       types.KeyTypeRange,
+            },
+        },
+        GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
+            {
+                IndexName: aws.String("workspaceId-index"),
+                KeySchema: []types.KeySchemaElement{
+                    {
+                        AttributeName: aws.String("workspaceId"),
+                        KeyType:       types.KeyTypeHash,
+                    },
+                },
+                Projection: &types.Projection{
+                    ProjectionType: types.ProjectionTypeAll,
+                },
+            },
+        },
+        TableName:   aws.String(TEST_STORAGE_NODE_WORKSPACE_TABLE),
+        BillingMode: types.BillingModePayPerRequest,
+    })
+    return err
 }
 
 // ensureTableFreshState ensures table is in clean state - either creates new or clears existing

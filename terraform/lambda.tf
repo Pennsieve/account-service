@@ -37,6 +37,12 @@ resource "aws_lambda_function" "service_lambda" {
       SECURITY_GROUP = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
       TASK_DEF_CONTAINER_NAME = var.tier
       APP_STORE_ECR_REPOSITORY = data.terraform_remote_state.platform_infrastructure.outputs.appstore_private_ecr_repository_url
+      STORAGE_NODES_TABLE = aws_dynamodb_table.storage_nodes_table.name
+      STORAGE_NODE_WORKSPACE_TABLE = aws_dynamodb_table.storage_node_workspace_table.name
+      STORAGE_READ_POLICY_ARN = aws_iam_policy.storage_read.arn
+      STORAGE_WRITE_POLICY_ARN = aws_iam_policy.storage_write.arn
+      STORAGE_TASK_DEF_ARN = aws_ecs_task_definition.storage_provisioner_task.arn
+      STORAGE_TASK_DEF_CONTAINER_NAME = "storage-provisioner"
     }
   }
 }
@@ -61,9 +67,13 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
 
   environment {
     variables = {
-      ENV                 = var.environment_name
-      REGION              = var.aws_region
-      COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
+      ENV                          = var.environment_name
+      REGION                       = var.aws_region
+      COMPUTE_NODES_TABLE          = aws_dynamodb_table.compute_resource_nodes_table.name
+      STORAGE_NODES_TABLE          = aws_dynamodb_table.storage_nodes_table.name
+      STORAGE_NODE_WORKSPACE_TABLE = aws_dynamodb_table.storage_node_workspace_table.name
+      STORAGE_READ_POLICY_ARN      = aws_iam_policy.storage_read.arn
+      STORAGE_WRITE_POLICY_ARN     = aws_iam_policy.storage_write.arn
     }
   }
 }
@@ -102,6 +112,80 @@ resource "aws_lambda_permission" "eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.compute_node_provisioning.arn
 }
 
+# EventBridge Rule for Storage Node Provisioning Events
+resource "aws_cloudwatch_event_rule" "storage_node_provisioning" {
+  name        = "${var.environment_name}-storage-node-provisioning-events"
+  description = "Capture storage node provisioning events"
+
+  event_pattern = jsonencode({
+    source      = ["storage-node-provisioner"]
+    detail-type = [
+      "StorageNodeCREATE",
+      "StorageNodeCREATEError",
+      "StorageNodeUPDATE",
+      "StorageNodeUPDATEError",
+      "StorageNodeDELETE",
+      "StorageNodeDELETEError"
+    ]
+  })
+}
+
+# EventBridge Target - reuse the same eventbridge handler Lambda
+resource "aws_cloudwatch_event_target" "storage_lambda" {
+  rule      = aws_cloudwatch_event_rule.storage_node_provisioning.name
+  target_id = "StorageNodeEventBridgeHandler"
+  arn       = aws_lambda_function.eventbridge_handler_lambda.arn
+}
+
+# Lambda Permission for storage EventBridge to invoke the function
+resource "aws_lambda_permission" "storage_eventbridge" {
+  statement_id  = "AllowExecutionFromStorageEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.eventbridge_handler_lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.storage_node_provisioning.arn
+}
+
+# Storage Node Provisioner Fargate Task Definition
+resource "aws_ecs_task_definition" "storage_provisioner_task" {
+  family                   = "${var.environment_name}-${var.service_name}-storage-provisioner-task-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  task_role_arn            = aws_iam_role.provisioner_fargate_task_iam_role.arn
+  execution_role_arn       = aws_iam_role.provisioner_fargate_task_iam_role.arn
+
+  container_definitions = jsonencode([{
+    name      = "storage-provisioner"
+    image     = "${var.storage_provisioner_image}:${var.storage_provisioner_image_tag}"
+    essential = true
+    cpu       = 0
+    memory    = 2048
+    environment = [
+      { name = "ENV", value = var.environment_name },
+      { name = "REGION", value = var.aws_region }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.storage_provisioner_log_group.name
+        "awslogs-region"        = data.aws_region.current_region.name
+        "awslogs-stream-prefix" = "fargate"
+      }
+    }
+    repositoryCredentials = {
+      credentialsParameter = data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn
+    }
+  }])
+}
+
+# CloudWatch Log Group for Storage Provisioner
+resource "aws_cloudwatch_log_group" "storage_provisioner_log_group" {
+  name              = "/aws/fargate/${var.environment_name}-${var.service_name}-storage-provisioner-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  retention_in_days = 30
+  tags              = local.common_tags
+}
 
 # Lambda function for internal service-to-service access checking
 # This function is NOT exposed through API Gateway and can only be invoked directly
