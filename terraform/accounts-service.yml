@@ -2053,7 +2053,7 @@ paths:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: listStorageNodes
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Storage Nodes
       parameters:

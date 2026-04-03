@@ -4,22 +4,32 @@
 # and attach them to the correct workspaces based on the organizations table.
 #
 # Usage:
-#   ./scripts/seed-storage-nodes.sh <environment> <api-base-url> <auth-token> <account-uuid>
+#   ./scripts/seed-storage-nodes.sh <environment> <api-base-url> <auth-token>
 #
 # Example (dev):
-#   ./scripts/seed-storage-nodes.sh dev https://api2.pennsieve.net/account-service "Bearer xxx" "account-uuid-here"
+#   ./scripts/seed-storage-nodes.sh dev https://api2.pennsieve.net/compute/resources "Bearer xxx"
 #
 # Prerequisites:
 #   - account-service deployed with storage node support
-#   - An Account UUID that owns these buckets (the Pennsieve platform account)
+#   - Account UUIDs registered for each AWS account (Pennsieve, SPARC/NIH, RE-JOIN/PRECISION)
 #   - A valid auth token with admin access
 
 set -euo pipefail
 
-ENV="${1:?Usage: $0 <env> <api-base-url> <auth-token> <account-uuid>}"
+ENV="${1:?Usage: $0 <env> <api-base-url> <auth-token>}"
 API_BASE="${2:?Missing api-base-url}"
 AUTH_TOKEN="${3:?Missing auth-token}"
-ACCOUNT_UUID="${4:?Missing account-uuid}"
+
+# Account UUIDs per AWS account (dev)
+if [ "$ENV" = "dev" ]; then
+  PENNSIEVE_ACCOUNT_UUID="1369d17c-a4d3-439b-9283-3f81002d49fd"  # 941165240011 (Pennsieve dev)
+  SPARC_ACCOUNT_UUID="a2d1292a-3f35-486b-9427-92ab67f68dd3"      # 376308453966 (SPARC/NIH)
+  REJOIN_ACCOUNT_UUID="d74f1af4-c536-4ecc-aa3e-9c38fb3256c4"     # 225366564863 (RE-JOIN/PRECISION)
+else
+  echo "ERROR: Account UUIDs not configured for environment: ${ENV}"
+  echo "Register accounts first, then add their UUIDs here."
+  exit 1
+fi
 
 API_URL="${API_BASE}/storage-nodes"
 
@@ -28,14 +38,15 @@ create_storage_node() {
   local bucket="$2"
   local region="$3"
   local description="$4"
+  local account_uuid="$5"
 
-  echo "Registering: ${name} (${bucket})..."
+  echo "Registering: ${name} (${bucket}) [account: ${account_uuid}]..."
 
   response=$(curl -s -w "\n%{http_code}" -X POST "${API_URL}" \
     -H "Authorization: ${AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
     -d "{
-      \"accountUuid\": \"${ACCOUNT_UUID}\",
+      \"accountUuid\": \"${account_uuid}\",
       \"name\": \"${name}\",
       \"description\": \"${description}\",
       \"storageLocation\": \"${bucket}\",
@@ -105,7 +116,8 @@ create_storage_node \
   "Pennsieve Default Storage" \
   "${BUCKET}" \
   "us-east-1" \
-  "Default platform storage bucket for orgs without a dedicated bucket"
+  "Default platform storage bucket for orgs without a dedicated bucket" \
+  "${PENNSIEVE_ACCOUNT_UUID}"
 DEFAULT_UUID="$node_uuid"
 
 # Attach as default for all orgs that have empty storage_bucket
@@ -155,7 +167,8 @@ create_storage_node \
   "Pennsieve Africa Storage" \
   "${BUCKET}" \
   "af-south-1" \
-  "Storage bucket in Africa (Cape Town) region"
+  "Storage bucket in Africa (Cape Town) region" \
+  "${PENNSIEVE_ACCOUNT_UUID}"
 AFS1_UUID="$node_uuid"
 
 if [ "$ENV" = "dev" ]; then
@@ -177,7 +190,8 @@ create_storage_node \
   "SPARC Storage" \
   "${BUCKET}" \
   "us-east-1" \
-  "SPARC program storage bucket (NIH account)"
+  "SPARC program storage bucket (NIH account)" \
+  "${SPARC_ACCOUNT_UUID}"
 SPARC_UUID="$node_uuid"
 
 if [ "$ENV" = "dev" ]; then
@@ -193,7 +207,8 @@ create_storage_node \
   "RE-JOIN Storage" \
   "${ENV}-rejoin-storage-use1" \
   "us-east-1" \
-  "RE-JOIN program storage bucket"
+  "RE-JOIN program storage bucket" \
+  "${REJOIN_ACCOUNT_UUID}"
 REJOIN_UUID="$node_uuid"
 
 if [ "$ENV" = "dev" ]; then
@@ -210,7 +225,8 @@ create_storage_node \
   "PRECISION Storage" \
   "${ENV}-precision-storage-use1" \
   "us-east-1" \
-  "PRECISION Human Pain Network storage bucket"
+  "PRECISION Human Pain Network storage bucket" \
+  "${REJOIN_ACCOUNT_UUID}"
 PRECISION_UUID="$node_uuid"
 
 if [ "$ENV" = "dev" ]; then
