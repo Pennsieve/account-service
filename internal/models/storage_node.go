@@ -8,6 +8,7 @@ import (
 // CreateStorageNodeRequest is the request body for POST /storage-nodes
 type CreateStorageNodeRequest struct {
 	AccountUuid      string `json:"accountUuid"`
+	OrganizationId   string `json:"organizationId"`             // Required: workspace for this storage node
 	Name             string `json:"name"`
 	Description      string `json:"description"`
 	StorageLocation  string `json:"storageLocation"`

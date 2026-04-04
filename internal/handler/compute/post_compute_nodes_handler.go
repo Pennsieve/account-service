@@ -367,6 +367,13 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				StatusCode: http.StatusForbidden,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyAccountOwnerCanCreateNodes),
 			}, nil
+		} else if !enablement.EnableCompute {
+			// Compute is not enabled for admins on this workspace
+			log.Printf("Compute not enabled for workspace %s on account %s", organizationId, accountUuid)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusForbidden,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrComputeNotEnabledForWorkspace),
+			}, nil
 		} else {
 			// When isPublic is true and user is not the account owner, user must be a workspace admin
 			// Use container to get PostgreSQL connection

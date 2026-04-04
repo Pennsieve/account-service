@@ -19,10 +19,12 @@ import (
 
 // WorkspaceEnablementRequest contains the parameters for enabling a workspace on an account
 type WorkspaceEnablementRequest struct {
-	// IsPublic determines who can create compute nodes on this account:
-	// - true: workspace managers can create compute nodes on this account
-	// - false: only the account owner can create compute nodes on this account
-	IsPublic bool `json:"isPublic"`
+	// IsPublic determines who can manage resources on this account:
+	// - true: workspace admins can manage resources (subject to EnableCompute/EnableStorage)
+	// - false: only the account owner can manage resources
+	IsPublic      bool `json:"isPublic"`
+	EnableCompute bool `json:"enableCompute"` // If true and IsPublic, admins can create compute nodes
+	EnableStorage bool `json:"enableStorage"` // If true and IsPublic, admins can create storage nodes
 }
 
 // PostAccountWorkspaceEnablementHandler enables workspace access for an account
@@ -131,6 +133,8 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		AccountUuid:    accountUuid,
 		WorkspaceId:    organizationId,  // Map organizationId to WorkspaceId for DB
 		IsPublic:       enablementRequest.IsPublic,
+		EnableCompute:  enablementRequest.EnableCompute,
+		EnableStorage:  enablementRequest.EnableStorage,
 		EnabledBy:      userId,
 		EnabledAt:      time.Now().Unix(),
 	}
@@ -149,6 +153,8 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 		AccountUuid:    enablement.AccountUuid,
 		OrganizationId: organizationId,  // Use the original organizationId
 		IsPublic:       enablement.IsPublic,
+		EnableCompute:  enablement.EnableCompute,
+		EnableStorage:  enablement.EnableStorage,
 		EnabledBy:      enablement.EnabledBy,
 		EnabledAt:      enablement.EnabledAt,
 	})

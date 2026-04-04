@@ -77,6 +77,33 @@ func (s *PermissionService) IsAdminWithManageAccess(ctx context.Context, userId,
 	return enablement.IsPublic, nil
 }
 
+// IsAdminWithStorageAccess checks if the user is an organization admin and the
+// account's workspace enablement has IsPublic=true and EnableStorage=true.
+func (s *PermissionService) IsAdminWithStorageAccess(ctx context.Context, userId, organizationId, accountUuid string) (bool, error) {
+	if organizationId == "" || s.Authorizer == nil {
+		return false, nil
+	}
+
+	authResp, err := s.Authorizer.Authorize(ctx, userId, organizationId)
+	if err != nil {
+		return false, fmt.Errorf("error invoking direct authorizer: %w", err)
+	}
+	if !authResp.IsAuthorized {
+		return false, nil
+	}
+
+	if !authorizer.IsOrgAdmin(authResp.Claims) {
+		return false, nil
+	}
+
+	enablement, err := s.AccountWorkspaceStore.Get(ctx, accountUuid, organizationId)
+	if err != nil {
+		return false, fmt.Errorf("error getting workspace enablement: %w", err)
+	}
+
+	return enablement.IsPublic && enablement.EnableStorage, nil
+}
+
 // CheckNodeAccess checks if a user has access to a compute node.
 // For organization-independent nodes, only direct user access (owner) is checked.
 // For organization-bound nodes, it uses the direct authorizer Lambda to verify

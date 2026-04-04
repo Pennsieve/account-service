@@ -21,12 +21,14 @@ type Account struct {
 type AccountWorkspace struct {
     AccountUuid    string `dynamodbav:"accountUuid"`
     WorkspaceId    string `dynamodbav:"workspaceId"`  // This maps to the organizationId in the application logic
-    // IsPublic determines who can create compute nodes on this account:
-    // - true: workspace managers can create compute nodes on this account
-    // - false: only the account owner can create compute nodes on this account
-    IsPublic  bool   `dynamodbav:"isPublic"`
-    EnabledBy string `dynamodbav:"enabledBy"`
-    EnabledAt int64  `dynamodbav:"enabledAt"`
+    // IsPublic determines who can manage resources on this account:
+    // - true: workspace admins can manage resources (subject to EnableCompute/EnableStorage)
+    // - false: only the account owner can manage resources
+    IsPublic      bool   `dynamodbav:"isPublic"`
+    EnableCompute bool   `dynamodbav:"enableCompute"` // If true and IsPublic, admins can create compute nodes
+    EnableStorage bool   `dynamodbav:"enableStorage"` // If true and IsPublic, admins can create storage nodes
+    EnabledBy     string `dynamodbav:"enabledBy"`
+    EnabledAt     int64  `dynamodbav:"enabledAt"`
 }
 
 func (i Account) GetKey() map[string]types.AttributeValue {

@@ -140,7 +140,13 @@ components:
       properties:
         isPublic:
           type: boolean
-          description: If true, workspace administrators can create and fully manage compute nodes on this account. If false, only the account owner can create and manage nodes; administrators are treated as collaborators with read-only access.
+          description: If true, workspace administrators can manage resources on this account (subject to enableCompute/enableStorage). If false, only the account owner can manage resources.
+        enableCompute:
+          type: boolean
+          description: If true and isPublic is true, workspace administrators can create compute nodes on this account.
+        enableStorage:
+          type: boolean
+          description: If true and isPublic is true, workspace administrators can create storage nodes on this account.
     workspaceEnablementResponse:
       type: object
       properties:
@@ -152,7 +158,13 @@ components:
           description: the workspace ID
         isPublic:
           type: boolean
-          description: If true, workspace administrators can create and fully manage compute nodes on this account. If false, only the account owner can create and manage nodes; administrators are treated as collaborators with read-only access.
+          description: If true, workspace administrators can manage resources on this account (subject to enableCompute/enableStorage). If false, only the account owner can manage resources.
+        enableCompute:
+          type: boolean
+          description: If true and isPublic is true, workspace administrators can create compute nodes on this account.
+        enableStorage:
+          type: boolean
+          description: If true and isPublic is true, workspace administrators can create storage nodes on this account.
         createdAt:
           type: string
           format: date-time
@@ -2021,12 +2033,17 @@ paths:
               type: object
               required:
                 - accountUuid
+                - organizationId
                 - name
                 - storageLocation
                 - providerType
               properties:
                 accountUuid:
                   type: string
+                organizationId:
+                  type: string
+                  description: Organization ID (workspace) for this storage node
+                  example: "N:organization:050fae39-4412-43ef-a514-703ed8e299d5"
                 name:
                   type: string
                 description:

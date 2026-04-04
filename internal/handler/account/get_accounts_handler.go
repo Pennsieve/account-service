@@ -147,6 +147,8 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 					AccountUuid:    e.AccountUuid,
 					OrganizationId: e.WorkspaceId,  // WorkspaceId from DB maps to OrganizationId in model
 					IsPublic:       e.IsPublic,
+					EnableCompute:  e.EnableCompute,
+					EnableStorage:  e.EnableStorage,
 					EnabledBy:      e.EnabledBy,
 					EnabledAt:      e.EnabledAt,
 				}

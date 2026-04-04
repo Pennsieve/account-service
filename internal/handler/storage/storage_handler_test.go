@@ -45,6 +45,24 @@ func setupStorageHandlerTest(t *testing.T) (store_dynamodb.DynamoDBStore, store_
 	return accountStore, storageNodeStore, storageNodeWorkspaceStore
 }
 
+const testOrgId = "N:organization:00000000-0000-0000-0000-000000000001"
+
+func createTestWorkspaceEnablement(t *testing.T, accountUuid, userId string) {
+	client := test.GetClient()
+	wsStore := store_dynamodb.NewAccountWorkspaceStore(client, test.TEST_WORKSPACE_TABLE)
+	enablement := store_dynamodb.AccountWorkspace{
+		AccountUuid:   accountUuid,
+		WorkspaceId:   testOrgId,
+		IsPublic:      true,
+		EnableCompute: true,
+		EnableStorage: true,
+		EnabledBy:     userId,
+		EnabledAt:     1000000000,
+	}
+	err := wsStore.Insert(context.Background(), enablement)
+	require.NoError(t, err)
+}
+
 func createTestAccount(t *testing.T, accountStore store_dynamodb.DynamoDBStore, userId string) store_dynamodb.Account {
 	testAccount := store_dynamodb.Account{
 		Uuid:        uuid.New().String(),
@@ -61,13 +79,15 @@ func createTestAccount(t *testing.T, accountStore store_dynamodb.DynamoDBStore, 
 // --- POST /storage-nodes ---
 
 func TestPostStorageNodeHandler_Success(t *testing.T) {
-	accountStore, _, _ := setupStorageHandlerTest(t)
+	accountStore, _, wsStore := setupStorageHandlerTest(t)
 	ctx := context.Background()
 	userId := "user-" + test.GenerateTestId()
 	testAccount := createTestAccount(t, accountStore, userId)
+	createTestWorkspaceEnablement(t, testAccount.Uuid, userId)
 
 	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
 		AccountUuid:      testAccount.Uuid,
+		OrganizationId:   testOrgId,
 		Name:             "SPARC Storage",
 		Description:      "SPARC primary storage bucket",
 		StorageLocation:  "pennsieve-sparc-storage",
@@ -79,7 +99,7 @@ func TestPostStorageNodeHandler_Success(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(reqBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(userId, ""),
+			Authorizer: test.CreateTestAuthorizer(userId, testOrgId),
 		},
 	}
 
@@ -97,6 +117,13 @@ func TestPostStorageNodeHandler_Success(t *testing.T) {
 	assert.Equal(t, "us-east-1", node.Region)
 	assert.Equal(t, "Enabled", node.Status)
 	assert.Equal(t, userId, node.CreatedBy)
+
+	// Verify auto-attachment to workspace
+	workspaces, err := wsStore.GetByStorageNode(ctx, node.Uuid)
+	assert.NoError(t, err)
+	assert.Len(t, workspaces, 1)
+	assert.Equal(t, testOrgId, workspaces[0].WorkspaceId)
+	assert.True(t, workspaces[0].IsDefault)
 }
 
 func TestPostStorageNodeHandler_InvalidProviderType(t *testing.T) {
@@ -104,9 +131,11 @@ func TestPostStorageNodeHandler_InvalidProviderType(t *testing.T) {
 	ctx := context.Background()
 	userId := "user-" + test.GenerateTestId()
 	testAccount := createTestAccount(t, accountStore, userId)
+	createTestWorkspaceEnablement(t, testAccount.Uuid, userId)
 
 	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
 		AccountUuid:      testAccount.Uuid,
+		OrganizationId:   testOrgId,
 		Name:             "Bad Storage",
 		StorageLocation:  "some-bucket",
 		ProviderType:     "invalid",
@@ -116,7 +145,7 @@ func TestPostStorageNodeHandler_InvalidProviderType(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(reqBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(userId, ""),
+			Authorizer: test.CreateTestAuthorizer(userId, testOrgId),
 		},
 	}
 
@@ -152,6 +181,7 @@ func TestPostStorageNodeHandler_AccountNotFound(t *testing.T) {
 
 	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
 		AccountUuid:     uuid.New().String(),
+		OrganizationId:  testOrgId,
 		Name:            "Test Storage",
 		StorageLocation: "bucket",
 		ProviderType:    "s3",
@@ -160,7 +190,7 @@ func TestPostStorageNodeHandler_AccountNotFound(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(reqBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("test-user", ""),
+			Authorizer: test.CreateTestAuthorizer("test-user", testOrgId),
 		},
 	}
 
@@ -174,9 +204,11 @@ func TestPostStorageNodeHandler_NonOwnerForbidden(t *testing.T) {
 	ctx := context.Background()
 	ownerId := "owner-" + test.GenerateTestId()
 	testAccount := createTestAccount(t, accountStore, ownerId)
+	createTestWorkspaceEnablement(t, testAccount.Uuid, ownerId)
 
 	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
 		AccountUuid:     testAccount.Uuid,
+		OrganizationId:  testOrgId,
 		Name:            "Test Storage",
 		StorageLocation: "bucket",
 		ProviderType:    "s3",
@@ -185,7 +217,7 @@ func TestPostStorageNodeHandler_NonOwnerForbidden(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(reqBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("random-user", ""),
+			Authorizer: test.CreateTestAuthorizer("random-user", testOrgId),
 		},
 	}
 
@@ -199,9 +231,11 @@ func TestPostStorageNodeHandler_AzureBlob(t *testing.T) {
 	ctx := context.Background()
 	userId := "user-" + test.GenerateTestId()
 	testAccount := createTestAccount(t, accountStore, userId)
+	createTestWorkspaceEnablement(t, testAccount.Uuid, userId)
 
 	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
 		AccountUuid:     testAccount.Uuid,
+		OrganizationId:  testOrgId,
 		Name:            "Azure Storage",
 		StorageLocation: "https://myaccount.blob.core.windows.net/mycontainer",
 		Region:          "eastus2",
@@ -211,7 +245,7 @@ func TestPostStorageNodeHandler_AzureBlob(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(reqBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(userId, ""),
+			Authorizer: test.CreateTestAuthorizer(userId, testOrgId),
 		},
 	}
 
@@ -223,6 +257,100 @@ func TestPostStorageNodeHandler_AzureBlob(t *testing.T) {
 	err = json.Unmarshal([]byte(response.Body), &node)
 	assert.NoError(t, err)
 	assert.Equal(t, "azure-blob", node.ProviderType)
+}
+
+func TestPostStorageNodeHandler_NoEnablement(t *testing.T) {
+	accountStore, _, _ := setupStorageHandlerTest(t)
+	ctx := context.Background()
+	userId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, userId)
+	// No workspace enablement created
+
+	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
+		AccountUuid:      testAccount.Uuid,
+		OrganizationId:   testOrgId,
+		Name:             "Test Storage",
+		StorageLocation:  "some-bucket",
+		ProviderType:     "s3",
+		SkipProvisioning: true,
+	})
+
+	request := events.APIGatewayV2HTTPRequest{
+		Body: string(reqBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, testOrgId),
+		},
+	}
+
+	response, err := storage.PostStorageNodeHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 403, response.StatusCode)
+	assert.Contains(t, response.Body, "not enabled for this workspace")
+}
+
+func TestPostStorageNodeHandler_MissingOrganizationId(t *testing.T) {
+	_, _, _ = setupStorageHandlerTest(t)
+	ctx := context.Background()
+
+	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
+		AccountUuid:     uuid.New().String(),
+		Name:            "Test Storage",
+		StorageLocation: "some-bucket",
+		ProviderType:    "s3",
+	})
+
+	request := events.APIGatewayV2HTTPRequest{
+		Body: string(reqBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer("test-user", testOrgId),
+		},
+	}
+
+	response, err := storage.PostStorageNodeHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, response.StatusCode)
+}
+
+func TestPostStorageNodeHandler_OwnerBypassesEnableStorage(t *testing.T) {
+	accountStore, _, _ := setupStorageHandlerTest(t)
+	ctx := context.Background()
+	userId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, userId)
+
+	// Create enablement with enableStorage=false
+	client := test.GetClient()
+	wsStore := store_dynamodb.NewAccountWorkspaceStore(client, test.TEST_WORKSPACE_TABLE)
+	err := wsStore.Insert(ctx, store_dynamodb.AccountWorkspace{
+		AccountUuid:   testAccount.Uuid,
+		WorkspaceId:   testOrgId,
+		IsPublic:      true,
+		EnableCompute: true,
+		EnableStorage: false, // Storage disabled for admins
+		EnabledBy:     userId,
+		EnabledAt:     1000000000,
+	})
+	require.NoError(t, err)
+
+	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
+		AccountUuid:      testAccount.Uuid,
+		OrganizationId:   testOrgId,
+		Name:             "Owner Storage",
+		StorageLocation:  "owner-bucket",
+		ProviderType:     "s3",
+		SkipProvisioning: true,
+	})
+
+	request := events.APIGatewayV2HTTPRequest{
+		Body: string(reqBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, testOrgId),
+		},
+	}
+
+	// Owner should succeed even with enableStorage=false
+	response, err := storage.PostStorageNodeHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 201, response.StatusCode)
 }
 
 // --- GET /storage-nodes/{id} ---

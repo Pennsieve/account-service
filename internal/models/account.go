@@ -20,12 +20,14 @@ type AccountResponse struct {
 type AccountWorkspaceEnablement struct {
 	AccountUuid    string `json:"accountUuid"`
 	OrganizationId string `json:"organizationId"`
-	// IsPublic determines who can create compute nodes on this account:
-	// - true: workspace managers can create compute nodes on this account
-	// - false: only the account owner can create compute nodes on this account
-	IsPublic       bool   `json:"isPublic"`
-	EnabledBy      string `json:"enabledBy"`
-	EnabledAt      int64  `json:"enabledAt"`
+	// IsPublic determines who can manage resources on this account:
+	// - true: workspace admins can manage resources (subject to EnableCompute/EnableStorage)
+	// - false: only the account owner can manage resources
+	IsPublic      bool   `json:"isPublic"`
+	EnableCompute bool   `json:"enableCompute"` // If true and IsPublic, admins can create compute nodes
+	EnableStorage bool   `json:"enableStorage"` // If true and IsPublic, admins can create storage nodes
+	EnabledBy     string `json:"enabledBy"`
+	EnabledAt     int64  `json:"enabledAt"`
 }
 
 type AccountWithWorkspaces struct {
