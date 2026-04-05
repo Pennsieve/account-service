@@ -118,12 +118,17 @@ for account_uuid, workspace_id in sorted(pairs):
   existing=$($AWS dynamodb get-item \
     --table-name "$WORKSPACE_TABLE" \
     --key "{\"accountUuid\":{\"S\":\"$account_uuid\"},\"workspaceId\":{\"S\":\"$workspace_id\"}}" \
-    --output json 2>&1)
+    --output json 2>&1 || echo '{}')
 
-  has_item=$(echo "$existing" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if 'Item' in d else 'no')")
+  # get-item returns empty string or {} when item doesn't exist
+  if [ -z "$existing" ]; then
+    existing='{}'
+  fi
+
+  has_item=$(echo "$existing" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print('yes' if 'Item' in d else 'no')")
 
   if [ "$has_item" = "yes" ]; then
-    has_storage=$(echo "$existing" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['Item'].get('enableStorage',{}).get('BOOL', False))")
+    has_storage=$(echo "$existing" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d['Item'].get('enableStorage',{}).get('BOOL', False))")
     if [ "$has_storage" = "False" ]; then
       echo "  Updating $account_uuid / $workspace_id -> enableStorage=true"
       $AWS dynamodb update-item \

@@ -24,6 +24,8 @@ type StorageNode struct {
 	Name            string                          `json:"name"`
 	Description     string                          `json:"description"`
 	AccountUuid     string                          `json:"accountUuid"`
+	AccountName     string                          `json:"accountName,omitempty"`
+	AccountOwnerId  string                          `json:"accountOwnerId,omitempty"`
 	StorageLocation string                          `json:"storageLocation"`
 	Region          string                          `json:"region,omitempty"`
 	ProviderType    string                          `json:"providerType"`

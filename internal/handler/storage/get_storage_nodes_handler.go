@@ -46,10 +46,11 @@ func GetStorageNodesHandler(ctx context.Context, request events.APIGatewayV2HTTP
 
 	var storageNodes []models.DynamoDBStorageNode
 
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+
 	if accountOwnerMode {
 		// Return all storage nodes on accounts owned by the user
-		accountsTable := os.Getenv("ACCOUNTS_TABLE")
-		accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
 		accountStoreImpl, ok := accountStore.(*store_dynamodb.AccountDatabaseStore)
 		if !ok {
 			return events.APIGatewayV2HTTPResponse{
@@ -107,23 +108,56 @@ func GetStorageNodesHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		}, nil
 	}
 
-	// Build response with workspace info
+	// Build account cache for enriching responses
+	accountCache := map[string]store_dynamodb.Account{}
+
+	// Build response with account info
+	// For the list endpoint, only include the requesting user's workspace attachment
 	var responseNodes []models.StorageNode
 	for _, node := range storageNodes {
-		workspaces, err := workspaceStore.GetByStorageNode(ctx, node.Uuid)
-		if err != nil {
-			log.Printf("Error getting workspaces for storage node %s: %v", node.Uuid, err)
+		// Look up account info (cached)
+		var accountName, accountOwnerId string
+		if _, cached := accountCache[node.AccountUuid]; !cached {
+			account, err := accountStore.GetById(ctx, node.AccountUuid)
+			if err != nil {
+				log.Printf("Error getting account %s: %v", node.AccountUuid, err)
+			} else {
+				accountCache[node.AccountUuid] = account
+			}
+		}
+		if acct, ok := accountCache[node.AccountUuid]; ok {
+			accountName = acct.Name
+			accountOwnerId = acct.UserId
 		}
 
 		var wsEnablements []models.StorageNodeWorkspaceEnablement
-		for _, ws := range workspaces {
-			wsEnablements = append(wsEnablements, models.StorageNodeWorkspaceEnablement{
-				StorageNodeUuid: ws.StorageNodeUuid,
-				WorkspaceId:     ws.WorkspaceId,
-				IsDefault:       ws.IsDefault,
-				EnabledBy:       ws.EnabledBy,
-				EnabledAt:       ws.EnabledAt,
-			})
+		if accountOwnerMode {
+			// Account owner sees all workspace attachments
+			workspaces, err := workspaceStore.GetByStorageNode(ctx, node.Uuid)
+			if err != nil {
+				log.Printf("Error getting workspaces for storage node %s: %v", node.Uuid, err)
+			}
+			for _, ws := range workspaces {
+				wsEnablements = append(wsEnablements, models.StorageNodeWorkspaceEnablement{
+					StorageNodeUuid: ws.StorageNodeUuid,
+					WorkspaceId:     ws.WorkspaceId,
+					IsDefault:       ws.IsDefault,
+					EnabledBy:       ws.EnabledBy,
+					EnabledAt:       ws.EnabledAt,
+				})
+			}
+		} else if organizationId != "" {
+			// Non-owner only sees their own workspace attachment
+			ws, err := workspaceStore.Get(ctx, node.Uuid, organizationId)
+			if err == nil && ws.StorageNodeUuid != "" {
+				wsEnablements = append(wsEnablements, models.StorageNodeWorkspaceEnablement{
+					StorageNodeUuid: ws.StorageNodeUuid,
+					WorkspaceId:     ws.WorkspaceId,
+					IsDefault:       ws.IsDefault,
+					EnabledBy:       ws.EnabledBy,
+					EnabledAt:       ws.EnabledAt,
+				})
+			}
 		}
 
 		responseNodes = append(responseNodes, models.StorageNode{
@@ -131,6 +165,8 @@ func GetStorageNodesHandler(ctx context.Context, request events.APIGatewayV2HTTP
 			Name:            node.Name,
 			Description:     node.Description,
 			AccountUuid:     node.AccountUuid,
+			AccountName:     accountName,
+			AccountOwnerId:  accountOwnerId,
 			StorageLocation: node.StorageLocation,
 			Region:          node.Region,
 			ProviderType:    node.ProviderType,

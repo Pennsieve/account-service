@@ -94,17 +94,32 @@ func GetStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	// Get workspace associations
 	storageNodeWorkspaceTable := os.Getenv("STORAGE_NODE_WORKSPACE_TABLE")
 	wsStore := store_dynamodb.NewStorageNodeWorkspaceStore(dynamoDBClient, storageNodeWorkspaceTable)
-	workspaces, _ := wsStore.GetByStorageNode(ctx, nodeId)
 
 	var wsEnablements []models.StorageNodeWorkspaceEnablement
-	for _, ws := range workspaces {
-		wsEnablements = append(wsEnablements, models.StorageNodeWorkspaceEnablement{
-			StorageNodeUuid: ws.StorageNodeUuid,
-			WorkspaceId:     ws.WorkspaceId,
-			IsDefault:       ws.IsDefault,
-			EnabledBy:       ws.EnabledBy,
-			EnabledAt:       ws.EnabledAt,
-		})
+	if account.UserId == userId {
+		// Owner sees all workspace attachments
+		workspaces, _ := wsStore.GetByStorageNode(ctx, nodeId)
+		for _, ws := range workspaces {
+			wsEnablements = append(wsEnablements, models.StorageNodeWorkspaceEnablement{
+				StorageNodeUuid: ws.StorageNodeUuid,
+				WorkspaceId:     ws.WorkspaceId,
+				IsDefault:       ws.IsDefault,
+				EnabledBy:       ws.EnabledBy,
+				EnabledAt:       ws.EnabledAt,
+			})
+		}
+	} else if organizationId != "" {
+		// Non-owner sees only their workspace
+		ws, err := wsStore.Get(ctx, nodeId, organizationId)
+		if err == nil && ws.StorageNodeUuid != "" {
+			wsEnablements = append(wsEnablements, models.StorageNodeWorkspaceEnablement{
+				StorageNodeUuid: ws.StorageNodeUuid,
+				WorkspaceId:     ws.WorkspaceId,
+				IsDefault:       ws.IsDefault,
+				EnabledBy:       ws.EnabledBy,
+				EnabledAt:       ws.EnabledAt,
+			})
+		}
 	}
 
 	response := models.StorageNode{
@@ -112,6 +127,8 @@ func GetStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		Name:            node.Name,
 		Description:     node.Description,
 		AccountUuid:     node.AccountUuid,
+		AccountName:     account.Name,
+		AccountOwnerId:  account.UserId,
 		StorageLocation: node.StorageLocation,
 		Region:          node.Region,
 		ProviderType:    node.ProviderType,
