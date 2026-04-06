@@ -110,7 +110,60 @@ func DeleteAccountWorkspaceEnablementHandler(ctx context.Context, request events
 		}, nil
 	}
 
-	// TODO: Send event to remove any compute nodes on the account!
+	// Check for active compute nodes on this account in this workspace
+	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
+	if computeNodesTable != "" {
+		nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable)
+		accountNodes, err := nodeStore.GetByAccount(ctx, accountUuid)
+		if err != nil {
+			log.Printf("Error checking compute nodes: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+		for _, node := range accountNodes {
+			if node.OrganizationId == workspaceId {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusConflict,
+					Body:       errors.HandlerError(handlerName, errors.ErrWorkspaceHasActiveNodes),
+				}, nil
+			}
+		}
+	}
+
+	// Check for active storage nodes on this account in this workspace
+	storageNodesTable := os.Getenv("STORAGE_NODES_TABLE")
+	storageNodeWorkspaceTable := os.Getenv("STORAGE_NODE_WORKSPACE_TABLE")
+	if storageNodesTable != "" && storageNodeWorkspaceTable != "" {
+		storageNodeStore := store_dynamodb.NewStorageNodeDatabaseStore(dynamoDBClient, storageNodesTable)
+		accountStorageNodes, err := storageNodeStore.GetByAccount(ctx, accountUuid)
+		if err != nil {
+			log.Printf("Error checking storage nodes: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+		if len(accountStorageNodes) > 0 {
+			workspaceStore := store_dynamodb.NewStorageNodeWorkspaceStore(dynamoDBClient, storageNodeWorkspaceTable)
+			for _, sNode := range accountStorageNodes {
+				wsEnablements, err := workspaceStore.GetByStorageNode(ctx, sNode.Uuid)
+				if err != nil {
+					log.Printf("Error checking storage node workspaces: %v", err)
+					continue
+				}
+				for _, ws := range wsEnablements {
+					if ws.WorkspaceId == workspaceId {
+						return events.APIGatewayV2HTTPResponse{
+							StatusCode: http.StatusConflict,
+							Body:       errors.HandlerError(handlerName, errors.ErrWorkspaceHasActiveNodes),
+						}, nil
+					}
+				}
+			}
+		}
+	}
 
 	// Delete workspace enablement
 	err = enablementStore.Delete(ctx, accountUuid, workspaceId)

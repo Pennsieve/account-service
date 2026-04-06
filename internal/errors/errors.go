@@ -60,6 +60,7 @@ var ErrSecretKeyTooLong = errors.New("secret key exceeds max length (256)")
 var ErrSecretValueTooLong = errors.New("secret value exceeds max length (10000)")
 var ErrProvisionerRequest = errors.New("failed to communicate with provisioner")
 var ErrLLMBaaRequired = errors.New("LLM access in secure/compliant mode requires llmBaaAcknowledged: true (confirming an AWS BAA is in place)")
+var ErrWorkspaceHasActiveNodes = errors.New("cannot remove workspace access: active compute or storage nodes exist in this workspace. Remove them first before disabling workspace access")
 
 // Common errors used across handlers
 var ErrMarshaling = errors.New("error marshaling item")
