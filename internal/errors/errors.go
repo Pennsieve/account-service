@@ -54,6 +54,8 @@ var ErrInvalidOrganizationIdFormat = errors.New("invalid organization ID format 
 var ErrAccountNotRegistered = errors.New("account is not registered")
 var ErrBadRequest = errors.New("bad request")
 var ErrInvalidProviderType = errors.New("invalid provider type - must be s3, azure-blob, or local")
+var ErrInvalidDeploymentMode = errors.New("invalid deployment mode - must be basic or compliant")
+var ErrStorageNodeHasAttachments = errors.New("storage node has workspace attachments - detach them first or pass force=true to override")
 var ErrDeleteTagRequired = errors.New("bucket must have tag 'pennsieve:allow-delete' set to 'true' before deletion - set this tag on the S3 bucket in the AWS console to confirm")
 var ErrTooManySecrets = errors.New("too many secrets (max 50)")
 var ErrSecretKeyTooLong = errors.New("secret key exceeds max length (256)")

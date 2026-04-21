@@ -82,7 +82,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	canUpdate := account.UserId == userId
 	if !canUpdate {
-		canUpdate = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, claims.OrgClaim.NodeId, node.AccountUuid)
+		canUpdate = canAdminManageNode(ctx, cfg, dynamoDBClient, userId, node.Uuid, node.AccountUuid)
 	}
 	if !canUpdate {
 		return events.APIGatewayV2HTTPResponse{

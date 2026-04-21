@@ -115,20 +115,19 @@ func GetStorageNodesHandler(ctx context.Context, request events.APIGatewayV2HTTP
 	// For the list endpoint, only include the requesting user's workspace attachment
 	var responseNodes []models.StorageNode
 	for _, node := range storageNodes {
-		// Look up account info (cached)
+		// Look up account info (cached; cache failures too to avoid retry storms)
 		var accountName, accountOwnerId string
-		if _, cached := accountCache[node.AccountUuid]; !cached {
-			account, err := accountStore.GetById(ctx, node.AccountUuid)
+		acct, cached := accountCache[node.AccountUuid]
+		if !cached {
+			a, err := accountStore.GetById(ctx, node.AccountUuid)
 			if err != nil {
 				log.Printf("Error getting account %s: %v", node.AccountUuid, err)
-			} else {
-				accountCache[node.AccountUuid] = account
 			}
+			accountCache[node.AccountUuid] = a
+			acct = a
 		}
-		if acct, ok := accountCache[node.AccountUuid]; ok {
-			accountName = acct.Name
-			accountOwnerId = acct.UserId
-		}
+		accountName = acct.Name
+		accountOwnerId = acct.UserId
 
 		var wsEnablements []models.StorageNodeWorkspaceEnablement
 		if accountOwnerMode {

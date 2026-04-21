@@ -2033,7 +2033,6 @@ paths:
               type: object
               required:
                 - accountUuid
-                - organizationId
                 - name
                 - storageLocation
                 - providerType
@@ -2042,7 +2041,13 @@ paths:
                   type: string
                 organizationId:
                   type: string
-                  description: Organization ID (workspace) for this storage node
+                  description: |
+                    Optional workspace for this storage node. When provided, the account must be
+                    enabled for the workspace, the caller must be the account owner or a workspace
+                    admin on a public+storage-enabled account, and the node is auto-attached to
+                    that workspace. When omitted, only the account owner may create the node and
+                    no workspace attachment is created (workspaces can be attached afterwards via
+                    POST /storage-nodes/{id}/workspace).
                   example: "N:organization:050fae39-4412-43ef-a514-703ed8e299d5"
                 name:
                   type: string

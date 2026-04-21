@@ -79,7 +79,7 @@ func GetDetachImpactHandler(ctx context.Context, request events.APIGatewayV2HTTP
 
 	hasAccess := account.UserId == userId
 	if !hasAccess {
-		hasAccess = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, claims.OrgClaim.NodeId, node.AccountUuid)
+		hasAccess = canAdminManageNode(ctx, cfg, dynamoDBClient, userId, node.Uuid, node.AccountUuid)
 	}
 	if !hasAccess {
 		return events.APIGatewayV2HTTPResponse{

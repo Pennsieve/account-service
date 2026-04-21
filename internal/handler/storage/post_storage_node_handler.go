@@ -40,14 +40,14 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		}, nil
 	}
 
-	if req.AccountUuid == "" || req.OrganizationId == "" || req.Name == "" || req.StorageLocation == "" || req.ProviderType == "" {
+	if req.AccountUuid == "" || req.Name == "" || req.StorageLocation == "" || req.ProviderType == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
 		}, nil
 	}
 
-	if !strings.HasPrefix(req.OrganizationId, "N:organization:") {
+	if req.OrganizationId != "" && !strings.HasPrefix(req.OrganizationId, "N:organization:") {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidOrganizationIdFormat),
@@ -59,6 +59,13 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidProviderType),
+		}, nil
+	}
+
+	if req.DeploymentMode != "" && !validDeploymentModes[req.DeploymentMode] {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidDeploymentMode),
 		}, nil
 	}
 
@@ -74,7 +81,6 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	organizationId := claims.OrgClaim.NodeId
 
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -105,53 +111,62 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		}, nil
 	}
 
-	// Check workspace enablement
-	enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
-	if enablementTable == "" {
-		log.Printf("ACCOUNT_WORKSPACE_TABLE not configured")
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
-		}, nil
-	}
-
-	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
-	enablement, err := workspaceStore.Get(ctx, req.AccountUuid, req.OrganizationId)
-	if err != nil {
-		log.Printf("Error getting workspace enablement: %v", err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
-		}, nil
-	}
-	if enablement.AccountUuid == "" || enablement.WorkspaceId == "" {
-		log.Printf("Account %s is not enabled for workspace %s", req.AccountUuid, req.OrganizationId)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusForbidden,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrAccountNotEnabledForWorkspace),
-		}, nil
-	}
-
-	// Check permissions: account owner can always create; admins need isPublic + enableStorage
-	if account.UserId != userId {
-		if !enablement.IsPublic {
+	// When organizationId is omitted, only the account owner can create a node
+	// (no workspace context, so enablement and admin-on-public paths don't apply).
+	if req.OrganizationId == "" {
+		if account.UserId != userId {
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusForbidden,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyAccountOwnerCanCreateNodes),
 			}, nil
 		}
-		if !enablement.EnableStorage {
+	} else {
+		enablementTable := os.Getenv("ACCOUNT_WORKSPACE_TABLE")
+		if enablementTable == "" {
+			log.Printf("ACCOUNT_WORKSPACE_TABLE not configured")
 			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusForbidden,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrStorageNotEnabledForWorkspace),
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
 			}, nil
 		}
-		canCreate := checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, organizationId, req.AccountUuid)
-		if !canCreate {
+
+		workspaceStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
+		enablement, err := workspaceStore.Get(ctx, req.AccountUuid, req.OrganizationId)
+		if err != nil {
+			log.Printf("Error getting workspace enablement: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+		if enablement.AccountUuid == "" || enablement.WorkspaceId == "" {
+			log.Printf("Account %s is not enabled for workspace %s", req.AccountUuid, req.OrganizationId)
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusForbidden,
-				Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrAccountNotEnabledForWorkspace),
 			}, nil
+		}
+
+		if account.UserId != userId {
+			if !enablement.IsPublic {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusForbidden,
+					Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyAccountOwnerCanCreateNodes),
+				}, nil
+			}
+			if !enablement.EnableStorage {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusForbidden,
+					Body:       errors.ComputeHandlerError(handlerName, errors.ErrStorageNotEnabledForWorkspace),
+				}, nil
+			}
+			canCreate := checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, req.OrganizationId, req.AccountUuid)
+			if !canCreate {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusForbidden,
+					Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
+				}, nil
+			}
 		}
 	}
 
@@ -196,9 +211,10 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 	}
 	log.Printf("Created storage node %s in DynamoDB with status %s", nodeUuid, initialStatus)
 
-	// Auto-attach storage node to the workspace it was created in
+	// Auto-attach storage node to the workspace it was created in. If this fails we
+	// roll back the node record so the caller can retry cleanly.
 	storageNodeWorkspaceTable := os.Getenv("STORAGE_NODE_WORKSPACE_TABLE")
-	if storageNodeWorkspaceTable != "" {
+	if req.OrganizationId != "" && storageNodeWorkspaceTable != "" {
 		wsStore := store_dynamodb.NewStorageNodeWorkspaceStore(dynamoDBClient, storageNodeWorkspaceTable)
 		autoAttachment := models.DynamoDBStorageNodeWorkspace{
 			StorageNodeUuid: nodeUuid,
@@ -208,7 +224,14 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 			EnabledAt:       time.Now().UTC().Format(time.RFC3339),
 		}
 		if err := wsStore.Insert(ctx, autoAttachment); err != nil {
-			log.Printf("Warning: Failed to auto-attach storage node to workspace: %v", err)
+			log.Printf("Error auto-attaching storage node to workspace, rolling back node %s: %v", nodeUuid, err)
+			if delErr := storageNodeStore.Delete(ctx, nodeUuid); delErr != nil {
+				log.Printf("Error rolling back storage node %s: %v", nodeUuid, delErr)
+			}
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
 		}
 	}
 

@@ -288,27 +288,70 @@ func TestPostStorageNodeHandler_NoEnablement(t *testing.T) {
 	assert.Contains(t, response.Body, "not enabled for this workspace")
 }
 
-func TestPostStorageNodeHandler_MissingOrganizationId(t *testing.T) {
-	_, _, _ = setupStorageHandlerTest(t)
+func TestPostStorageNodeHandler_NoOrganizationId_OwnerSucceeds(t *testing.T) {
+	accountStore, storageNodeStore, wsStore := setupStorageHandlerTest(t)
 	ctx := context.Background()
+	userId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, userId)
 
 	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
-		AccountUuid:     uuid.New().String(),
-		Name:            "Test Storage",
-		StorageLocation: "some-bucket",
-		ProviderType:    "s3",
+		AccountUuid:      testAccount.Uuid,
+		Name:             "Platform Default Storage",
+		StorageLocation:  "pennsieve-prod-storage-use1",
+		Region:           "us-east-1",
+		ProviderType:     "s3",
+		SkipProvisioning: true,
 	})
 
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(reqBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("test-user", testOrgId),
+			Authorizer: test.CreateTestAuthorizer(userId, testOrgId),
 		},
 	}
 
 	response, err := storage.PostStorageNodeHandler(ctx, request)
 	assert.NoError(t, err)
-	assert.Equal(t, 400, response.StatusCode)
+	assert.Equal(t, 201, response.StatusCode)
+
+	// Parse the response to get the node UUID, then verify no auto-attach happened.
+	var created models.StorageNode
+	require.NoError(t, json.Unmarshal([]byte(response.Body), &created))
+
+	node, err := storageNodeStore.GetById(ctx, created.Uuid)
+	require.NoError(t, err)
+	assert.Equal(t, testAccount.Uuid, node.AccountUuid)
+
+	attachments, err := wsStore.GetByStorageNode(ctx, created.Uuid)
+	require.NoError(t, err)
+	assert.Empty(t, attachments, "no workspace auto-attach when organizationId is omitted")
+}
+
+func TestPostStorageNodeHandler_NoOrganizationId_NonOwnerForbidden(t *testing.T) {
+	accountStore, _, _ := setupStorageHandlerTest(t)
+	ctx := context.Background()
+	ownerId := "user-" + test.GenerateTestId()
+	callerId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, ownerId)
+
+	reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
+		AccountUuid:      testAccount.Uuid,
+		Name:             "Test Storage",
+		StorageLocation:  "some-bucket",
+		ProviderType:     "s3",
+		SkipProvisioning: true,
+	})
+
+	request := events.APIGatewayV2HTTPRequest{
+		Body: string(reqBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(callerId, testOrgId),
+		},
+	}
+
+	response, err := storage.PostStorageNodeHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 403, response.StatusCode)
 }
 
 func TestPostStorageNodeHandler_OwnerBypassesEnableStorage(t *testing.T) {
