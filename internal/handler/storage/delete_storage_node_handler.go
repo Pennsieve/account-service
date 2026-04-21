@@ -93,6 +93,33 @@ func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
+	// Safety check: block delete if workspaces are still attached unless force=true.
+	// The caller should detach workspaces explicitly (or confirm the blast radius) before destroying the bucket.
+	force := request.QueryStringParameters["force"] == "true"
+	storageNodeWorkspaceTable := os.Getenv("STORAGE_NODE_WORKSPACE_TABLE")
+	var attachedWorkspaces []models.DynamoDBStorageNodeWorkspace
+	if storageNodeWorkspaceTable != "" {
+		wsStore := store_dynamodb.NewStorageNodeWorkspaceStore(dynamoDBClient, storageNodeWorkspaceTable)
+		attachedWorkspaces, err = wsStore.GetByStorageNode(ctx, nodeId)
+		if err != nil {
+			log.Printf("Error getting workspace associations: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+		if len(attachedWorkspaces) > 0 && !force {
+			body, _ := json.Marshal(map[string]interface{}{
+				"error":           errors.ErrStorageNodeHasAttachments.Error(),
+				"attachmentCount": len(attachedWorkspaces),
+			})
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusConflict,
+				Body:       string(body),
+			}, nil
+		}
+	}
+
 	// Safety check: for S3 nodes, require the bucket to have the
 	// "pennsieve:allow-delete" = "true" tag before proceeding.
 	// This forces the account owner to take a manual action in AWS
@@ -149,16 +176,13 @@ func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
-	// Registration-only: delete workspace associations + DynamoDB record directly
-	storageNodeWorkspaceTable := os.Getenv("STORAGE_NODE_WORKSPACE_TABLE")
-	wsStore := store_dynamodb.NewStorageNodeWorkspaceStore(dynamoDBClient, storageNodeWorkspaceTable)
-	workspaces, err := wsStore.GetByStorageNode(ctx, nodeId)
-	if err != nil {
-		log.Printf("Error getting workspace associations: %v", err)
-	}
-	for _, ws := range workspaces {
-		if err := wsStore.Delete(ctx, ws.StorageNodeUuid, ws.WorkspaceId); err != nil {
-			log.Printf("Error deleting workspace association: %v", err)
+	// Registration-only: delete workspace associations (if force=true retained any) + DynamoDB record directly
+	if storageNodeWorkspaceTable != "" {
+		wsStore := store_dynamodb.NewStorageNodeWorkspaceStore(dynamoDBClient, storageNodeWorkspaceTable)
+		for _, ws := range attachedWorkspaces {
+			if err := wsStore.Delete(ctx, ws.StorageNodeUuid, ws.WorkspaceId); err != nil {
+				log.Printf("Error deleting workspace association: %v", err)
+			}
 		}
 	}
 
