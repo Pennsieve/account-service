@@ -1115,7 +1115,11 @@ paths:
         must be "Enabled" or "Paused" (not "Pending" or "Destroying").
 
         **Permissions:** Node owner, account owner, or workspace administrator on public accounts (isPublic=true).
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: postUpdateConfig
+      security:
+        - token_auth: [ ]
       tags:
         - compute-nodes
       parameters:
