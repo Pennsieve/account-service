@@ -593,6 +593,60 @@ components:
           type: integer
           format: int64
           description: Unix-epoch TTL after which this row is swept (default 90 days).
+    chatUserEffectiveQuota:
+      type: object
+      description: |
+        Resolved chat & workflow LLM cost limits for a single (user, compute-node) pair,
+        with per-axis source attribution and current spend. Computed as:
+
+          per-user row → node `__default__` row → platform safety cap
+
+        axis-by-axis (any unset axis on a higher tier falls through to the next).
+      properties:
+        computeNodeId:
+          type: string
+        userId:
+          type: string
+        dailyCostUsd:
+          type: number
+          format: double
+          description: Effective daily cap (USD) after fallback resolution.
+        monthlyCostUsd:
+          type: number
+          format: double
+          description: Effective monthly cap (USD) after fallback resolution.
+        perWorkflowUsd:
+          type: number
+          format: double
+          description: Effective per-workflow cap (USD) after fallback resolution.
+        dailySource:
+          type: string
+          enum: [user, node-default, platform-safety]
+          description: Which tier supplied the daily limit.
+        monthlySource:
+          type: string
+          enum: [user, node-default, platform-safety]
+          description: Which tier supplied the monthly limit.
+        perWorkflowSource:
+          type: string
+          enum: [user, node-default, platform-safety]
+          description: Which tier supplied the per-workflow limit.
+        dailySpentUsd:
+          type: number
+          format: double
+          description: Current UTC-day LLM spend on this compute node.
+        monthlySpentUsd:
+          type: number
+          format: double
+          description: Current UTC-month LLM spend on this compute node.
+        remainingDayUsd:
+          type: number
+          format: double
+          description: max(0, dailyCostUsd - dailySpentUsd).
+        remainingMonthUsd:
+          type: number
+          format: double
+          description: max(0, monthlyCostUsd - monthlySpentUsd).
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -2172,11 +2226,20 @@ paths:
     get:
       summary: Get the chat & workflow LLM quota for a user on this compute node
       description: |
-        Returns the quota row for (computeNodeId, userId), or 404 if none is set
-        for that pair. Pass `__default__` as `userId` to retrieve the node-wide
-        default.
+        Returns the raw quota row for (computeNodeId, userId), or 404 if none
+        is set for that pair. A 404 does NOT mean "no limit applies" — the
+        user still falls back to the node `__default__` row, then to a
+        platform safety cap. Use `/effective` to see what's actually enforced.
 
-        **Permissions:** Node owner or workspace administrator on public accounts.
+        Pass `__default__` as `userId` to retrieve the node-wide default
+        (owner-only).
+
+        Pass `me` as `userId` to retrieve the caller's own row without
+        having to know your own user node id.
+
+        **Permissions:** Node owner / workspace admin can read any row; the
+        caller can also read their own row (`userId` matches their JWT or
+        `me`) provided they have any access to the node.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getChatUserQuota
@@ -2196,7 +2259,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Pennsieve user node id, or `__default__`.
+          description: Pennsieve user node id, the literal `me`, or `__default__`.
       responses:
         '200':
           description: Quota row
@@ -2258,6 +2321,61 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/user-quotas/{userId}/effective:
+    get:
+      summary: Get the *resolved* chat & workflow LLM quota plus current spend
+      description: |
+        Returns the limits actually enforced for (computeNodeId, userId),
+        with per-axis source attribution and current per-period spend.
+        Mirrors the resolution chat-service runs at dispatch time:
+
+          per-user row → node `__default__` row → platform safety cap
+
+        axis-by-axis (any unset axis falls through to the next tier). Use
+        this rather than the raw `/user-quotas/{userId}` GET when you want
+        to know what's actually applied — the raw GET returns 404 when no
+        per-user override exists, which is misleading because the user is
+        still bound by `__default__` and the safety cap.
+
+        Pass `me` as `userId` to retrieve your own effective quota.
+
+        **Permissions:** Node owner / workspace admin can read any user;
+        the caller can also read their own effective quota.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getChatUserEffectiveQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Pennsieve user node id, or the literal `me`.
+      responses:
+        '200':
+          description: Resolved limits + current spend
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chatUserEffectiveQuota'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
   /compute-nodes/{id}/user-usage/{userId}:
     get:
       summary: Get aggregate chat & workflow LLM usage for a user on this compute node
@@ -2266,7 +2384,10 @@ paths:
         userId). Useful for reporting and for explaining why a quota check might
         have failed.
 
-        **Permissions:** Node owner or workspace administrator on public accounts.
+        Pass `me` as `userId` to retrieve your own usage.
+
+        **Permissions:** Node owner / workspace admin can read any user;
+        the caller can also read their own usage.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getChatUserUsage
@@ -2286,7 +2407,7 @@ paths:
           required: true
           schema:
             type: string
-          description: Pennsieve user node id.
+          description: Pennsieve user node id, or the literal `me`.
         - in: query
           name: period
           required: false

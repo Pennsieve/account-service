@@ -26,6 +26,16 @@ resource "aws_lambda_function" "service_lambda" {
       NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
       CHAT_USER_QUOTA_TABLE = aws_dynamodb_table.chat_user_quota_table.name
       CHAT_USER_USAGE_TABLE = aws_dynamodb_table.chat_user_usage_table.name
+
+      // Platform safety cap for per-user chat & workflow LLM spend. MUST
+      // mirror the values set on the chat-service Lambda — both services
+      // resolve effective quotas the same way (user row → __default__ →
+      // safety cap), so divergent values mean the "effective quota"
+      // endpoint here disagrees with what chat-service actually enforces.
+      // Owners can raise per-node by writing a __default__ row.
+      DEFAULT_USER_DAILY_COST_USD   = var.default_user_daily_cost_usd
+      DEFAULT_USER_MONTHLY_COST_USD = var.default_user_monthly_cost_usd
+      DEFAULT_USER_PER_WORKFLOW_USD = var.default_user_per_workflow_usd
       DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
       # PostgreSQL Configuration
       POSTGRES_HOST    = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
