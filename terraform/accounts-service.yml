@@ -478,6 +478,175 @@ components:
             tag to allow any version (e.g. "git://github.com/org/repo").
             An empty array means all processors are allowed (open mode).
             Data targets and service processors are always allowed regardless of this list.
+    chatUserQuotaRequest:
+      type: object
+      description: |
+        Cost ceilings applied to chat and workflow LLM spend for a single user on this
+        compute node. The compute node owner pays for LLM usage on their node, so they
+        set these limits to bound per-user spend.
+
+        **Fallback resolution (axis-by-axis):** any axis omitted (or set to null) on a
+        per-user row falls back to the node's `__default__` row for that axis. Any axis
+        still unset there falls back to a small **platform safety cap** baked into
+        chat-service config — so unset axes are never "unlimited". Owners raise limits
+        by writing `__default__` (node-wide) or by writing a per-user row with higher
+        numbers.
+      properties:
+        dailyCostUsd:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            Maximum LLM spend (USD) per UTC day for this user on this node. Null/omitted
+            falls back to the node `__default__` row, then to the platform safety cap.
+          example: 5.00
+        monthlyCostUsd:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            Maximum LLM spend (USD) per UTC calendar month for this user on this node.
+            Null/omitted falls back to `__default__`, then to the platform safety cap.
+          example: 50.00
+        perWorkflowUsd:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            Maximum LLM spend (USD) any single workflow invocation by this user may
+            incur. Forwarded to the LLM governor as the per-execution budget.
+            Null/omitted falls back to `__default__`, then to the platform safety cap.
+          example: 2.00
+        notes:
+          type: string
+          description: Free-text notes (e.g. why this user has a custom limit).
+    chatUserQuota:
+      type: object
+      description: |
+        A per-(user, compute-node) cost ceiling. A row with userId == "__default__"
+        is the node-wide default applied to any user without an explicit override.
+      properties:
+        computeNodeId:
+          type: string
+          description: UUID of the compute node this quota applies to.
+        userId:
+          type: string
+          description: |
+            Pennsieve user node id, or the literal string "__default__" for the
+            node-wide default row.
+        dailyCostUsd:
+          type: number
+          format: double
+          nullable: true
+        monthlyCostUsd:
+          type: number
+          format: double
+          nullable: true
+        perWorkflowUsd:
+          type: number
+          format: double
+          nullable: true
+        notes:
+          type: string
+        updatedBy:
+          type: string
+          description: User node id of the last writer.
+        updatedAt:
+          type: string
+          format: date-time
+    chatUserUsage:
+      type: object
+      description: |
+        Aggregate LLM cost & token counts for a single (user, compute-node) pair over
+        a single time bucket (day or month).
+      properties:
+        userNodeDate:
+          type: string
+          description: |
+            Composite key: "{userId}#{computeNodeId}#YYYY-MM-DD" for daily aggregates,
+            "{userId}#{computeNodeId}#YYYY-MM" for monthly.
+        userId:
+          type: string
+        computeNodeId:
+          type: string
+        period:
+          type: string
+          enum: [day, month]
+        totalInputTokens:
+          type: integer
+          format: int64
+        totalOutputTokens:
+          type: integer
+          format: int64
+        estimatedCostUsd:
+          type: number
+          format: double
+        requestCount:
+          type: integer
+          format: int64
+        lastModel:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: integer
+          format: int64
+          description: Unix-epoch TTL after which this row is swept (default 90 days).
+    chatUserEffectiveQuota:
+      type: object
+      description: |
+        Resolved chat & workflow LLM cost limits for a single (user, compute-node) pair,
+        with per-axis source attribution and current spend. Computed as:
+
+          per-user row → node `__default__` row → platform safety cap
+
+        axis-by-axis (any unset axis on a higher tier falls through to the next).
+      properties:
+        computeNodeId:
+          type: string
+        userId:
+          type: string
+        dailyCostUsd:
+          type: number
+          format: double
+          description: Effective daily cap (USD) after fallback resolution.
+        monthlyCostUsd:
+          type: number
+          format: double
+          description: Effective monthly cap (USD) after fallback resolution.
+        perWorkflowUsd:
+          type: number
+          format: double
+          description: Effective per-workflow cap (USD) after fallback resolution.
+        dailySource:
+          type: string
+          enum: [user, node-default, platform-safety]
+          description: Which tier supplied the daily limit.
+        monthlySource:
+          type: string
+          enum: [user, node-default, platform-safety]
+          description: Which tier supplied the monthly limit.
+        perWorkflowSource:
+          type: string
+          enum: [user, node-default, platform-safety]
+          description: Which tier supplied the per-workflow limit.
+        dailySpentUsd:
+          type: number
+          format: double
+          description: Current UTC-day LLM spend on this compute node.
+        monthlySpentUsd:
+          type: number
+          format: double
+          description: Current UTC-month LLM spend on this compute node.
+        remainingDayUsd:
+          type: number
+          format: double
+          description: max(0, dailyCostUsd - dailySpentUsd).
+        remainingMonthUsd:
+          type: number
+          format: double
+          description: max(0, monthlyCostUsd - monthlySpentUsd).
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
@@ -1945,6 +2114,333 @@ paths:
                       source URL (e.g. "git://github.com/org/repo:v1"). Exact match,
                       or omit the tag to allow any version. Empty list means all
                       processors are allowed.
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/user-quotas:
+    get:
+      summary: List per-user chat & workflow LLM quotas for a compute node
+      description: |
+        Returns every quota row defined on this node, including the special
+        `__default__` row (if set) that applies to any user without an explicit
+        override.
+
+        **Permissions:** Node owner or workspace administrator on public accounts.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: listChatUserQuotas
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Quota list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quotas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/chatUserQuota'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/user-quotas/{userId}:
+    put:
+      summary: Create or replace the chat & workflow LLM quota for a user on this compute node
+      description: |
+        Writes the quota row for (computeNodeId, userId). Pass the literal string
+        `__default__` as `userId` to set the node-wide default applied when no
+        per-user override exists.
+
+        Each cost-axis field is independent — omit (or set to null) any axis to
+        leave that axis uncapped. The per-workflow cap is forwarded to the LLM
+        governor as the per-execution budget when this user kicks off a workflow.
+
+        **Permissions:** Node owner or workspace administrator on public accounts.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putChatUserQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: |
+            The Pennsieve user node id, or the literal string `__default__` to
+            set the node-wide default.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/chatUserQuotaRequest'
+      responses:
+        '200':
+          description: Quota saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chatUserQuota'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get the chat & workflow LLM quota for a user on this compute node
+      description: |
+        Returns the raw quota row for (computeNodeId, userId), or 404 if none
+        is set for that pair. A 404 does NOT mean "no limit applies" — the
+        user still falls back to the node `__default__` row, then to a
+        platform safety cap. Use `/effective` to see what's actually enforced.
+
+        Pass `__default__` as `userId` to retrieve the node-wide default
+        (owner-only).
+
+        Pass `me` as `userId` to retrieve the caller's own row without
+        having to know your own user node id.
+
+        **Permissions:** Node owner / workspace admin can read any row; the
+        caller can also read their own row (`userId` matches their JWT or
+        `me`) provided they have any access to the node.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getChatUserQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Pennsieve user node id, the literal `me`, or `__default__`.
+      responses:
+        '200':
+          description: Quota row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chatUserQuota'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Remove the chat & workflow LLM quota for a user on this compute node
+      description: |
+        Deletes the quota row for (computeNodeId, userId). After deletion the user
+        falls back to the node's `__default__` row (if any), then to "no limit" on
+        each uncapped axis.
+
+        **Permissions:** Node owner or workspace administrator on public accounts.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteChatUserQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Pennsieve user node id, or `__default__`.
+      responses:
+        '200':
+          description: Quota deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/user-quotas/{userId}/effective:
+    get:
+      summary: Get the *resolved* chat & workflow LLM quota plus current spend
+      description: |
+        Returns the limits actually enforced for (computeNodeId, userId),
+        with per-axis source attribution and current per-period spend.
+        Mirrors the resolution chat-service runs at dispatch time:
+
+          per-user row → node `__default__` row → platform safety cap
+
+        axis-by-axis (any unset axis falls through to the next tier). Use
+        this rather than the raw `/user-quotas/{userId}` GET when you want
+        to know what's actually applied — the raw GET returns 404 when no
+        per-user override exists, which is misleading because the user is
+        still bound by `__default__` and the safety cap.
+
+        Pass `me` as `userId` to retrieve your own effective quota.
+
+        **Permissions:** Node owner / workspace admin can read any user;
+        the caller can also read their own effective quota.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getChatUserEffectiveQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Pennsieve user node id, or the literal `me`.
+      responses:
+        '200':
+          description: Resolved limits + current spend
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chatUserEffectiveQuota'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/user-usage/{userId}:
+    get:
+      summary: Get aggregate chat & workflow LLM usage for a user on this compute node
+      description: |
+        Returns the daily and/or monthly aggregate usage rows for (computeNodeId,
+        userId). Useful for reporting and for explaining why a quota check might
+        have failed.
+
+        Pass `me` as `userId` to retrieve your own usage.
+
+        **Permissions:** Node owner / workspace admin can read any user;
+        the caller can also read their own usage.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getChatUserUsage
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Pennsieve user node id, or the literal `me`.
+        - in: query
+          name: period
+          required: false
+          schema:
+            type: string
+            enum: [day, month]
+          description: |
+            Restrict to just the daily or monthly aggregate. If omitted, both are
+            returned.
+        - in: query
+          name: date
+          required: false
+          schema:
+            type: string
+          description: |
+            Reference date as `YYYY-MM-DD`. The daily aggregate for this date and
+            the monthly aggregate for the same month are returned. Defaults to today (UTC).
+      responses:
+        '200':
+          description: Usage aggregates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  computeNodeId:
+                    type: string
+                  userId:
+                    type: string
+                  daily:
+                    $ref: '#/components/schemas/chatUserUsage'
+                  monthly:
+                    $ref: '#/components/schemas/chatUserUsage'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':

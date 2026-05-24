@@ -70,6 +70,16 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.PUT("/compute-nodes/{id}/allowed-processors", computeHandler.PutAllowedProcessorsHandler)
     router.GET("/compute-nodes/{id}/allowed-processors", computeHandler.GetAllowedProcessorsHandler)
 
+    // Per-user chat & workflow LLM quotas. Owner-only for PUT/DELETE/list and
+    // for reads of the `__default__` row. GET of a specific user's row +
+    // /effective + /user-usage allow the user themselves (or "me" alias).
+    router.GET("/compute-nodes/{id}/user-quotas", computeHandler.ListChatUserQuotasHandler)
+    router.PUT("/compute-nodes/{id}/user-quotas/{userId}", computeHandler.PutChatUserQuotaHandler)
+    router.GET("/compute-nodes/{id}/user-quotas/{userId}", computeHandler.GetChatUserQuotaHandler)
+    router.DELETE("/compute-nodes/{id}/user-quotas/{userId}", computeHandler.DeleteChatUserQuotaHandler)
+    router.GET("/compute-nodes/{id}/user-quotas/{userId}/effective", computeHandler.GetChatUserEffectiveQuotaHandler)
+    router.GET("/compute-nodes/{id}/user-usage/{userId}", computeHandler.GetChatUserUsageHandler)
+
     // App Store access endpoint
     router.POST("/app-store/access", computeHandler.PostAppStoreAccessHandler)
 

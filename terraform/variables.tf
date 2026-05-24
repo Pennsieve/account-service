@@ -16,6 +16,30 @@ variable "image_tag" {
   description = "Image tag for Lambda function packages"
 }
 
+// Platform safety cap for per-user chat & workflow LLM spend. Applied
+// axis-by-axis when neither a per-user quota row nor a node `__default__`
+// row sets that axis. Keep in sync with the same-named variables in
+// compute-node-chat/terraform/variables.tf — both services resolve the
+// effective quota the same way; divergent values would make this service's
+// "effective quota" endpoint disagree with what chat-service enforces.
+variable "default_user_daily_cost_usd" {
+  description = "Default per-user daily LLM spend cap (USD) when no quota row is set on the user or the node."
+  type        = number
+  default     = 1.00
+}
+
+variable "default_user_monthly_cost_usd" {
+  description = "Default per-user monthly LLM spend cap (USD) when no quota row is set on the user or the node."
+  type        = number
+  default     = 10.00
+}
+
+variable "default_user_per_workflow_usd" {
+  description = "Default per-user per-workflow LLM spend cap (USD), reported as the per-execution budget receivers should honor when no quota row is set on the user or the node."
+  type        = number
+  default     = 0.50
+}
+
 variable "lambda_bucket" {
   default = "pennsieve-cc-lambda-functions-use1"
 }
