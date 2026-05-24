@@ -2718,8 +2718,7 @@ paths:
         - name: id
           in: path
           required: true
-          sche
-          ma:
+          schema:
             type: string
       requestBody:
         required: true
