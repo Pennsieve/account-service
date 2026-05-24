@@ -503,6 +503,13 @@ type effectiveQuotaResponse struct {
 	// re-doing it.
 	RemainingDayUsd   float64 `json:"remainingDayUsd"`
 	RemainingMonthUsd float64 `json:"remainingMonthUsd"`
+
+	// Token counts for the same buckets. Tracked alongside cost so frontends
+	// can display a less in-your-face "tokens used" caption instead of
+	// dollars while keeping the dollar-based enforcement axis intact.
+	// Total = input + output across all turns in the period.
+	DailyTokens   int64 `json:"dailyTokens"`
+	MonthlyTokens int64 `json:"monthlyTokens"`
 }
 
 // GetChatUserEffectiveQuotaHandler returns the resolved limits + current
@@ -618,6 +625,8 @@ func GetChatUserEffectiveQuotaHandler(ctx context.Context, request events.APIGat
 	resp.MonthlySpentUsd = monthly.EstimatedCostUsd
 	resp.RemainingDayUsd = maxFloat(0, resp.DailyCostUsd-resp.DailySpentUsd)
 	resp.RemainingMonthUsd = maxFloat(0, resp.MonthlyCostUsd-resp.MonthlySpentUsd)
+	resp.DailyTokens = daily.TotalInputTokens + daily.TotalOutputTokens
+	resp.MonthlyTokens = monthly.TotalInputTokens + monthly.TotalOutputTokens
 
 	out, _ := json.Marshal(resp)
 	return events.APIGatewayV2HTTPResponse{

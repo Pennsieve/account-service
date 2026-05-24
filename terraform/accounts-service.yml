@@ -647,6 +647,20 @@ components:
           type: number
           format: double
           description: max(0, monthlyCostUsd - monthlySpentUsd).
+        dailyTokens:
+          type: integer
+          format: int64
+          description: |
+            Total LLM tokens (input + output) used today on this compute node.
+            Provided for display purposes — enforcement is dollar-based. Useful
+            for a less in-your-face usage caption ("28k tokens today") than
+            dollar amounts on every chat turn.
+        monthlyTokens:
+          type: integer
+          format: int64
+          description: |
+            Total LLM tokens (input + output) used this calendar month on this
+            compute node. Same display-only role as dailyTokens.
   responses:
     Unauthorized:
       description: Incorrect authentication or user has incorrect permissions.
