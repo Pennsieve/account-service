@@ -24,6 +24,8 @@ resource "aws_lambda_function" "service_lambda" {
       ACCOUNT_WORKSPACE_TABLE = aws_dynamodb_table.account_workspace_table.name
       COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
       NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
+      CHAT_USER_QUOTA_TABLE = aws_dynamodb_table.chat_user_quota_table.name
+      CHAT_USER_USAGE_TABLE = aws_dynamodb_table.chat_user_usage_table.name
       DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
       # PostgreSQL Configuration
       POSTGRES_HOST    = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint

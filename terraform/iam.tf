@@ -95,7 +95,11 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       aws_dynamodb_table.storage_nodes_table.arn,
       "${aws_dynamodb_table.storage_nodes_table.arn}/*",
       aws_dynamodb_table.storage_node_workspace_table.arn,
-      "${aws_dynamodb_table.storage_node_workspace_table.arn}/*"
+      "${aws_dynamodb_table.storage_node_workspace_table.arn}/*",
+      aws_dynamodb_table.chat_user_quota_table.arn,
+      "${aws_dynamodb_table.chat_user_quota_table.arn}/*",
+      aws_dynamodb_table.chat_user_usage_table.arn,
+      "${aws_dynamodb_table.chat_user_usage_table.arn}/*"
     ]
 
   }

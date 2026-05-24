@@ -75,6 +75,22 @@ output "storage_node_workspace_table_name" {
   value = aws_dynamodb_table.storage_node_workspace_table.name
 }
 
+output "chat_user_quota_table_arn" {
+  value = aws_dynamodb_table.chat_user_quota_table.arn
+}
+
+output "chat_user_quota_table_name" {
+  value = aws_dynamodb_table.chat_user_quota_table.name
+}
+
+output "chat_user_usage_table_arn" {
+  value = aws_dynamodb_table.chat_user_usage_table.arn
+}
+
+output "chat_user_usage_table_name" {
+  value = aws_dynamodb_table.chat_user_usage_table.name
+}
+
 output "storage_read_policy_arn" {
   value       = aws_iam_policy.storage_read.arn
   description = "ARN of the managed IAM policy for storage bucket read access"
