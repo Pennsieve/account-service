@@ -70,6 +70,14 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
     router.PUT("/compute-nodes/{id}/allowed-processors", computeHandler.PutAllowedProcessorsHandler)
     router.GET("/compute-nodes/{id}/allowed-processors", computeHandler.GetAllowedProcessorsHandler)
 
+    // Node-wide LLM cost budget (the SSM-backed cap the governor enforces).
+    // Owner-only. Distinct from the per-user chat quotas below: this cap
+    // applies to *every* LLM caller on the node — chat *and* workflow
+    // applications. It's the only backstop for application-initiated runs
+    // since those don't go through chat-service's CheckTurn.
+    router.PUT("/compute-nodes/{id}/llm-config", computeHandler.PutLLMConfigHandler)
+    router.GET("/compute-nodes/{id}/llm-config", computeHandler.GetLLMConfigHandler)
+
     // Per-user chat & workflow LLM quotas. Owner-only for PUT/DELETE/list and
     // for reads of the `__default__` row. GET of a specific user's row +
     // /effective + /user-usage allow the user themselves (or "me" alias).
