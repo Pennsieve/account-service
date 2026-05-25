@@ -2136,6 +2136,117 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+  /compute-nodes/{id}/llm-config:
+    put:
+      summary: Set node-wide LLM cost budget
+      description: |
+        Updates the node-wide LLM cost budget the governor enforces on every
+        invocation. Applies to chat and to workflow applications that invoke
+        the LLM — this is the only enforcement layer that catches non-chat
+        callers (per-user chat quotas don't apply to workflow apps).
+
+        **Permissions:** Node owner only.
+
+        Note: the governor caches SSM values for ~60 seconds, so changes take
+        up to a minute to take effect on in-flight invocations.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putLLMConfig
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - budgetUsd
+                - budgetPeriod
+              properties:
+                budgetUsd:
+                  type: number
+                  format: double
+                  minimum: 0
+                  description: Cost cap in USD for the chosen period.
+                budgetPeriod:
+                  type: string
+                  enum: [daily, monthly]
+                  description: Period the cap applies to.
+      responses:
+        '200':
+          description: LLM budget updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  budgetUsd:
+                    type: number
+                    format: double
+                  budgetPeriod:
+                    type: string
+                    enum: [daily, monthly]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get node-wide LLM cost budget
+      description: |
+        Returns the current node-wide LLM cost budget. Owner-only — the cap
+        is policy data and isn't surfaced to non-owners.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getLLMConfig
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Current LLM budget
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  budgetUsd:
+                    type: number
+                    format: double
+                  budgetPeriod:
+                    type: string
+                    enum: [daily, monthly]
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
   /compute-nodes/{id}/user-quotas:
     get:
       summary: List per-user chat & workflow LLM quotas for a compute node
