@@ -3,6 +3,7 @@ package compute
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -225,17 +226,39 @@ func PutChatUserQuotaHandler(ctx context.Context, request events.APIGatewayV2HTT
 	quotaStore := store_dynamodb.NewChatUserQuotaStore(qctx.DDB, qctx.QuotaTbl)
 	if err := quotaStore.Put(ctx, quota); err != nil {
 		log.Printf("Error putting chat user quota: %v", err)
+		log.Printf("AUDIT action=put_chat_user_quota result=failure caller=%q node=%q target=%q error=%q",
+			qctx.UserID, qctx.NodeUuid, qctx.TargetUid, err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
 
+	// Audit trail of admin actions on per-user cost caps. See
+	// llm_config_handler.go for the HIPAA / NIST rationale. We log
+	// the three cap axes as pointers-or-nil so the entry distinguishes
+	// "explicitly set to 0" from "cleared / falls back to default".
+	log.Printf("AUDIT action=put_chat_user_quota result=success caller=%q node=%q target=%q daily=%s monthly=%s perWorkflow=%s",
+		qctx.UserID, qctx.NodeUuid, qctx.TargetUid,
+		formatNullableUsd(quota.DailyCostUsd),
+		formatNullableUsd(quota.MonthlyCostUsd),
+		formatNullableUsd(quota.PerWorkflowUsd))
+
 	out, _ := json.Marshal(quota)
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
 		Body:       string(out),
 	}, nil
+}
+
+// formatNullableUsd renders an optional cap value for audit log lines.
+// `null` means the axis is unset on this row (falls through to the next
+// resolution tier); a number means an explicit cap (including $0.00).
+func formatNullableUsd(v *float64) string {
+	if v == nil {
+		return "null"
+	}
+	return fmt.Sprintf("%.2f", *v)
 }
 
 // GetChatUserQuotaHandler returns the quota row for (nodeId, userId), or 404 if none.
@@ -330,11 +353,16 @@ func DeleteChatUserQuotaHandler(ctx context.Context, request events.APIGatewayV2
 	quotaStore := store_dynamodb.NewChatUserQuotaStore(qctx.DDB, qctx.QuotaTbl)
 	if err := quotaStore.Delete(ctx, qctx.NodeUuid, qctx.TargetUid); err != nil {
 		log.Printf("Error deleting chat user quota: %v", err)
+		log.Printf("AUDIT action=delete_chat_user_quota result=failure caller=%q node=%q target=%q error=%q",
+			qctx.UserID, qctx.NodeUuid, qctx.TargetUid, err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
+
+	log.Printf("AUDIT action=delete_chat_user_quota result=success caller=%q node=%q target=%q",
+		qctx.UserID, qctx.NodeUuid, qctx.TargetUid)
 
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,

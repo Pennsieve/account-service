@@ -61,11 +61,23 @@ func PutLLMConfigHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	respBody, err := sctx.ProvisionerClient.Put(ctx, "/llm-config", payload)
 	if err != nil {
 		log.Printf("Error putting LLM config: %v", err)
+		// Audit the attempt even on failure — HIPAA §164.312(b) wants
+		// unsuccessful access attempts logged as well.
+		log.Printf("AUDIT action=put_llm_budget result=failure caller=%q node=%q budgetUsd=%.2f period=%q error=%q",
+			sctx.UserID, sctx.NodeUuid, body.BudgetUsd, body.BudgetPeriod, err.Error())
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrProvisionerRequest),
 		}, nil
 	}
+
+	// Audit trail of admin actions on cost-governance config. HIPAA
+	// §164.312(b) / NIST 800-171 AU-2: changes to security-relevant config
+	// on PHI-processing systems must be logged with caller identity. The
+	// budget value itself isn't PHI; we log it so audit can show the
+	// before/after delta.
+	log.Printf("AUDIT action=put_llm_budget result=success caller=%q node=%q budgetUsd=%.2f period=%q",
+		sctx.UserID, sctx.NodeUuid, body.BudgetUsd, body.BudgetPeriod)
 
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
