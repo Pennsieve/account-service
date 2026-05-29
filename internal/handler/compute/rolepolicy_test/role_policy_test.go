@@ -87,6 +87,18 @@ func TestRolePolicyDocument_AutoscalingWildcardInAllowServices(t *testing.T) {
 	assert.Contains(t, actions, "autoscaling:*")
 }
 
+func TestRolePolicyDocument_TaggedResourceCreatesInAllowServices(t *testing.T) {
+	doc := parsePolicy(t)
+	stmt := findStatement(t, doc, "AllowServices")
+
+	actions, ok := stmt.Action.([]interface{})
+	require.True(t, ok)
+	assert.Contains(t, actions, "events:PutRule")
+	assert.Contains(t, actions, "events:TagResource")
+	assert.Contains(t, actions, "bedrock:CreateGuardrail")
+	assert.Contains(t, actions, "bedrock:TagResource")
+}
+
 func TestRolePolicyDocument_DenySelfModification_ProtectsComputeRoles(t *testing.T) {
 	doc := parsePolicy(t)
 	stmt := findStatement(t, doc, "DenySelfModification")
