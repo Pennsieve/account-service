@@ -141,6 +141,12 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	// Update provisioner image and tag in DynamoDB to match what the Fargate task will use
 	computeNode.ProvisionerImage = updateRequest.ProvisionerImage
 	computeNode.ProvisionerImageTag = updateRequest.ProvisionerImageTag
+	// Allow enabling/disabling interactive sessions on an existing node. Persist
+	// before launch so the provisioner env (read from computeNode below) and the
+	// stored record agree; >0 triggers the shared-infra ALB re-apply.
+	if updateRequest.MaxInteractiveSessions != nil {
+		computeNode.MaxInteractiveSessions = *updateRequest.MaxInteractiveSessions
+	}
 	if err := dynamo_store.Put(ctx, computeNode); err != nil {
 		log.Printf("Error updating provisioner image/tag for node %s: %v", uuid, err)
 		return events.APIGatewayV2HTTPResponse{
@@ -241,6 +247,18 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	maxGpuInstancesValue := strconv.Itoa(computeNode.MaxGpuInstances)
 	gpuTierKey := "GPU_TIER"
 	gpuTierValue := computeNode.GpuTier
+
+	// Interactive (Jupyter) sessions — sourced from the (possibly updated) node
+	// record. >0 enables the shared-infra ALB re-apply + DNS delegation. Leaving
+	// ACCOUNT_KEY unset lets the provisioner default it to the AWS account id.
+	maxInteractiveSessionsKey := "MAX_INTERACTIVE_SESSIONS"
+	maxInteractiveSessionsValue := strconv.Itoa(computeNode.MaxInteractiveSessions)
+	enableInteractiveKey := "ENABLE_INTERACTIVE"
+	enableInteractiveValue := "false"
+	if computeNode.MaxInteractiveSessions > 0 {
+		enableInteractiveValue = "true"
+	}
+
 	roleNameKey := "ROLE_NAME"
 	roleNameValue := account.RoleName
 
@@ -353,6 +371,14 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &gpuTierKey,
 							Value: &gpuTierValue,
+						},
+						{
+							Name:  &maxInteractiveSessionsKey,
+							Value: &maxInteractiveSessionsValue,
+						},
+						{
+							Name:  &enableInteractiveKey,
+							Value: &enableInteractiveValue,
 						},
 						{
 							Name:  &roleNameKey,

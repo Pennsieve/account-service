@@ -221,6 +221,11 @@ components:
           description: "GPU instance tier: small (T4 16GB), medium (L4 24GB), large (A10G 24GB), xlarge (L40S 48GB)"
           default: small
           enum: [small, medium, large, xlarge]
+        maxInteractiveSessions:
+          type: integer
+          description: Maximum concurrent interactive (Jupyter) sessions. Set to 0 to disable interactive sessions (no ALB / DNS cost). >0 enables the shared per-account ALB + delegated subdomain.
+          default: 0
+          minimum: 0
     computeNodeResponse:
       type: object
       properties:
@@ -290,6 +295,9 @@ components:
           type: string
           description: "GPU instance tier: small (T4 16GB), medium (L4 24GB), large (A10G 24GB), xlarge (L40S 48GB)"
           enum: [small, medium, large, xlarge]
+        maxInteractiveSessions:
+          type: integer
+          description: Maximum concurrent interactive (Jupyter) sessions (0 = interactive disabled)
         status:
           type: string
           enum: ["Enabled", "Paused", "Pending", "Destroying"]
@@ -320,6 +328,10 @@ components:
           type: string
           enum: ["basic", "secure", "compliant"]
           description: Deployment mode controlling the infrastructure networking tier (optional)
+        maxInteractiveSessions:
+          type: integer
+          minimum: 0
+          description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables. Omit to leave unchanged.
     updateConfigRequest:
       type: object
       description: Infrastructure configuration update. At least one field must be provided. Triggers re-provisioning.

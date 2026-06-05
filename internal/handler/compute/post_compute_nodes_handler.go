@@ -463,9 +463,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			DeploymentMode:        req.DeploymentMode,
 			EnableLLMAccess:       req.EnableLLMAccess,
 			LlmBaaAcknowledged:    req.LlmBaaAcknowledged,
-			MaxGpuInstances:       resolveIntPtr(req.MaxGpuInstances, 2),
-			GpuTier:               resolveStringPtr(req.GpuTier, "small"),
-			Status:                "Pending", // New Pending status
+			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, 2),
+			GpuTier:                resolveStringPtr(req.GpuTier, "small"),
+			MaxInteractiveSessions: resolveIntPtr(req.MaxInteractiveSessions, 0),
+			Status:                 "Pending", // New Pending status
 		}
 
 		err = nodeStore.Put(ctx, pendingNode)
@@ -532,6 +533,19 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		maxGpuInstancesValue := strconv.Itoa(resolveIntPtr(req.MaxGpuInstances, 2))
 		gpuTierKey := "GPU_TIER"
 		gpuTierValue := resolveStringPtr(req.GpuTier, "small")
+
+		// Interactive (Jupyter) sessions. MaxInteractiveSessions>0 enables the
+		// feature on the node; ENABLE_INTERACTIVE drives shared-infra ALB + DNS.
+		// ACCOUNT_KEY is left unset so the provisioner defaults it to the AWS
+		// account id (DNS-safe label for {accountKey}.compute.pennsieve.net).
+		maxInteractiveSessionsValue := resolveIntPtr(req.MaxInteractiveSessions, 0)
+		maxInteractiveSessionsKey := "MAX_INTERACTIVE_SESSIONS"
+		maxInteractiveSessionsStr := strconv.Itoa(maxInteractiveSessionsValue)
+		enableInteractiveKey := "ENABLE_INTERACTIVE"
+		enableInteractiveValue := "false"
+		if maxInteractiveSessionsValue > 0 {
+			enableInteractiveValue = "true"
+		}
 
 		roleNameKey := "ROLE_NAME"
 		roleNameValue := account.RoleName
@@ -630,6 +644,14 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 								Value: &gpuTierValue,
 							},
 							{
+								Name:  &maxInteractiveSessionsKey,
+								Value: &maxInteractiveSessionsStr,
+							},
+							{
+								Name:  &enableInteractiveKey,
+								Value: &enableInteractiveValue,
+							},
+							{
 								Name:  &roleNameKey,
 								Value: &roleNameValue,
 							},
@@ -697,9 +719,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			DeploymentMode:      req.DeploymentMode,
 			EnableLLMAccess:    req.EnableLLMAccess,
 			LlmBaaAcknowledged: req.LlmBaaAcknowledged,
-			MaxGpuInstances:    resolveIntPtr(req.MaxGpuInstances, 2),
-			GpuTier:            resolveStringPtr(req.GpuTier, "small"),
-			Status:             "Pending",
+			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, 2),
+			GpuTier:                resolveStringPtr(req.GpuTier, "small"),
+			MaxInteractiveSessions: resolveIntPtr(req.MaxInteractiveSessions, 0),
+			Status:                 "Pending",
 		}
 
 		m, err := json.Marshal(createdNode)
