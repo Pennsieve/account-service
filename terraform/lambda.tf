@@ -90,6 +90,9 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
       STORAGE_NODE_WORKSPACE_TABLE = aws_dynamodb_table.storage_node_workspace_table.name
       STORAGE_READ_POLICY_ARN      = aws_iam_policy.storage_read.arn
       STORAGE_WRITE_POLICY_ARN     = aws_iam_policy.storage_write.arn
+      # Parent zone (compute.pennsieve.net) for interactive-session subdomain
+      # NS delegation. Empty disables delegation (no-op).
+      INTERACTIVE_PARENT_ZONE_ID = var.interactive_parent_zone_id
     }
   }
 }

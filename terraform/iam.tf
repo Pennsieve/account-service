@@ -539,6 +539,21 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
     ]
   }
 
+  # Upsert the NS delegation record for interactive-session subdomains in the
+  # Pennsieve parent hosted zone. Scoped to the configured parent zone only.
+  statement {
+    sid    = "EventBridgeHandlerInteractiveDNSDelegation"
+    effect = "Allow"
+    actions = [
+      "route53:ChangeResourceRecordSets",
+      "route53:GetChange"
+    ]
+    resources = [
+      "arn:aws:route53:::hostedzone/${var.interactive_parent_zone_id}",
+      "arn:aws:route53:::change/*"
+    ]
+  }
+
 }
 
 

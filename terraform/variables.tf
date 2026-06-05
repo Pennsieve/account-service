@@ -92,6 +92,12 @@ variable "storage_provisioner_image_tag" {
   default     = "latest"
 }
 
+variable "interactive_parent_zone_id" {
+  description = "Route53 hosted zone ID of the Pennsieve parent zone (compute.pennsieve.net) where interactive-session subdomain NS delegation records are upserted. Empty disables delegation."
+  type        = string
+  default     = ""
+}
+
 locals {
   
   common_tags = {

@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	"github.com/pennsieve/account-service/internal/interactivedns"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 )
@@ -26,6 +28,12 @@ type ComputeNodeEvent struct {
 	ProvisionerImage      string `json:"provisionerImage,omitempty"`
 	ProvisionerImageTag   string `json:"provisionerImageTag,omitempty"`
 	CreatedAt             string `json:"createdAt,omitempty"`
+
+	// Interactive (Jupyter) session subdomain delegation. Present when the node
+	// enabled interactive sessions; account-service upserts the NS record in the
+	// Pennsieve parent zone so {accountKey}.compute.pennsieve.net resolves.
+	InteractiveZoneName        string   `json:"interactiveZoneName,omitempty"`
+	InteractiveZoneNameServers []string `json:"interactiveZoneNameServers,omitempty"`
 }
 
 // ComputeNodeErrorEvent represents error events from the provisioner
@@ -114,7 +122,37 @@ func handleProvisioningComplete(ctx context.Context, nodeStore store_dynamodb.No
 	}
 
 	log.Printf("Successfully updated node %s to Enabled status with infrastructure details", event.ComputeNodeId)
+
+	// Best-effort: refresh the interactive subdomain NS delegation if present.
+	ensureInteractiveDelegation(ctx, event)
 	return nil
+}
+
+// ensureInteractiveDelegation upserts the NS delegation for the node's
+// interactive-session subdomain in the Pennsieve parent zone. Best-effort: a
+// failure here must not fail provisioning (the node is already Enabled). The
+// delegation logic lives in interactivedns and is transport-agnostic so a
+// future non-AWS (e.g. Azure) provisioner can reuse it via a different channel.
+func ensureInteractiveDelegation(ctx context.Context, event ComputeNodeEvent) {
+	if event.InteractiveZoneName == "" || len(event.InteractiveZoneNameServers) == 0 {
+		return
+	}
+	parentZoneID := os.Getenv("INTERACTIVE_PARENT_ZONE_ID")
+	if parentZoneID == "" {
+		log.Printf("INTERACTIVE_PARENT_ZONE_ID not set; skipping NS delegation for %s", event.InteractiveZoneName)
+		return
+	}
+	cfg, err := utils.LoadAWSConfig(ctx)
+	if err != nil {
+		log.Printf("Warning: failed to load AWS config for NS delegation: %v", err)
+		return
+	}
+	r53 := route53.NewFromConfig(cfg)
+	if err := interactivedns.EnsureZoneDelegation(ctx, r53, parentZoneID, event.InteractiveZoneName, event.InteractiveZoneNameServers); err != nil {
+		log.Printf("Warning: failed to ensure NS delegation for %s: %v", event.InteractiveZoneName, err)
+		return
+	}
+	log.Printf("Ensured interactive NS delegation for %s (%d name servers)", event.InteractiveZoneName, len(event.InteractiveZoneNameServers))
 }
 
 func handleProvisioningError(ctx context.Context, nodeStore store_dynamodb.NodeStore, detail json.RawMessage) error {
@@ -194,6 +232,11 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	}
 
 	log.Printf("Successfully processed UPDATE for node %s", event.ComputeNodeId)
+
+	// Best-effort: refresh the interactive subdomain NS delegation if present.
+	// An UPDATE that just enabled interactive (or re-created the shared zone)
+	// carries fresh name servers, so re-upserting keeps the delegation current.
+	ensureInteractiveDelegation(ctx, event)
 	return nil
 }
 
