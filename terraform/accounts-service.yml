@@ -708,6 +708,31 @@ components:
               message:
                 type: string
 paths:
+  /interactive/jwks:
+    get:
+      summary: Public JWKS for interactive-session signing keys
+      description: >-
+        Returns the broker's public keys (RFC 7517) used to verify interactive
+        (Jupyter) session tokens by kid. Intentionally UNAUTHENTICATED — it
+        exposes only public key material; the per-node auth-proxy sidecars fetch
+        it to verify broker-signed tokens.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getInteractiveJwks
+      tags:
+        - Interactive
+      responses:
+        '200':
+          description: JWKS document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
   /gpu-tiers:
     get:
       summary: List available GPU instance tiers
