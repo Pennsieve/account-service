@@ -93,6 +93,15 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
       # Parent zone (compute.pennsieve.net) for interactive-session subdomain
       # NS delegation. Empty disables delegation (no-op).
       INTERACTIVE_PARENT_ZONE_ID = try(aws_route53_zone.interactive_parent[0].zone_id, "")
+      INTERACTIVE_PARENT_DOMAIN  = var.interactive_parent_domain
+      # Provisioner-launch config — the handler auto-triggers interactive phase 2
+      # (UPDATE re-provision) after it creates the NS delegation. Mirrors the
+      # service lambda. Empty/unset → the handler logs + skips (graceful).
+      ACCOUNTS_TABLE          = aws_dynamodb_table.accounts_table.name
+      CLUSTER_ARN             = data.terraform_remote_state.fargate.outputs.ecs_cluster_arn
+      SUBNET_IDS              = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
+      SECURITY_GROUP          = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
+      TASK_DEF_CONTAINER_NAME = var.tier
     }
   }
 }

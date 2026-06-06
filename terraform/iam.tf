@@ -539,19 +539,42 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
     ]
   }
 
-  # Upsert the NS delegation record for interactive-session subdomains in the
-  # Pennsieve parent hosted zone. Scoped to the configured parent zone only.
+  # Upsert/remove the NS delegation record for interactive-session subdomains in
+  # the Pennsieve parent hosted zone. Scoped to the configured parent zone only.
   statement {
     sid    = "EventBridgeHandlerInteractiveDNSDelegation"
     effect = "Allow"
     actions = [
       "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
       "route53:GetChange"
     ]
     resources = [
       try(aws_route53_zone.interactive_parent[0].arn, "arn:aws:route53:::hostedzone/none"),
       "arn:aws:route53:::change/*"
     ]
+  }
+
+  # Auto-trigger interactive phase 2: after creating the NS delegation, the
+  # handler launches an UPDATE re-provision so the provisioner completes ACM
+  # validation + the HTTPS listener (which it skipped on the first pass to avoid
+  # deadlocking on an undelegated zone). Mirrors the service lambda's ECS perms.
+  statement {
+    sid    = "EventBridgeHandlerReprovision"
+    effect = "Allow"
+    actions = [
+      "ecs:RunTask",
+      "ecs:DescribeTaskDefinition",
+      "ecs:RegisterTaskDefinition"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "EventBridgeHandlerPassRole"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["*"]
   }
 
 }

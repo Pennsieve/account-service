@@ -347,6 +347,10 @@ components:
         enableLLMAccess:
           type: boolean
           description: Enable or disable LLM/Bedrock access for processors
+        maxInteractiveSessions:
+          type: integer
+          minimum: 0
+          description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables.
     computeNodePermissionsRequest:
       type: object
       required:
