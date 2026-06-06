@@ -24,9 +24,10 @@ import (
 // UpdateConfigRequest is the request body for POST /compute-nodes/{id}/update-config.
 // Only infrastructure-affecting fields are accepted. Nil fields are left unchanged.
 type UpdateConfigRequest struct {
-	MaxGpuInstances *int    `json:"maxGpuInstances,omitempty"`
-	GpuTier         *string `json:"gpuTier,omitempty"`
-	EnableLLMAccess *bool   `json:"enableLLMAccess,omitempty"`
+	MaxGpuInstances        *int    `json:"maxGpuInstances,omitempty"`
+	GpuTier                *string `json:"gpuTier,omitempty"`
+	EnableLLMAccess        *bool   `json:"enableLLMAccess,omitempty"`
+	MaxInteractiveSessions *int    `json:"maxInteractiveSessions,omitempty"`
 }
 
 // PostUpdateConfigHandler updates infrastructure configuration for a compute node
@@ -59,7 +60,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 
 	// Must provide at least one field
-	if req.MaxGpuInstances == nil && req.GpuTier == nil && req.EnableLLMAccess == nil {
+	if req.MaxGpuInstances == nil && req.GpuTier == nil && req.EnableLLMAccess == nil && req.MaxInteractiveSessions == nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnmarshaling),
@@ -68,6 +69,12 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Validate values
 	if req.MaxGpuInstances != nil && *req.MaxGpuInstances < 0 {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+		}, nil
+	}
+	if req.MaxInteractiveSessions != nil && *req.MaxInteractiveSessions < 0 {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
@@ -156,6 +163,9 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if req.EnableLLMAccess != nil {
 		computeNode.EnableLLMAccess = *req.EnableLLMAccess
 	}
+	if req.MaxInteractiveSessions != nil {
+		computeNode.MaxInteractiveSessions = *req.MaxInteractiveSessions
+	}
 
 	// Save to DynamoDB
 	if err := nodesStore.Put(ctx, computeNode); err != nil {
@@ -165,8 +175,8 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
-	log.Printf("Updated config for node %s: maxGpuInstances=%d, gpuTier=%s, enableLLMAccess=%v",
-		nodeUuid, computeNode.MaxGpuInstances, computeNode.GpuTier, computeNode.EnableLLMAccess)
+	log.Printf("Updated config for node %s: maxGpuInstances=%d, gpuTier=%s, enableLLMAccess=%v, maxInteractiveSessions=%d",
+		nodeUuid, computeNode.MaxGpuInstances, computeNode.GpuTier, computeNode.EnableLLMAccess, computeNode.MaxInteractiveSessions)
 
 	// Trigger re-provisioning
 	envValue := os.Getenv("ENV")
@@ -219,29 +229,35 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if computeNode.EnableLLMAccess {
 		enableLLMAccess = "true"
 	}
+	enableInteractive := "false"
+	if computeNode.MaxInteractiveSessions > 0 {
+		enableInteractive = "true"
+	}
 
 	env := buildEnvVars(map[string]string{
-		"COMPUTE_NODE_ID":     nodeUuid,
-		"ENV":                 envValue,
-		"ACTION":              "UPDATE",
-		"COMPUTE_NODES_TABLE": computeNodesTable,
-		"ORG_ID":              computeNode.OrganizationId,
-		"USER_ID":             userId,
-		"ACCOUNT_ID":          computeNode.AccountId,
-		"UUID":                computeNode.AccountUuid,
-		"ACCOUNT_TYPE":        computeNode.AccountType,
-		"WM_TAG":              computeNode.WorkflowManagerTag,
-		"WM_CPU":              "2048",
-		"WM_MEMORY":           "4096",
-		"NODE_IDENTIFIER":     nodeIdentifier,
-		"NODE_NAME":           computeNode.Name,
-		"PROVISIONER_IMAGE":     provisionerImage,
-		"PROVISIONER_IMAGE_TAG": provisionerImageTag,
-		"DEPLOYMENT_MODE":     deploymentMode,
-		"ENABLE_LLM_ACCESS":   enableLLMAccess,
-		"MAX_GPU_INSTANCES":   strconv.Itoa(computeNode.MaxGpuInstances),
-		"GPU_TIER":            computeNode.GpuTier,
-		"ROLE_NAME":           account.RoleName,
+		"COMPUTE_NODE_ID":          nodeUuid,
+		"ENV":                      envValue,
+		"ACTION":                   "UPDATE",
+		"COMPUTE_NODES_TABLE":      computeNodesTable,
+		"ORG_ID":                   computeNode.OrganizationId,
+		"USER_ID":                  userId,
+		"ACCOUNT_ID":               computeNode.AccountId,
+		"UUID":                     computeNode.AccountUuid,
+		"ACCOUNT_TYPE":             computeNode.AccountType,
+		"WM_TAG":                   computeNode.WorkflowManagerTag,
+		"WM_CPU":                   "2048",
+		"WM_MEMORY":                "4096",
+		"NODE_IDENTIFIER":          nodeIdentifier,
+		"NODE_NAME":                computeNode.Name,
+		"PROVISIONER_IMAGE":        provisionerImage,
+		"PROVISIONER_IMAGE_TAG":    provisionerImageTag,
+		"DEPLOYMENT_MODE":          deploymentMode,
+		"ENABLE_LLM_ACCESS":        enableLLMAccess,
+		"MAX_GPU_INSTANCES":        strconv.Itoa(computeNode.MaxGpuInstances),
+		"GPU_TIER":                 computeNode.GpuTier,
+		"MAX_INTERACTIVE_SESSIONS": strconv.Itoa(computeNode.MaxInteractiveSessions),
+		"ENABLE_INTERACTIVE":       enableInteractive,
+		"ROLE_NAME":                account.RoleName,
 	})
 
 	runTaskIn := &ecs.RunTaskInput{
