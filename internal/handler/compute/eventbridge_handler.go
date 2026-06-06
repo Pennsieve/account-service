@@ -8,9 +8,11 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/pennsieve/account-service/internal/interactivedns"
+	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 )
@@ -123,17 +125,22 @@ func handleProvisioningComplete(ctx context.Context, nodeStore store_dynamodb.No
 
 	log.Printf("Successfully updated node %s to Enabled status with infrastructure details", event.ComputeNodeId)
 
-	// Best-effort: refresh the interactive subdomain NS delegation if present.
-	ensureInteractiveDelegation(ctx, event)
+	// Best-effort: create/refresh the interactive subdomain NS delegation, and —
+	// if this is the FIRST time the zone is delegated — kick off phase 2 (cert
+	// validation + HTTPS listener), which the provisioner deliberately skipped on
+	// the first pass to avoid deadlocking on an undelegated zone.
+	ensureInteractiveDelegation(ctx, nodeStore, event)
 	return nil
 }
 
 // ensureInteractiveDelegation upserts the NS delegation for the node's
-// interactive-session subdomain in the Pennsieve parent zone. Best-effort: a
-// failure here must not fail provisioning (the node is already Enabled). The
-// delegation logic lives in interactivedns and is transport-agnostic so a
-// future non-AWS (e.g. Azure) provisioner can reuse it via a different channel.
-func ensureInteractiveDelegation(ctx context.Context, event ComputeNodeEvent) {
+// interactive-session subdomain in the Pennsieve parent zone, then — only when
+// the delegation was NEWLY created — auto-triggers a phase-2 re-provision so the
+// HTTPS listener comes up without any operator action. Best-effort: a failure
+// here must not fail provisioning (the node is already Enabled). The delegation
+// logic lives in interactivedns and is transport-agnostic so a future non-AWS
+// (e.g. Azure) provisioner can reuse it via a different channel.
+func ensureInteractiveDelegation(ctx context.Context, nodeStore store_dynamodb.NodeStore, event ComputeNodeEvent) {
 	if event.InteractiveZoneName == "" || len(event.InteractiveZoneNameServers) == 0 {
 		return
 	}
@@ -148,11 +155,19 @@ func ensureInteractiveDelegation(ctx context.Context, event ComputeNodeEvent) {
 		return
 	}
 	r53 := route53.NewFromConfig(cfg)
-	if err := interactivedns.EnsureZoneDelegation(ctx, r53, parentZoneID, event.InteractiveZoneName, event.InteractiveZoneNameServers); err != nil {
+	created, err := interactivedns.EnsureZoneDelegation(ctx, r53, parentZoneID, event.InteractiveZoneName, event.InteractiveZoneNameServers)
+	if err != nil {
 		log.Printf("Warning: failed to ensure NS delegation for %s: %v", event.InteractiveZoneName, err)
 		return
 	}
-	log.Printf("Ensured interactive NS delegation for %s (%d name servers)", event.InteractiveZoneName, len(event.InteractiveZoneNameServers))
+	log.Printf("Ensured interactive NS delegation for %s (%d name servers, newlyCreated=%v)", event.InteractiveZoneName, len(event.InteractiveZoneNameServers), created)
+
+	// Loop-safe: only on first delegation. Phase 2 is itself an UPDATE → its
+	// event re-runs this, but by then the NS record exists → created=false → no
+	// re-trigger.
+	if created {
+		triggerInteractivePhase2(ctx, cfg, nodeStore, event.ComputeNodeId)
+	}
 }
 
 func handleProvisioningError(ctx context.Context, nodeStore store_dynamodb.NodeStore, detail json.RawMessage) error {
@@ -236,7 +251,7 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	// Best-effort: refresh the interactive subdomain NS delegation if present.
 	// An UPDATE that just enabled interactive (or re-created the shared zone)
 	// carries fresh name servers, so re-upserting keeps the delegation current.
-	ensureInteractiveDelegation(ctx, event)
+	ensureInteractiveDelegation(ctx, nodeStore, event)
 	return nil
 }
 
@@ -257,6 +272,10 @@ func handleDeleteComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	}
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
+
+	// Capture the node's account before we delete it, so we can decide whether
+	// the per-account interactive DNS delegation should be torn down.
+	deletedNode, _ := nodeStore.GetById(ctx, event.ComputeNodeId)
 
 	// Clean up all node access records (permissions) for this node
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
@@ -279,5 +298,40 @@ func handleDeleteComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	}
 
 	log.Printf("Successfully deleted node %s and all associated access records from database", event.ComputeNodeId)
+
+	// If this account no longer has any interactive node, the per-account
+	// interactive zone is (being) torn down — remove its NS delegation from the
+	// Pennsieve parent zone so it doesn't dangle. Best-effort.
+	removeInteractiveDelegationIfUnused(ctx, cfg, nodeStore, deletedNode)
 	return nil
+}
+
+// removeInteractiveDelegationIfUnused deletes the parent-zone NS delegation for
+// the account's interactive subdomain when no interactive nodes remain for the
+// account (i.e. the per-account zone is gone or about to be). Safe: if a node
+// later re-enables interactive, the provisioner re-creates the zone and
+// account-service re-delegates. No-op if interactive was never in play.
+func removeInteractiveDelegationIfUnused(ctx context.Context, cfg aws.Config, nodeStore store_dynamodb.NodeStore, deletedNode models.DynamoDBNode) {
+	parentZoneID := os.Getenv("INTERACTIVE_PARENT_ZONE_ID")
+	parentDomain := os.Getenv("INTERACTIVE_PARENT_DOMAIN")
+	if parentZoneID == "" || parentDomain == "" || deletedNode.AccountUuid == "" || deletedNode.AccountId == "" {
+		return
+	}
+	remaining, err := nodeStore.GetByAccount(ctx, deletedNode.AccountUuid)
+	if err != nil {
+		log.Printf("Warning: could not list account %s nodes for delegation cleanup: %v", deletedNode.AccountUuid, err)
+		return
+	}
+	for _, n := range remaining {
+		if n.MaxInteractiveSessions > 0 {
+			return // another interactive node still needs the zone
+		}
+	}
+	zoneName := fmt.Sprintf("%s.%s", deletedNode.AccountId, parentDomain)
+	r53 := route53.NewFromConfig(cfg)
+	if err := interactivedns.RemoveZoneDelegation(ctx, r53, parentZoneID, zoneName); err != nil {
+		log.Printf("Warning: failed to remove NS delegation for %s: %v", zoneName, err)
+		return
+	}
+	log.Printf("Removed interactive NS delegation for %s (no interactive nodes remain)", zoneName)
 }
