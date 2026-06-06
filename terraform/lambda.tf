@@ -92,7 +92,7 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
       STORAGE_WRITE_POLICY_ARN     = aws_iam_policy.storage_write.arn
       # Parent zone (compute.pennsieve.net) for interactive-session subdomain
       # NS delegation. Empty disables delegation (no-op).
-      INTERACTIVE_PARENT_ZONE_ID = var.interactive_parent_zone_id
+      INTERACTIVE_PARENT_ZONE_ID = try(aws_route53_zone.interactive_parent[0].zone_id, "")
     }
   }
 }

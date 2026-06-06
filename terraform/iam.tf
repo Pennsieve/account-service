@@ -549,7 +549,7 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
       "route53:GetChange"
     ]
     resources = [
-      "arn:aws:route53:::hostedzone/${var.interactive_parent_zone_id}",
+      try(aws_route53_zone.interactive_parent[0].arn, "arn:aws:route53:::hostedzone/none"),
       "arn:aws:route53:::change/*"
     ]
   }
