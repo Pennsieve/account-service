@@ -17,15 +17,15 @@ resource "aws_lambda_function" "service_lambda" {
 
   environment {
     variables = {
-      ENV              = var.environment_name
-      PENNSIEVE_DOMAIN = data.terraform_remote_state.account.outputs.domain_name,
-      REGION           = var.aws_region,
-      ACCOUNTS_TABLE = aws_dynamodb_table.accounts_table.name
+      ENV                     = var.environment_name
+      PENNSIEVE_DOMAIN        = data.terraform_remote_state.account.outputs.domain_name,
+      REGION                  = var.aws_region,
+      ACCOUNTS_TABLE          = aws_dynamodb_table.accounts_table.name
       ACCOUNT_WORKSPACE_TABLE = aws_dynamodb_table.account_workspace_table.name
-      COMPUTE_NODES_TABLE = aws_dynamodb_table.compute_resource_nodes_table.name
-      NODE_ACCESS_TABLE = aws_dynamodb_table.compute_node_access_table.name
-      CHAT_USER_QUOTA_TABLE = aws_dynamodb_table.chat_user_quota_table.name
-      CHAT_USER_USAGE_TABLE = aws_dynamodb_table.chat_user_usage_table.name
+      COMPUTE_NODES_TABLE     = aws_dynamodb_table.compute_resource_nodes_table.name
+      NODE_ACCESS_TABLE       = aws_dynamodb_table.compute_node_access_table.name
+      CHAT_USER_QUOTA_TABLE   = aws_dynamodb_table.chat_user_quota_table.name
+      CHAT_USER_USAGE_TABLE   = aws_dynamodb_table.chat_user_usage_table.name
 
       // Platform safety cap for per-user chat & workflow LLM spend. MUST
       // mirror the values set on the chat-service Lambda — both services
@@ -37,23 +37,27 @@ resource "aws_lambda_function" "service_lambda" {
       DEFAULT_USER_MONTHLY_COST_USD = var.default_user_monthly_cost_usd
       DEFAULT_USER_PER_WORKFLOW_USD = var.default_user_per_workflow_usd
       DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
+      # Interactive-session broker signing keypair (account-service owns it;
+      # workflow-service reads the same secret to sign; sidecars verify via the
+      # public JWKS at GET /interactive/jwks).
+      INTERACTIVE_SIGNING_SECRET = "${var.environment_name}-interactive-session-signing"
       # PostgreSQL Configuration
-      POSTGRES_HOST    = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
-      POSTGRES_PORT    = "5432"
-      POSTGRES_USER    = "${var.environment_name}_rds_proxy_user"
+      POSTGRES_HOST                  = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
+      POSTGRES_PORT                  = "5432"
+      POSTGRES_USER                  = "${var.environment_name}_rds_proxy_user"
       POSTGRES_ORGANIZATION_DATABASE = "pennsieve_postgres"
       # ECS Configuration for compute node provisioning
-      TASK_DEF_ARN = aws_ecs_task_definition.provisioner_ecs_task_definition.arn
-      CLUSTER_ARN = data.terraform_remote_state.fargate.outputs.ecs_cluster_arn
-      SUBNET_IDS = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
-      SECURITY_GROUP = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
-      TASK_DEF_CONTAINER_NAME = var.tier
-      APP_STORE_ECR_REPOSITORY = data.terraform_remote_state.platform_infrastructure.outputs.appstore_private_ecr_repository_url
-      STORAGE_NODES_TABLE = aws_dynamodb_table.storage_nodes_table.name
-      STORAGE_NODE_WORKSPACE_TABLE = aws_dynamodb_table.storage_node_workspace_table.name
-      STORAGE_READ_POLICY_ARN = aws_iam_policy.storage_read.arn
-      STORAGE_WRITE_POLICY_ARN = aws_iam_policy.storage_write.arn
-      STORAGE_TASK_DEF_ARN = aws_ecs_task_definition.storage_provisioner_task.arn
+      TASK_DEF_ARN                    = aws_ecs_task_definition.provisioner_ecs_task_definition.arn
+      CLUSTER_ARN                     = data.terraform_remote_state.fargate.outputs.ecs_cluster_arn
+      SUBNET_IDS                      = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
+      SECURITY_GROUP                  = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
+      TASK_DEF_CONTAINER_NAME         = var.tier
+      APP_STORE_ECR_REPOSITORY        = data.terraform_remote_state.platform_infrastructure.outputs.appstore_private_ecr_repository_url
+      STORAGE_NODES_TABLE             = aws_dynamodb_table.storage_nodes_table.name
+      STORAGE_NODE_WORKSPACE_TABLE    = aws_dynamodb_table.storage_node_workspace_table.name
+      STORAGE_READ_POLICY_ARN         = aws_iam_policy.storage_read.arn
+      STORAGE_WRITE_POLICY_ARN        = aws_iam_policy.storage_write.arn
+      STORAGE_TASK_DEF_ARN            = aws_ecs_task_definition.storage_provisioner_task.arn
       STORAGE_TASK_DEF_CONTAINER_NAME = "storage-provisioner"
     }
   }
@@ -86,6 +90,9 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
       STORAGE_NODE_WORKSPACE_TABLE = aws_dynamodb_table.storage_node_workspace_table.name
       STORAGE_READ_POLICY_ARN      = aws_iam_policy.storage_read.arn
       STORAGE_WRITE_POLICY_ARN     = aws_iam_policy.storage_write.arn
+      # Parent zone (compute.pennsieve.net) for interactive-session subdomain
+      # NS delegation. Empty disables delegation (no-op).
+      INTERACTIVE_PARENT_ZONE_ID = try(aws_route53_zone.interactive_parent[0].zone_id, "")
     }
   }
 }
@@ -96,11 +103,11 @@ resource "aws_cloudwatch_event_rule" "compute_node_provisioning" {
   description = "Capture compute node provisioning events"
 
   event_pattern = jsonencode({
-    source      = ["compute-node-provisioner"]
+    source = ["compute-node-provisioner"]
     detail-type = [
       "ComputeNodeCREATE",
       "ComputeNodeCREATEError",
-      "ComputeNodeUPDATE", 
+      "ComputeNodeUPDATE",
       "ComputeNodeUPDATEError",
       "ComputeNodeDELETE",
       "ComputeNodeDELETEError"
@@ -130,7 +137,7 @@ resource "aws_cloudwatch_event_rule" "storage_node_provisioning" {
   description = "Capture storage node provisioning events"
 
   event_pattern = jsonencode({
-    source      = ["storage-node-provisioner"]
+    source = ["storage-node-provisioner"]
     detail-type = [
       "StorageNodeCREATE",
       "StorageNodeCREATEError",
@@ -218,13 +225,13 @@ resource "aws_lambda_function" "check_user_node_access" {
 
   environment {
     variables = {
-      ENV                = var.environment_name
-      NODE_ACCESS_TABLE  = aws_dynamodb_table.compute_node_access_table.name
+      ENV                           = var.environment_name
+      NODE_ACCESS_TABLE             = aws_dynamodb_table.compute_node_access_table.name
       DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
       # PostgreSQL Configuration via RDS Proxy with IAM auth
-      POSTGRES_HOST      = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
-      POSTGRES_PORT      = "5432"
-      POSTGRES_USER      = "${var.environment_name}_rds_proxy_user"
+      POSTGRES_HOST                  = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
+      POSTGRES_PORT                  = "5432"
+      POSTGRES_USER                  = "${var.environment_name}_rds_proxy_user"
       POSTGRES_ORGANIZATION_DATABASE = "pennsieve_postgres"
     }
   }

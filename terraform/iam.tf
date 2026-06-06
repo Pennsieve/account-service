@@ -32,8 +32,8 @@ resource "aws_iam_policy" "service_lambda_iam_policy" {
 data "aws_iam_policy_document" "service_iam_policy_document" {
 
   statement {
-    sid     = "AccountServiceLambdaLogsPermissions"
-    effect  = "Allow"
+    sid    = "AccountServiceLambdaLogsPermissions"
+    effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
@@ -45,8 +45,8 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
   }
 
   statement {
-    sid     = "AccountServiceLambdaRDSPermissions"
-    effect  = "Allow"
+    sid    = "AccountServiceLambdaRDSPermissions"
+    effect = "Allow"
     actions = [
       "rds-db:connect"
     ]
@@ -56,8 +56,8 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
   }
 
   statement {
-    sid     = "AccountServiceLambdaEC2Permissions"
-    effect  = "Allow"
+    sid    = "AccountServiceLambdaEC2Permissions"
+    effect = "Allow"
     actions = [
       "ec2:CreateNetworkInterface",
       "ec2:DescribeNetworkInterfaces",
@@ -68,8 +68,25 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     resources = ["*"]
   }
 
+  // Interactive-session signing keypair: account-service generates it on first
+  // GET /interactive/jwks and reads it to serve the public JWKS.
   statement {
-    sid = "LambdaAccessToDynamoDB"
+    sid    = "AccountServiceInteractiveSigningSecret"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:CreateSecret",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:TagResource"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:*:*:secret:${var.environment_name}-interactive-session-signing-*"
+    ]
+  }
+
+  statement {
+    sid    = "LambdaAccessToDynamoDB"
     effect = "Allow"
 
     actions = [
@@ -142,11 +159,11 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
   }
 
   statement {
-    sid       = "SSMGetParameterPermissions"
-    effect    = "Allow"
-    actions   = [
+    sid    = "SSMGetParameterPermissions"
+    effect = "Allow"
+    actions = [
       "ssm:GetParameter",
-      "ssm:GetParameters", 
+      "ssm:GetParameters",
       "ssm:GetParametersByPath"
     ]
     resources = ["arn:aws:ssm:${data.aws_region.current_region.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment_name}/${var.service_name}/*"]
@@ -227,8 +244,8 @@ resource "aws_iam_policy" "health_checker_lambda_iam_policy" {
 data "aws_iam_policy_document" "health_checker_iam_policy_document" {
 
   statement {
-    sid     = "HealthCheckerLambdaLogsPermissions"
-    effect  = "Allow"
+    sid    = "HealthCheckerLambdaLogsPermissions"
+    effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
@@ -238,8 +255,8 @@ data "aws_iam_policy_document" "health_checker_iam_policy_document" {
   }
 
   statement {
-    sid     = "HealthCheckerLambdaEC2Permissions"
-    effect  = "Allow"
+    sid    = "HealthCheckerLambdaEC2Permissions"
+    effect = "Allow"
     actions = [
       "ec2:CreateNetworkInterface",
       "ec2:DescribeNetworkInterfaces",
@@ -461,8 +478,8 @@ resource "aws_iam_policy" "eventbridge_handler_lambda_iam_policy" {
 data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
 
   statement {
-    sid     = "EventBridgeHandlerLambdaLogsPermissions"
-    effect  = "Allow"
+    sid    = "EventBridgeHandlerLambdaLogsPermissions"
+    effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
       "logs:CreateLogStream",
@@ -472,8 +489,8 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
   }
 
   statement {
-    sid     = "EventBridgeHandlerLambdaEC2Permissions"
-    effect  = "Allow"
+    sid    = "EventBridgeHandlerLambdaEC2Permissions"
+    effect = "Allow"
     actions = [
       "ec2:CreateNetworkInterface",
       "ec2:DescribeNetworkInterfaces",
@@ -519,6 +536,21 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
     resources = [
       aws_iam_policy.storage_read.arn,
       aws_iam_policy.storage_write.arn
+    ]
+  }
+
+  # Upsert the NS delegation record for interactive-session subdomains in the
+  # Pennsieve parent hosted zone. Scoped to the configured parent zone only.
+  statement {
+    sid    = "EventBridgeHandlerInteractiveDNSDelegation"
+    effect = "Allow"
+    actions = [
+      "route53:ChangeResourceRecordSets",
+      "route53:GetChange"
+    ]
+    resources = [
+      try(aws_route53_zone.interactive_parent[0].arn, "arn:aws:route53:::hostedzone/none"),
+      "arn:aws:route53:::change/*"
     ]
   }
 

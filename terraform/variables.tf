@@ -92,14 +92,26 @@ variable "storage_provisioner_image_tag" {
   default     = "latest"
 }
 
+variable "interactive_parent_domain" {
+  description = "Per-env parent domain for interactive-session subdomains (per-account zones are {accountKey}.{this}). Must be unique per environment since a hosted-zone name is global — e.g. compute-dev.pennsieve.net (dev), compute.pennsieve.net (prod). Empty = interactive DNS disabled in this env (no zone created, delegation is a no-op). Must match the provisioner shared-infra compute_domain for the env."
+  type        = string
+  default     = ""
+}
+
+variable "interactive_root_zone_name" {
+  description = "Pennsieve root zone that delegates to the interactive parent zone (an NS record is added here). Pennsieve-owned and managed in this account."
+  type        = string
+  default     = "pennsieve.net"
+}
+
 locals {
-  
+
   common_tags = {
     aws_account      = var.aws_account
     aws_region       = data.aws_region.current_region.name
     environment_name = var.environment_name
   }
 
-  cors_allowed_origins  = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"]
+  cors_allowed_origins = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"]
 
 }

@@ -7,42 +7,46 @@ import (
 
 // CreateComputeNodeRequest is the request body for POST /compute-nodes
 type CreateComputeNodeRequest struct {
-	AccountId       string `json:"accountId"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	OrganizationId  string `json:"organizationId,omitempty"`
-	ProvisionerImage    string `json:"provisionerImage,omitempty"`
-	ProvisionerImageTag string `json:"provisionerImageTag,omitempty"`
-	DeploymentMode      string `json:"deploymentMode,omitempty"`
-	EnableLLMAccess     bool   `json:"enableLLMAccess,omitempty"`
-	LlmBaaAcknowledged  bool   `json:"llmBaaAcknowledged,omitempty"`
+	AccountId           string  `json:"accountId"`
+	Name                string  `json:"name"`
+	Description         string  `json:"description"`
+	OrganizationId      string  `json:"organizationId,omitempty"`
+	ProvisionerImage    string  `json:"provisionerImage,omitempty"`
+	ProvisionerImageTag string  `json:"provisionerImageTag,omitempty"`
+	DeploymentMode      string  `json:"deploymentMode,omitempty"`
+	EnableLLMAccess     bool    `json:"enableLLMAccess,omitempty"`
+	LlmBaaAcknowledged  bool    `json:"llmBaaAcknowledged,omitempty"`
 	MaxGpuInstances     *int    `json:"maxGpuInstances,omitempty"`
 	GpuTier             *string `json:"gpuTier,omitempty"`
+	// MaxInteractiveSessions > 0 enables interactive (Jupyter) sessions on the
+	// node and drives the shared per-account ALB + DNS delegation.
+	MaxInteractiveSessions *int `json:"maxInteractiveSessions,omitempty"`
 }
 
 // Node is the response representation of a compute node
 type Node struct {
-	Uuid                  string          `json:"uuid"`
-	Name                  string          `json:"name"`
-	Description           string          `json:"description"`
-	QueueUrl              string          `json:"queueUrl"`
-	Account               NodeAccount     `json:"account"`
-	CreatedAt             string          `json:"createdAt"`
-	OrganizationId        string          `json:"organizationId,omitempty"`
-	OwnerId               string          `json:"ownerId"`
-	Identifier            string          `json:"identifier"`
-	WorkflowManagerTag    string          `json:"workflowManagerTag"`
-	ProvisionerImage      string          `json:"provisionerImage,omitempty"`
-	ProvisionerImageTag   string          `json:"provisionerImageTag,omitempty"`
-	DeploymentMode        string          `json:"deploymentMode,omitempty"`
-	EnableLLMAccess       bool            `json:"enableLLMAccess,omitempty"`
-	LlmBaaAcknowledged    bool            `json:"llmBaaAcknowledged,omitempty"`
-	MaxGpuInstances       int             `json:"maxGpuInstances"`
-	GpuTier               string          `json:"gpuTier"`
-	AccessScope           NodeAccessScope `json:"accessScope,omitempty"`
-	Status                string          `json:"status"`
-	HealthStatus          string          `json:"healthStatus,omitempty"`
-	LastHealthCheck       string          `json:"lastHealthCheck,omitempty"`
+	Uuid                   string          `json:"uuid"`
+	Name                   string          `json:"name"`
+	Description            string          `json:"description"`
+	QueueUrl               string          `json:"queueUrl"`
+	Account                NodeAccount     `json:"account"`
+	CreatedAt              string          `json:"createdAt"`
+	OrganizationId         string          `json:"organizationId,omitempty"`
+	OwnerId                string          `json:"ownerId"`
+	Identifier             string          `json:"identifier"`
+	WorkflowManagerTag     string          `json:"workflowManagerTag"`
+	ProvisionerImage       string          `json:"provisionerImage,omitempty"`
+	ProvisionerImageTag    string          `json:"provisionerImageTag,omitempty"`
+	DeploymentMode         string          `json:"deploymentMode,omitempty"`
+	EnableLLMAccess        bool            `json:"enableLLMAccess,omitempty"`
+	LlmBaaAcknowledged     bool            `json:"llmBaaAcknowledged,omitempty"`
+	MaxGpuInstances        int             `json:"maxGpuInstances"`
+	GpuTier                string          `json:"gpuTier"`
+	MaxInteractiveSessions int             `json:"maxInteractiveSessions"`
+	AccessScope            NodeAccessScope `json:"accessScope,omitempty"`
+	Status                 string          `json:"status"`
+	HealthStatus           string          `json:"healthStatus,omitempty"`
+	LastHealthCheck        string          `json:"lastHealthCheck,omitempty"`
 }
 
 type NodeAccount struct {
@@ -63,35 +67,40 @@ type NodeUpdateRequest struct {
 	AuthorizationType     string `json:"authorizationType,omitempty"`     // Optional - "NONE" or "AWS_IAM", only for legacy provisioner
 	ProvisionerImage      string `json:"provisionerImage,omitempty"`      // Optional - Docker image for the provisioner
 	ProvisionerImageTag   string `json:"provisionerImageTag,omitempty"`   // Optional - Docker tag for the provisioner image
+	// MaxInteractiveSessions, when set, enables/disables interactive (Jupyter)
+	// sessions on an existing node (>0 enables). Pointer so "absent" means "leave
+	// unchanged" vs. an explicit 0 to disable.
+	MaxInteractiveSessions *int `json:"maxInteractiveSessions,omitempty"`
 }
 
 // DynamoDBNode represents the DynamoDB storage structure for compute nodes
 type DynamoDBNode struct {
-	Uuid                  string `dynamodbav:"uuid"`
-	Name                  string `dynamodbav:"name"`
-	Description           string `dynamodbav:"description"`
-	ComputeNodeGatewayUrl string `dynamodbav:"computeNodeGatewayUrl"`
-	EfsId                 string `dynamodbav:"efsId"`
-	QueueUrl              string `dynamodbav:"queueUrl"`
-	Env                   string `dynamodbav:"environment"`
-	AccountUuid           string `dynamodbav:"accountUuid"`
-	AccountId             string `dynamodbav:"accountId"`
-	AccountType           string `dynamodbav:"accountType"`
-	CreatedAt             string `dynamodbav:"createdAt"`
-	OrganizationId        string `dynamodbav:"organizationId"`
-	UserId                string `dynamodbav:"userId"`
-	Identifier            string `dynamodbav:"identifier"`
-	WorkflowManagerTag    string `dynamodbav:"workflowManagerTag"`
-	DeploymentMode        string `dynamodbav:"deploymentMode"`
-	ProvisionerImage      string `dynamodbav:"provisionerImage"`
-	ProvisionerImageTag   string `dynamodbav:"provisionerImageTag"`
-	EnableLLMAccess       bool   `dynamodbav:"enableLLMAccess"`
-	LlmBaaAcknowledged    bool   `dynamodbav:"llmBaaAcknowledged"`
-	MaxGpuInstances       int    `dynamodbav:"maxGpuInstances"`
-	GpuTier               string `dynamodbav:"gpuTier"`
-	Status                string `dynamodbav:"status"`
-	HealthStatus          string `dynamodbav:"healthStatus"`
-	LastHealthCheck       string `dynamodbav:"lastHealthCheck"`
+	Uuid                   string `dynamodbav:"uuid"`
+	Name                   string `dynamodbav:"name"`
+	Description            string `dynamodbav:"description"`
+	ComputeNodeGatewayUrl  string `dynamodbav:"computeNodeGatewayUrl"`
+	EfsId                  string `dynamodbav:"efsId"`
+	QueueUrl               string `dynamodbav:"queueUrl"`
+	Env                    string `dynamodbav:"environment"`
+	AccountUuid            string `dynamodbav:"accountUuid"`
+	AccountId              string `dynamodbav:"accountId"`
+	AccountType            string `dynamodbav:"accountType"`
+	CreatedAt              string `dynamodbav:"createdAt"`
+	OrganizationId         string `dynamodbav:"organizationId"`
+	UserId                 string `dynamodbav:"userId"`
+	Identifier             string `dynamodbav:"identifier"`
+	WorkflowManagerTag     string `dynamodbav:"workflowManagerTag"`
+	DeploymentMode         string `dynamodbav:"deploymentMode"`
+	ProvisionerImage       string `dynamodbav:"provisionerImage"`
+	ProvisionerImageTag    string `dynamodbav:"provisionerImageTag"`
+	EnableLLMAccess        bool   `dynamodbav:"enableLLMAccess"`
+	LlmBaaAcknowledged     bool   `dynamodbav:"llmBaaAcknowledged"`
+	MaxGpuInstances        int    `dynamodbav:"maxGpuInstances"`
+	GpuTier                string `dynamodbav:"gpuTier"`
+	MaxInteractiveSessions int    `dynamodbav:"maxInteractiveSessions"`
+	Status                 string `dynamodbav:"status"`
+	HealthStatus           string `dynamodbav:"healthStatus"`
+	LastHealthCheck        string `dynamodbav:"lastHealthCheck"`
 }
 
 func (i DynamoDBNode) GetKey() map[string]types.AttributeValue {
