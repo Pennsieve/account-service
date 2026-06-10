@@ -179,10 +179,11 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		DeploymentMode:      computeNode.DeploymentMode,
 		EnableLLMAccess:     computeNode.EnableLLMAccess,
 		LlmBaaAcknowledged:  computeNode.LlmBaaAcknowledged,
-		MaxGpuInstances:     computeNode.MaxGpuInstances,
-		GpuTier:             computeNode.GpuTier,
-		AccessScope:        accessScope,
-		Status:             nodeStatus,
+		MaxGpuInstances:        computeNode.MaxGpuInstances,
+		GpuTier:                computeNode.GpuTier,
+		MaxInteractiveSessions: computeNode.MaxInteractiveSessions,
+		AccessScope:            accessScope,
+		Status:                 nodeStatus,
 	})
 	if err != nil {
 		log.Println(err.Error())

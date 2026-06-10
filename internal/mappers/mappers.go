@@ -66,12 +66,13 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			DeploymentMode:      c.DeploymentMode,
 			EnableLLMAccess:     c.EnableLLMAccess,
 			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
-			MaxGpuInstances:     c.MaxGpuInstances,
-			GpuTier:             c.GpuTier,
-			AccessScope:         accessScope,
-			Status:              nodeStatus,
-			HealthStatus:        c.HealthStatus,
-			LastHealthCheck:     c.LastHealthCheck,
+			MaxGpuInstances:        c.MaxGpuInstances,
+			GpuTier:                c.GpuTier,
+			MaxInteractiveSessions: c.MaxInteractiveSessions,
+			AccessScope:            accessScope,
+			Status:                 nodeStatus,
+			HealthStatus:           c.HealthStatus,
+			LastHealthCheck:        c.LastHealthCheck,
 		})
 	}
 
@@ -108,11 +109,12 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			DeploymentMode:      c.DeploymentMode,
 			EnableLLMAccess:     c.EnableLLMAccess,
 			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
-			MaxGpuInstances:     c.MaxGpuInstances,
-			GpuTier:             c.GpuTier,
-			Status:              c.Status,
-			HealthStatus:        c.HealthStatus,
-			LastHealthCheck:     c.LastHealthCheck,
+			MaxGpuInstances:        c.MaxGpuInstances,
+			GpuTier:                c.GpuTier,
+			MaxInteractiveSessions: c.MaxInteractiveSessions,
+			Status:                 c.Status,
+			HealthStatus:           c.HealthStatus,
+			LastHealthCheck:        c.LastHealthCheck,
 		})
 	}
 
