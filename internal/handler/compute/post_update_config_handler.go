@@ -234,6 +234,23 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		enableInteractive = "true"
 	}
 
+	// If this request explicitly DISABLES interactive on the node (sets it to 0)
+	// and no other node in the account still has it enabled, tear down the (now
+	// unused) shared interactive infra on this same re-provision (the shared
+	// module is otherwise sticky and would keep it). Gated on the request actually
+	// touching interactive so unrelated updates (e.g. GPU config) on non-
+	// interactive nodes never carry a teardown signal. Fail safe: leave it false
+	// on uncertainty.
+	destroyInteractive := "false"
+	if req.MaxInteractiveSessions != nil && *req.MaxInteractiveSessions == 0 {
+		otherInteractive, err := accountHasInteractiveExcept(ctx, nodesStore, computeNode.AccountUuid, computeNode.Uuid)
+		if err != nil {
+			log.Printf("Warning: could not determine remaining interactive nodes for account %s; not tearing down interactive infra: %v", computeNode.AccountUuid, err)
+		} else if !otherInteractive {
+			destroyInteractive = "true"
+		}
+	}
+
 	env := buildEnvVars(map[string]string{
 		"COMPUTE_NODE_ID":          nodeUuid,
 		"ENV":                      envValue,
@@ -257,6 +274,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		"GPU_TIER":                 computeNode.GpuTier,
 		"MAX_INTERACTIVE_SESSIONS": strconv.Itoa(computeNode.MaxInteractiveSessions),
 		"ENABLE_INTERACTIVE":       enableInteractive,
+		"DESTROY_INTERACTIVE":      destroyInteractive,
 		"ROLE_NAME":                account.RoleName,
 	})
 

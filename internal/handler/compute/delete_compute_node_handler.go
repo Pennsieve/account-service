@@ -200,6 +200,24 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	roleNameKey := "ROLE_NAME"
 	roleNameValue := account.RoleName
 
+	// If this node is interactive and it's the LAST interactive node in the
+	// account, tell the provisioner to tear down the shared interactive infra
+	// (ALB + zone + cert + listener) on this same delete run. When other nodes
+	// remain the provisioner keeps the shared VPC/NAT; when this is the last node
+	// overall, its full shared destroy removes everything regardless of this flag.
+	// Fail safe: on any uncertainty, leave it false (never wrongly destroy infra
+	// another node depends on).
+	destroyInteractiveKey := "DESTROY_INTERACTIVE"
+	destroyInteractiveValue := "false"
+	if computeNode.MaxInteractiveSessions > 0 {
+		otherInteractive, err := accountHasInteractiveExcept(ctx, dynamo_store, computeNode.AccountUuid, computeNode.Uuid)
+		if err != nil {
+			log.Printf("Warning: could not determine remaining interactive nodes for account %s; not tearing down interactive infra: %v", computeNode.AccountUuid, err)
+		} else if !otherInteractive {
+			destroyInteractiveValue = "true"
+		}
+	}
+
 	runTaskIn := &ecs.RunTaskInput{
 		TaskDefinition: aws.String(TaskDefinitionArn),
 		Cluster:        aws.String(cluster),
@@ -266,6 +284,10 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 						{
 							Name:  &roleNameKey,
 							Value: &roleNameValue,
+						},
+						{
+							Name:  &destroyInteractiveKey,
+							Value: &destroyInteractiveValue,
 						},
 					},
 				},
