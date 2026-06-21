@@ -12,18 +12,18 @@ ordered by dependency; several are independently shippable.
 
 ---
 
-## Decisions to settle first (gate the build)
+## Decisions (settled)
 
-These shape multiple milestones; agree on them before M1.
+Agreed before build; these shape multiple milestones.
 
-| # | Decision | Options | Leaning |
-|---|---|---|---|
-| D1 | **Layer versioning** | overwrite-in-place vs immutable snapshot (`{name}@{hash}`) | snapshot for `python-env`/`r-env` (provenance refs them); overwrite OK for `data`, guarded by active-run check |
-| D2 | **Compatibility enforcement** | hard-fail vs warn at mount/select on python/R version mismatch | hard-fail at run submit; warn in selector |
-| D3 | **Consume-side wiring mechanism** | runtime entrypoint wrapper vs processor self-wiring (status quo) | keep self-wiring as the contract; add the wrapper as the centralized convenience (M3) |
-| D4 | **Provenance home** | run record only vs also Discover dataset provenance | run record for v1; Discover later |
-| D5 | **EFS import perf** | accept NFS imports vs stage layer → local at task start | accept for v1 (deps-on-base-image posture); revisit if cold-start hurts |
-| D6 | **Quota / GC** | per-node layer count/size cap + cleanup policy | define a cap before self-service (M6) |
+| # | Decision | **Settled** |
+|---|---|---|
+| D1 | **Layer versioning** | **Immutable snapshots (`{name}@{hash}`) for `python-env`/`r-env`** (a run references a stable env); **`data` layers overwrite in place**, guarded by an active-run check. |
+| D2 | **Compatibility enforcement** | **Hard-fail at run submit** on python/R version (or arch) mismatch; **warn earlier in the selector**. |
+| D3 | **Consume-side wiring** | **Keep consumer self-wiring from `LAYERS_DIR` as the contract; add an opt-in runtime entrypoint wrapper** that auto-appends `PYTHONPATH` from the manifest (never a clobbering env override). |
+| D4 | **Provenance home** | **Run record for v1; Discover dataset provenance later.** |
+| D5 | **EFS import perf** | **Accept NFS imports for v1** (base-image + thin-layer posture); measure cold-start, optimize (local staging) only if it hurts. |
+| D6 | **Quota / GC** | **No cap for v1** — ship self-service without quotas (admin/power-user-facing at first); add per-node limits + cleanup later if EFS/cost becomes a problem. |
 
 ---
 
@@ -136,12 +136,13 @@ shows type + contents.
   `persistent-layer` target) on the node; track build status.
 - pennsieve-app `ComputeNodeLayers.vue`: extend the create-layer form to
   `{name, requirements, pythonVersion}`; show a `BUILDING` state on the existing badge.
-- Quota/GC enforcement (D6).
+- No quota/GC for v1 (D6) — ships without per-node caps; revisit if EFS/cost grows.
 
 **Acceptance:** user submits a `requirements.txt` → layer builds on Fargate → shows READY →
-selectable; resolved lock captured (M2). Rejected on compliant nodes with a clear message.
+selectable; resolved lock captured (M2); rebuild creates a new snapshot (D1). Rejected on
+compliant nodes with a clear message.
 
-**Depends on:** M1, M2. **Decisions:** D1 (rebuild semantics), D6 (quota).
+**Depends on:** M1, M2. **Decisions:** D1 (snapshot on rebuild).
 
 ---
 
