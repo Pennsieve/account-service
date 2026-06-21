@@ -18,7 +18,7 @@ Agreed before build; these shape multiple milestones.
 
 | # | Decision | **Settled** |
 |---|---|---|
-| D1 | **Layer versioning** | **Immutable snapshots (`{name}@{hash}`) for `python-env`/`r-env`** (a run references a stable env); **`data` layers overwrite in place**, guarded by an active-run check. |
+| D1 | **Layer versioning** | **Immutable snapshots (`{name}@{hash}`) for `python-env`/`r-env`** (a run references a stable env); **`data` layers overwrite in place**, guarded by an active-run check. **Snapshot id = short SHA-256 of the normalized resolved lock** (sorted `pip freeze`), computed at commit — content-addressed (rebuilding identical deps dedups; PyPI drift yields a new id). Hash the *resolved* lock, not the input `requirements.txt`. Manifest keeps `treeChecksum` for byte-integrity. |
 | D2 | **Compatibility enforcement** | **Hard-fail at run submit** on python/R version (or arch) mismatch; **warn earlier in the selector**. |
 | D3 | **Consume-side wiring** | **Keep consumer self-wiring from `LAYERS_DIR` as the contract; add an opt-in runtime entrypoint wrapper** that auto-appends `PYTHONPATH` from the manifest (never a clobbering env override). |
 | D4 | **Provenance home** | **Run record for v1; Discover dataset provenance later.** |
@@ -70,20 +70,29 @@ versions + `pythonVersion: 3.12`, readable via the layers API.
 **Goal:** a `python-env` layer is importable without consumer hardcoding, **without
 clobbering** the image's own `PYTHONPATH`.
 
-**Tasks**
-- Decide the wrapper mechanism (sub-decision): a small entrypoint shim the converter prepends
-  to the container command, OR an init that writes an env file the processor sources. It must
-  **append** `$LAYERS_DIR/{name}/lib/python{ver}/site-packages` (version from the manifest)
-  to the existing `PYTHONPATH`, and set `PYTHONPYCACHEPREFIX=/tmp/pycache`.
-- provisioner converter (`internal/aslconverter`): pass the resolved env-layer + its manifest
-  version to the wrapper (not via an ECS env override — see plan, "Consume-side wiring").
-- Compatibility check (D2): refuse/warn when layer `pythonVersion` ≠ the processor base.
+**Mechanism (settled):** an **in-image entrypoint wrapper**, not a converter override. A
+Pennsieve processor base image (or a drop-in 2-line entrypoint snippet) that, before exec'ing
+the real command: reads `LAYERS_DIR` (already injected — *no converter change*), **globs** each
+mounted layer's `lib/python*/site-packages` and **appends** them to `PYTHONPATH`, sets
+`PYTHONPYCACHEPREFIX=/tmp/pycache`, then `exec "$@"`. Runtime shell expansion = append-safe
+(preserves the image's own `PYTHONPATH`); the glob makes it version-agnostic (no need to thread
+the manifest version through the converter). **Opt-in** (D3): processors on the base/snippet get
+auto-wiring; others keep the `LAYERS_DIR` self-wiring contract.
 
-**Acceptance:** a processor with a `python-env` layer imports its packages with no hardcoding,
-**and** `pennsieve-quick-plot`'s `ENV PYTHONPATH=/app` still works (regression guard).
+**Tasks**
+- New Pennsieve processor **base image** (or entrypoint snippet) implementing the glob+append
+  wrapper above.
+- Compatibility check (D2): hard-fail at run submit when a layer's `pythonVersion` (manifest) ≠
+  the processor's; warn in the selector.
+- Migrate `processor-build-python-layer` / `pennsieve-quick-plot` onto the base (or add the
+  snippet) to adopt — net-new processors start on it.
+
+**Acceptance:** a processor on the base image with a `python-env` layer imports its packages with
+no hardcoding, **and** an image that sets its own `PYTHONPATH` (e.g. `quick-plot`'s `/app`) still
+works (append, not clobber — regression guard).
 
 **Depends on:** M2. **Decisions:** D2, D3.
-*(Reference: the clobbering ECS-override approach was prototyped and rejected — provisioner #34.)*
+*(Reference: the clobbering ECS-override approach was prototyped and rejected — provisioner #34; this in-image append wrapper is the fix.)*
 
 ---
 
