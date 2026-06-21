@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"fmt"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -129,6 +131,19 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	provisionerImageTag := os.Getenv("PROVISIONER_TEARDOWN_IMAGE_TAG")
 	if provisionerImageTag == "" {
 		provisionerImageTag = "latest"
+	}
+
+	// Gate: refuse to delete a node with live work — running workflows OR
+	// interactive sessions (both are Step Functions executions). The authoritative
+	// count comes from the node's gateway /health. If it's unknown (old or
+	// unreachable gateway) we proceed and rely on the provisioner-side delete()
+	// active-execution check as the backstop.
+	if active, known := activeExecutionsViaGateway(ctx, computeNode.ComputeNodeGatewayUrl, cfg.Region, cfg); known && active > 0 {
+		log.Printf("Refusing delete of node %s: %d active execution(s) reported by gateway", uuid, active)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusConflict,
+			Body:       errors.ComputeHandlerError(handlerName, fmt.Errorf("compute node has %d active workflow execution(s) or interactive session(s) — cancel or wait for them to finish before deleting", active)),
+		}, nil
 	}
 
 	// Set node status to "Destroying" before launching the delete task
