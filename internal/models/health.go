@@ -9,14 +9,18 @@ const (
 
 // HealthCheckResponse is the parsed response from a gateway's GET /health endpoint.
 type HealthCheckResponse struct {
-	Status    string                `json:"status"`
-	Issues    []HealthCheckIssue    `json:"issues,omitempty"`
-	Resources HealthCheckResources  `json:"resources,omitempty"`
+	Status    string               `json:"status"`
+	Issues    []HealthCheckIssue   `json:"issues,omitempty"`
+	Resources HealthCheckResources `json:"resources,omitempty"`
 }
 
 // HealthCheckResources contains resource inventories from the gateway.
 type HealthCheckResources struct {
 	EFSLayers []EFSLayerInfo `json:"efsLayers,omitempty"`
+	// SFNActiveExecutions is the count of RUNNING workflow executions on the node
+	// (workflows + interactive sessions). Used to gate node deletion. Omitted by
+	// older gateways → treated as "unknown" (gate fails open to the provisioner backstop).
+	SFNActiveExecutions int `json:"sfnActiveExecutions,omitempty"`
 }
 
 // EFSLayerInfo describes a layer on EFS as reported by the gateway health check.
