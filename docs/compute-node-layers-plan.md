@@ -55,6 +55,13 @@ provenance question that matters most for a scientific platform.
 - **Two provenance dimensions**: *software environment* (image digest + env layers + freeze)
   vs *inputs / reference data* (the primary dataset + data layers). The layer type decides
   which dimension a layer feeds — a genome is an input, not part of the software env.
+- **At most one env layer per processor** (one `python-env` and one `r-env`); **many `data`
+  layers** allowed. A `pip --target` tree is a *co-resolved* set; stacking two on
+  `PYTHONPATH` causes silent version shadowing / ABI breaks (positional precedence is not a
+  resolver). To combine env layers, rebuild one layer with the merged requirements so pip
+  co-resolves them — never compose at runtime. Data layers are independent file trees with
+  no resolution, so they compose freely. Enforced in `LayerNameSelector` (single-select for
+  env layers) + validated at run submit.
 - **Immutability**: env-layer provenance is only meaningful if a layer reference is stable.
   Resolve the current overwrite-vs-snapshot ambiguity in favor of versioned snapshots for
   env layers (see Open Questions).
