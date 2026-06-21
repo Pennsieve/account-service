@@ -199,6 +199,16 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	nodeNameValue := computeNode.Name
 	roleNameKey := "ROLE_NAME"
 	roleNameValue := account.RoleName
+	// DEPLOYMENT_MODE must be forwarded on DELETE too: the provisioner gates its
+	// shared-infrastructure teardown (last-node VPC/NAT destroy AND the
+	// DESTROY_INTERACTIVE interactive teardown below) on deployment_mode=="secure".
+	// Without this the provisioner defaults to "basic" and skips that teardown
+	// entirely, leaking the shared ALB/zone/cert (and VPC/NAT on the last node).
+	deploymentModeKey := "DEPLOYMENT_MODE"
+	deploymentModeValue := computeNode.DeploymentMode
+	if deploymentModeValue == "" {
+		deploymentModeValue = "basic"
+	}
 
 	// If this node is interactive and it's the LAST interactive node in the
 	// account, tell the provisioner to tear down the shared interactive infra
@@ -284,6 +294,10 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 						{
 							Name:  &roleNameKey,
 							Value: &roleNameValue,
+						},
+						{
+							Name:  &deploymentModeKey,
+							Value: &deploymentModeValue,
 						},
 						{
 							Name:  &destroyInteractiveKey,
