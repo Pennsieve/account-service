@@ -441,6 +441,30 @@ data "aws_iam_policy_document" "provisioner_fargate_iam_policy_document" {
     ]
   }
 
+  # Read the interactive-session NS delegation from the Pennsieve parent hosted
+  # zone. The provisioner gates phase 2 (ACM validation + HTTPS listener) on the
+  # per-account zone being delegated; it must read that delegation
+  # AUTHORITATIVELY via the Route53 API rather than a DNS lookup, because the
+  # provisioner's VPC attaches a private pennsieve.net zone that shadows
+  # compute.pennsieve.net (net.LookupNS there returns NXDOMAIN even when the
+  # public delegation is live). ListHostedZonesByName has no resource-level
+  # support, so it must be "*"; the record read is scoped to the parent zone.
+  statement {
+    sid       = "ProvisionerInteractiveDNSDelegationRead"
+    effect    = "Allow"
+    actions   = ["route53:ListHostedZonesByName"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid     = "ProvisionerInteractiveDNSDelegationRecordRead"
+    effect  = "Allow"
+    actions = ["route53:ListResourceRecordSets"]
+    resources = [
+      try(aws_route53_zone.interactive_parent[0].arn, "arn:aws:route53:::hostedzone/none"),
+    ]
+  }
+
 }
 
 # EventBridge Handler Lambda IAM Role
