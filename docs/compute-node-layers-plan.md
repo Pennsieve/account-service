@@ -41,12 +41,20 @@ provenance question that matters most for a scientific platform.
 - **Consume-side wiring is the one real fork**: the ASL converter reads each requested
   layer's `(type, version)` and injects the right env (`PYTHONPATH` / `R_LIBS_USER` /
   `LAYER_<NAME>_DIR`). Today it injects only a generic `LAYERS_DIR`.
-- **Provenance = run-level freeze, not layer manifest**: the authoritative record is a
-  `pip freeze` / `renv` snapshot of the *live interpreter* at execution time, plus the
-  container image digest and the layer refs. Mechanism-agnostic — works whether the env
-  came from a layer, the base image, or a runtime install.
-- **Two provenance dimensions**: software environment (base image + env layers + freeze)
-  vs reference data (data layers). The layer type decides which dimension a layer feeds.
+- **The image digest is the universal environment record**: a non-interactive processor
+  is a Docker container, so its environment is fully defined by the **image digest +
+  mounted env-layer versions** — language-agnostic (Python, R, Julia, C++, bash), already
+  pinned, exact-reproducible by re-pull. A dependency **freeze is captured only for
+  interactive notebooks**, where the kernel drifts at runtime (`pip install` mid-session)
+  and the image alone under-describes what ran. General workflows need no language-specific
+  capture.
+- **Every layer carries a `manifest.json`, copied into the run** (not just referenced):
+  for env layers it's a **recipe** (lockfile + interpreter version); for data layers it's
+  an **identity + content fingerprint** (version, source, tree checksum). Copying it into
+  the run record makes provenance self-contained and survives layer deletion.
+- **Two provenance dimensions**: *software environment* (image digest + env layers + freeze)
+  vs *inputs / reference data* (the primary dataset + data layers). The layer type decides
+  which dimension a layer feeds — a genome is an input, not part of the software env.
 - **Immutability**: env-layer provenance is only meaningful if a layer reference is stable.
   Resolve the current overwrite-vs-snapshot ambiguity in favor of versioned snapshots for
   env layers (see Open Questions).
@@ -102,29 +110,45 @@ Common: `{ layerType, layerName, createdAt, builder: {sourceUrl, tag}, sizeBytes
 Type-specific:
 - `python-env`: `{ pythonVersion, platform, packages: [{name, version}], pipFreeze: "<raw>" }`
 - `r-env`: `{ rVersion, platform, renvLock: {...} }`
-- `data`: `{ source, domainVersion?, checksum? }`
+- `data`: `{ version, source, treeChecksum, files?: [{path, sizeBytes, sha256}] }` — an
+  *identity + content fingerprint*, not a recipe. **Bound the inline `files` list**: always
+  include `treeChecksum` + counts; include per-file entries only when `fileCount` is small
+  (a genome has few large files; a million-file reference DB does not) — otherwise store the
+  full file manifest as a separate artifact referenced by hash.
 
-The manifest is the keystone: it lets the converter wire correctly (knows the
-`python{ver}` subpath), the UI render the catalog, and consumers reproduce.
+The manifest is the keystone: it lets the converter wire env layers correctly (knows the
+`python{ver}` subpath), the UI render the catalog, consumers reproduce, and — copied into
+each run — provenance survive layer deletion. `commit-layer` is the natural place to
+generate it (it already computes `sizeBytes`/`fileCount`; add `treeChecksum`).
 
 ---
 
 ## Run-level environment provenance
 
-Independent of *how* an environment was assembled, capture what actually ran:
+The software environment is **fully defined by the container image digest + mounted
+env-layer versions** — language-agnostic and already pinned. So capture is cheap and
+*conditional on node type*; a dependency freeze is only needed where the environment is
+mutable beyond the image.
 
-1. **At execution time** (processor entrypoint wrapper, uniform across processor + notebook):
-   - `pip freeze` / `installed.packages()` of the live interpreter (captures base image +
-     all env layers + any runtime install, already resolved).
-   - container image **digest** (`$ECS_CONTAINER_METADATA_URI_V4` → `Image` + digest).
-   - layer refs (the `Layers` list + each layer's `manifestKey`/version).
-   - processor source commit (`sourceUrl` + `tag`).
-   - → write `environment.json` (+ `environment.lock`) to `/mnt/efs/{cni}/{eri}/logs/{nodeId}/`.
+| Node | Captured | Freeze? |
+|---|---|---|
+| Non-interactive processor (any language) | image digest + env-layer versions (+ data-layer identities) | **No** — the image *is* the environment; don't assume a Python/R interpreter exists |
+| Interactive notebook | image digest + env-layer versions + **live `pip freeze`/`renv`** | **Yes** — the kernel drifts at runtime |
+
+A non-interactive processor that runtime-installs deps is an **anti-pattern** (it escapes
+the image); flag rather than chase it with a freeze — processors should bake deps into the
+image.
+
+**Capture mechanics:**
+1. **At execution time** — record the image digest (`$ECS_CONTAINER_METADATA_URI_V4` →
+   `Image` + digest), the mounted layer refs, **a copy of each mounted layer's
+   `manifest.json`** (recipe for env layers, identity+fingerprint for data layers), the
+   processor source commit (`sourceUrl` + `tag`), and — interactive only — the live freeze.
+   Write `environment.json` to `/mnt/efs/{cni}/{eri}/logs/{nodeId}/`.
 2. **At workflow end** — the finalizer collects per-node `environment.json` into a run-level
    provenance bundle on the run record.
-3. **Notebooks** — the kernel drifts (mid-session `pip install`), so freeze at **session end**
-   (session-proxy/teardown) and embed the freeze into the saved `.ipynb` metadata so the
-   notebook is self-describing outside Pennsieve.
+3. **Notebooks** — freeze at **session end** (session-proxy/teardown) and embed it into the
+   saved `.ipynb` metadata so the notebook is self-describing outside Pennsieve.
 
 ### Endpoint
 `GET /compute/workflows/runs/{runId}/environment[?nodeId=]` — mirrors the existing per-node
@@ -132,13 +156,28 @@ logs endpoint (`/runs/{runId}/logs?nodeId=`) the app already uses. Backed by the
 provenance bundle.
 
 ### Provenance split
-The run record exposes two sections, populated by layer type:
-- **Software environment** — base image digest + `python-env`/`r-env` layers + live freeze. *"What code ran."*
-- **Reference data** — `data` layers (e.g. genome build). *"What inputs/references it ran against."*
+The run record exposes two dimensions; **the layer type routes each layer to one**:
+- **Software environment** — image digest + `python-env`/`r-env` layers (+ interactive freeze). *"What code ran."*
+- **Inputs / reference data** — the primary dataset (data-source, already tracked) + `data` layers (e.g. genome build), recorded by **identity** (version + source + tree checksum), not a recipe. *"What it ran against."*
+
+### Provenance durability & layer lifecycle
+Because each mounted layer's manifest is **copied into the run** (not just referenced),
+deleting a layer never destroys a run's provenance — only its instant re-mount:
+
+| | Manifest payload | Reproduce | If layer deleted |
+|---|---|---|---|
+| env layer | recipe (lockfile + version) | rebuild from lockfile | re-derive (best-effort; may drift if upstream packages vanish) |
+| data layer | identity (version + source + tree checksum) | re-reference the bytes | re-fetch from `source`, verify by checksum |
+
+So layer DELETE should either warn that referenced runs lose exact re-mount (reproduce →
+rebuild/re-fetch), or **archive the layer to S3** so exact bytes stay recoverable. Hash-pin
+hard (`--require-hashes` / `uv.lock` / `renv.lock`) + image digest gets most of the way to
+exact without keeping files. *(Note current gap: `commit-layer` overwrites and gateway
+`DELETE /layers/{name}` removes metadata with no run-reference guard and no copy-into-run.)*
 
 ### Reproduce
-Lock + image digest = rebuildable. A "re-run with this environment" action pins a new run to
-the captured image digest + layer versions (lock as the rebuild fallback).
+Image digest + the copied manifests = rebuildable. A "re-run with this environment" action
+pins a new run to the captured image digest + layer versions (lockfile rebuild / data re-fetch as fallback).
 
 ---
 
