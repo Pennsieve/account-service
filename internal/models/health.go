@@ -38,6 +38,11 @@ type HealthCheckIssue struct {
 }
 
 // LayerRecord mirrors the workflow-service compute-node-layers DynamoDB schema.
+// It must stay in sync with that schema: the healthchecker's layer reconcile does a
+// read-modify-write of the whole record (MarshalMap), so any field missing here would
+// be dropped when reconcile corrects size/fileCount. The identity fields below
+// (layerType/snapshotId/treeChecksum/pythonVersion) are set by commit-layer; mirror
+// them so reconcile preserves them.
 type LayerRecord struct {
 	ComputeNodeId string `dynamodbav:"computeNodeId"`
 	LayerName     string `dynamodbav:"layerName"`
@@ -48,6 +53,10 @@ type LayerRecord struct {
 	CreatedAt     string `dynamodbav:"createdAt"`
 	CreatedBy     string `dynamodbav:"createdBy"`
 	LastAccessed  string `dynamodbav:"lastAccessed,omitempty"`
+	LayerType     string `dynamodbav:"layerType,omitempty"`
+	SnapshotId    string `dynamodbav:"snapshotId,omitempty"`
+	TreeChecksum  string `dynamodbav:"treeChecksum,omitempty"`
+	PythonVersion string `dynamodbav:"pythonVersion,omitempty"`
 }
 
 // DynamoDBHealthCheckLog is the DynamoDB record for a health check log entry.
