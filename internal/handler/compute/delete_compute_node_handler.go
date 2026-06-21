@@ -114,12 +114,19 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
-	// Use provisioner image from the stored compute node, with defaults
+	// Teardown uses the LATEST provisioner image, not the node's pinned
+	// provision-time tag. Pinning exists for reproducible PROVISIONING; DELETE
+	// wants the newest teardown logic so fixes (shared-VPC resolution, ENI
+	// draining, interactive-task reaping) apply to EVERY existing node regardless
+	// of when it was created — otherwise an old-pinned node carries its
+	// provisioning-era delete bugs forever and can't be torn down without a manual
+	// tag bump. Overridable via PROVISIONER_TEARDOWN_IMAGE_TAG to pin a known-good
+	// teardown build. The image repo still comes from the node (custom repos).
 	provisionerImage := computeNode.ProvisionerImage
 	if provisionerImage == "" {
 		provisionerImage = "pennsieve/compute-node-aws-provisioner-v2"
 	}
-	provisionerImageTag := computeNode.ProvisionerImageTag
+	provisionerImageTag := os.Getenv("PROVISIONER_TEARDOWN_IMAGE_TAG")
 	if provisionerImageTag == "" {
 		provisionerImageTag = "latest"
 	}
