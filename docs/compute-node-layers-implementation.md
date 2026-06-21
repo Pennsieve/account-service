@@ -65,34 +65,45 @@ versions + `pythonVersion: 3.12`, readable via the layers API.
 
 ---
 
-## M3 — Safe consume-side wiring (runtime wrapper)
+## M3 — Safe consume-side wiring
 
-**Goal:** a `python-env` layer is importable without consumer hardcoding, **without
-clobbering** the image's own `PYTHONPATH`.
+**Goal:** a `python-env` layer is importable without clobbering the image's own `PYTHONPATH`
+— and **without forcing user processors onto a Pennsieve base image.**
 
-**Mechanism (settled):** an **in-image entrypoint wrapper**, not a converter override. A
-Pennsieve processor base image (or a drop-in 2-line entrypoint snippet) that, before exec'ing
-the real command: reads `LAYERS_DIR` (already injected — *no converter change*), **globs** each
-mounted layer's `lib/python*/site-packages` and **appends** them to `PYTHONPATH`, sets
-`PYTHONPYCACHEPREFIX=/tmp/pycache`, then `exec "$@"`. Runtime shell expansion = append-safe
-(preserves the image's own `PYTHONPATH`); the glob makes it version-agnostic (no need to thread
-the manifest version through the converter). **Opt-in** (D3): processors on the base/snippet get
-auto-wiring; others keep the `LAYERS_DIR` self-wiring contract.
+**Hard limit:** there's no way to auto-append `PYTHONPATH` from *outside* a container (ECS
+overrides replace, not append — #34; and we don't know an arbitrary image's `CMD` to wrap it).
+The append must run *inside* the container at startup. So auto-wiring is **only free where
+Pennsieve owns the image**; everywhere else it's the existing self-wiring contract.
+
+**Tiered (settled):**
+
+| Consumer | Mechanism | Burden |
+|---|---|---|
+| **Pennsieve-managed** images (python-session & R-session kernels, `pennsieve-quick-plot`, `notebook-runner`) | wrapper **baked into the image**: globs `LAYERS_DIR` layers' `lib/python*/site-packages`, **appends** to `PYTHONPATH`, sets `PYTHONPYCACHEPREFIX=/tmp/pycache`, then `exec "$@"` (append-safe via runtime shell; version-agnostic via glob; **no converter change**) | none — Pennsieve owns it |
+| **User processor, wants convenience** | copy a ~3-line **entrypoint snippet** (keeps their own base image) | tiny, opt-in |
+| **User processor, minimal** | **self-wire** from `LAYERS_DIR` (`sys.path.insert`) — the universal contract, works on any image | a few lines of code |
+
+In practice this covers **every current env-layer consumer** (all Pennsieve-managed) with zero
+user coupling; the snippet/self-wiring is only for a user building their *own* processor against
+a Pennsieve env layer.
 
 **Tasks**
-- New Pennsieve processor **base image** (or entrypoint snippet) implementing the glob+append
-  wrapper above.
+- Implement the glob+append wrapper in the **Pennsieve-managed** session/app images
+  (python-session, R-session, quick-plot, notebook-runner).
+- **App: surface the copy-paste snippet** — when a user attaches an env layer to their own
+  processor (or views a layer in the catalog), show the entrypoint snippet *and* the
+  `sys.path` self-wiring alternative, with the layer's `LAYERS_DIR` path filled in. (pennsieve-app
+  `ComputeNodeLayers.vue` / `LayerNameSelector.vue`.)
 - Compatibility check (D2): hard-fail at run submit when a layer's `pythonVersion` (manifest) ≠
   the processor's; warn in the selector.
-- Migrate `processor-build-python-layer` / `pennsieve-quick-plot` onto the base (or add the
-  snippet) to adopt — net-new processors start on it.
 
-**Acceptance:** a processor on the base image with a `python-env` layer imports its packages with
-no hardcoding, **and** an image that sets its own `PYTHONPATH` (e.g. `quick-plot`'s `/app`) still
-works (append, not clobber — regression guard).
+**Acceptance:** a Pennsieve-managed app with a `python-env` layer imports its packages with no
+hardcoding, **and** an image that sets its own `PYTHONPATH` (e.g. `quick-plot`'s `/app`) still
+works (append, not clobber). A user building their own processor sees, in the app, exactly what
+to copy-paste — no Pennsieve base image required.
 
 **Depends on:** M2. **Decisions:** D2, D3.
-*(Reference: the clobbering ECS-override approach was prototyped and rejected — provisioner #34; this in-image append wrapper is the fix.)*
+*(Reference: the clobbering ECS-override approach was prototyped and rejected — provisioner #34; the in-image append wrapper is the fix, scoped to Pennsieve-managed images.)*
 
 ---
 
@@ -240,7 +251,8 @@ unblocks everything. Then split: M3+M4+M5 (the provenance/usability spine) vs M6
 | Repo | Milestones |
 |---|---|
 | workflow-service | M1, M2, M4, M6, M8 |
-| compute-node-aws-provisioner-v2 (`data-transfer`, `aslconverter`, `workflow-finalizer`, gateway) | M1, M2, M3, M4, M7, M9 |
+| compute-node-aws-provisioner-v2 (`data-transfer`, `aslconverter`, `workflow-finalizer`, gateway) | M1, M2, M4, M7 |
 | account-service | M1 (model mirror), M6 (build-trigger API) |
 | processor-build-python-layer / new processor-build-r-layer | M2, M9 |
-| pennsieve-app (`Analysis/`) | M5, M6, M8, M10 |
+| Pennsieve-managed app/session images (python-session & R-session kernels, `pennsieve-quick-plot`, `notebook-runner`) | M3 (bake in the wrapper), M9 (R) |
+| pennsieve-app (`Analysis/`) | M3 (copy-paste snippet UI), M5, M6, M8, M10 |
