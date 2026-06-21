@@ -188,6 +188,54 @@ pins a new run to the captured image digest + layer versions (lockfile rebuild /
 
 ---
 
+## Self-service env layers (`requirements.txt` → build)
+
+Today layer builds are **admin-driven**: each layer is a hand-authored workflow whose package
+list is baked into terraform (`4c23010f`'s `defaultParams.REQUIREMENTS`) and triggered via
+`POST /runs`. The builder (`processor-build-python-layer`) is already *generic* —
+`REQUIREMENTS` is a parameter ("one image, many layers") — so flipping this to **self-service**
+is mostly a user-facing trigger, not new infrastructure.
+
+### Flow
+```
+User (app, on their compute node): layer name + requirements.txt + python version
+  → account-service/workflow-service launches the build workflow on the node:
+        trigger → python-layer-builder (REQUIREMENTS=<user list>, PYTHON_VERSION=<v>)
+                → persistent-layer data-target (layerName=<user name>)
+  → (Fargate, ~5–10 min)  layer committed → ComputeNodeLayers shows READY
+  → user selects it for a workflow/notebook (LayerNameSelector)
+```
+
+### Reused vs. new
+- **Reused**: the generic builder, the build-workflow shape, the layer catalog +
+  create-layer form (`ComputeNodeLayers.vue` already takes `{name, description}`), the
+  status badge (a `BUILDING` state fits the existing READY/pending badges).
+- **New**: a build-trigger API that parameterizes the workflow from `requirements.txt` +
+  python version and runs it on the user's node; build status tracking; manifest capture.
+
+### Per-deployment-mode availability
+Env-layer builds need PyPI (internet), so they're a basic/secure feature; compliant defines
+its environment in the image instead. (Compliant has no internet — and no interactive nodes —
+so there's nothing to mirror; the earlier "private PyPI mirror" question drops.)
+
+| | basic / secure | compliant |
+|---|---|---|
+| **env layer** (pip build) | self-service | bake into the image |
+| **data layer** (e.g. genome) | yes | yes — staged from S3 via the gateway endpoint (mount needs no internet) |
+| **interactive notebook** | yes | no (already the case) |
+
+### Decisions
+- **Keep curated *and* self-service** — admin-curated shared stacks (the `quick-plot-stack`
+  model) alongside user-built layers; don't drop curation.
+- **Python-version compatibility** — the form must pick a version matching an available base
+  image, or you build a `3.12` layer a `3.11` processor can't use (the manifest/compat concern).
+- **Capture the resolved lock** — persist `pip freeze`, not just the input `requirements.txt`;
+  show the user what actually resolved.
+- **Versioning** — overwrite vs snapshot on rebuild, guarded by the active-run check.
+- **Quota/GC** — builds cost Fargate, layers cost EFS; per-node quota + cleanup.
+
+---
+
 ## UX (pennsieve-app, `Analysis/`)
 
 Surfaces already exist; provenance attaches by extending them.
@@ -228,10 +276,12 @@ Surfaces already exist; provenance attaches by extending them.
 3. **Run-environment capture + endpoint** — entrypoint freeze + image digest + layer refs →
    finalizer bundle → `GET /runs/{id}/environment`.
 4. **App MVP** — RunDetail Environment dialog (read provenance) + ComputeNodeLayers type badge.
-5. **Data layers** — `LAYER_<NAME>_DIR` wiring (trivial — just mount) + reference-data
+5. **Self-service env layers** — `requirements.txt` → build-trigger API + ComputeNodeLayers
+   create-from-requirements form + build status (basic/secure).
+6. **Data layers** — `LAYER_<NAME>_DIR` wiring (trivial — just mount) + reference-data
    provenance section.
-6. **R env** — `processor-build-r-layer` + `R_LIBS_USER` wiring + `renv.lock` manifest.
-7. **Reproduce + notebook snapshot/`.ipynb` embedding**; optional Discover provenance.
+7. **R env** — `processor-build-r-layer` + `R_LIBS_USER` wiring + `renv.lock` manifest.
+8. **Reproduce + notebook snapshot/`.ipynb` embedding**; optional Discover provenance.
 
 ---
 
@@ -246,8 +296,9 @@ Surfaces already exist; provenance attaches by extending them.
 3. **EFS import latency** — env layers imported off NFS are slow; position as incremental deps
    on a curated base image, and/or stage to local ephemeral storage at task start. Decide
    whether to invest in local staging now.
-4. **Compliant mode** — builds can't reach PyPI/CRAN (no internet); needs a private mirror
-   (VPC endpoint / S3 index) or pre-built layers.
+4. **Compliant mode** — *resolved*: env-layer builds need PyPI/CRAN (internet), so they're
+   basic/secure only; compliant defines its environment in the image (no mirror needed). Data
+   layers still work in compliant (S3-staged via the gateway endpoint).
 5. **Provenance home** — run record only, or promote the environment + reference-data record
    into the published dataset's provenance in Discover (highest reproducibility value).
 6. **Reproduce scope** — capture-only, or a first-class "rebuild environment from a run's lock"
