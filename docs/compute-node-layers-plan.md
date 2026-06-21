@@ -38,9 +38,17 @@ provenance question that matters most for a scientific platform.
 - **Storage stays generic**: all types are a read-only EFS dir at
   `/mnt/efs/{computeNodeId}/layers/{layerName}`; the type changes the *internal layout* and
   *how it's consumed*, not where it lives.
-- **Consume-side wiring is the one real fork**: the ASL converter reads each requested
-  layer's `(type, version)` and injects the right env (`PYTHONPATH` / `R_LIBS_USER` /
-  `LAYER_<NAME>_DIR`). Today it injects only a generic `LAYERS_DIR`.
+- **Consume-side wiring must APPEND, not clobber**: the converter injects a generic
+  `LAYERS_DIR` today, and the **current contract is consumer self-wiring** — the processor
+  reads `LAYERS_DIR` and does `sys.path.insert(...)` itself (e.g. `pennsieve-quick-plot`).
+  Centralizing this (auto-set `PYTHONPATH`/`R_LIBS_USER`/`LAYER_<NAME>_DIR`) is desirable but
+  **cannot be done via an ECS env override**: overrides *replace* the image's value (no
+  `${PYTHONPATH}` shell-expansion), so they'd drop an image's own `PYTHONPATH` — e.g.
+  `quick-plot`'s `ENV PYTHONPATH=/app`, breaking its imports. (A clobbering override was
+  prototyped and rejected — see provisioner #34.) Safe auto-wiring needs a **runtime
+  entrypoint wrapper** that appends, plus the layer's **python version** (from the manifest)
+  to know the `lib/python{ver}/site-packages` subpath — so it's future work, not a converter
+  one-liner. Until then, consumer self-wiring from `LAYERS_DIR` stands.
 - **The image digest is the universal environment record**: a non-interactive processor
   is a Docker container, so its environment is fully defined by the **image digest +
   mounted env-layer versions** — language-agnostic (Python, R, Julia, C++, bash), already
@@ -271,8 +279,11 @@ Surfaces already exist; provenance attaches by extending them.
 
 1. **Type model** — add `layerType` to the layer record + `persistent-layer` data-target;
    default `data`. No behavior change yet.
-2. **Python env, end-to-end** — `manifest.json` from the build processor; converter wires
-   `PYTHONPATH`/`PYTHONPYCACHEPREFIX` from `python-env` layers; compatibility check.
+2. **Python env, end-to-end** — `manifest.json` from the build processor (incl. `pythonVersion`);
+   safe auto-wiring via a **runtime entrypoint wrapper** that *appends* the layer's
+   `lib/python{ver}/site-packages` to `PYTHONPATH` (+ `PYTHONPYCACHEPREFIX=/tmp/pycache`) —
+   not a clobbering ECS env override (see Consume-side wiring); compatibility check. Until
+   this lands, consumers self-wire from `LAYERS_DIR`.
 3. **Run-environment capture + endpoint** — entrypoint freeze + image digest + layer refs →
    finalizer bundle → `GET /runs/{id}/environment`.
 4. **App MVP** — RunDetail Environment dialog (read provenance) + ComputeNodeLayers type badge.
