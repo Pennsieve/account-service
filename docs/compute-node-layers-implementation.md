@@ -65,6 +65,35 @@ versions + `pythonVersion: 3.12`, readable via the layers API.
 
 ---
 
+## Layer mounting & visibility (how a layer reaches the container)
+
+Layers live **shared per compute node** at EFS `/data/{cni}/layers/{name}` (one dir per
+layer). But a run's container reads EFS through a **per-execution access point** rooted at
+`/data/{cni}/{eri}`, so the shared layers dir — a *sibling outside that root* — is not
+directly reachable. Getting a selected layer to the container:
+
+- The processor/interactive **task definition attaches a dedicated read-only EFS access
+  point** rooted at `/data/{cni}/layers`, mounted at **`/mnt/layers`** (provisioner:
+  `aws_efs_access_point.layers` + `registerTaskDefinition`).
+- **`mount-layers` symlinks each *selected* layer** into the run's `LAYERS_DIR`
+  (`/data/{cni}/{eri}/layers/{name}` → `/mnt/layers/{name}`). The container resolves the
+  link through its own `/mnt/layers` mount; the consume-side wiring (below) then globs
+  `LAYERS_DIR` and only ever sees the selected layers.
+- **Why not copy/hard-link:** hard-linking the layer files fails `EPERM` on EFS (they're
+  read-only), and a symlink straight to the shared dir dangles (outside the per-exec root).
+  A copy duplicates bytes per run. The read-only shared mount + symlink is **O(1), no
+  duplication, no `EPERM`** (provisioner #39 hard-link → #41 read-only AP mount).
+
+**Visibility / least-privilege (decided):** only *selected* layers are symlinked into
+`LAYERS_DIR` and wired onto `PYTHONPATH` — that's what a run *uses*. But `/mnt/layers`
+exposes **all of the node's layers read-only**, so a run *can read* layers it didn't
+select. This is accepted: layers are **shared, read-only, same-account** assets (compute
+nodes are account-scoped), not cross-tenant. Don't put per-run secrets in a layer expecting
+isolation. If a sensitive-data-layer case emerges, stage *selected* layers per-run (copy)
+instead of the shared mount — a deliberate trade-off against the O(1) shared mount.
+
+---
+
 ## M3 — Safe consume-side wiring
 
 **Goal:** a `python-env` layer is importable without clobbering the image's own `PYTHONPATH`
