@@ -541,6 +541,10 @@ data "aws_iam_policy_document" "eventbridge_handler_iam_policy_document" {
     resources = [
       aws_dynamodb_table.compute_resource_nodes_table.arn,
       "${aws_dynamodb_table.compute_resource_nodes_table.arn}/*",
+      # The interactive phase-2 auto-trigger reads the accounts table to resolve
+      # the per-account compute role before re-provisioning (reprovision_phase2.go).
+      aws_dynamodb_table.accounts_table.arn,
+      "${aws_dynamodb_table.accounts_table.arn}/*",
       aws_dynamodb_table.storage_nodes_table.arn,
       "${aws_dynamodb_table.storage_nodes_table.arn}/*",
       aws_dynamodb_table.storage_node_workspace_table.arn,
