@@ -98,6 +98,7 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
       # (UPDATE re-provision) after it creates the NS delegation. Mirrors the
       # service lambda. Empty/unset → the handler logs + skips (graceful).
       ACCOUNTS_TABLE          = aws_dynamodb_table.accounts_table.name
+      TASK_DEF_ARN            = aws_ecs_task_definition.provisioner_ecs_task_definition.arn
       CLUSTER_ARN             = data.terraform_remote_state.fargate.outputs.ecs_cluster_arn
       SUBNET_IDS              = join(",", data.terraform_remote_state.vpc.outputs.private_subnet_ids)
       SECURITY_GROUP          = data.terraform_remote_state.platform_infrastructure.outputs.rehydration_fargate_security_group_id
