@@ -44,8 +44,8 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 	cluster := os.Getenv("CLUSTER_ARN")
 	taskDefContainerName := os.Getenv("TASK_DEF_CONTAINER_NAME")
 	securityGroup := os.Getenv("SECURITY_GROUP")
-	if cluster == "" || taskDefContainerName == "" || securityGroup == "" || os.Getenv("SUBNET_IDS") == "" {
-		log.Printf("phase2: launch env not configured on this lambda (CLUSTER_ARN/SUBNET_IDS/SECURITY_GROUP/TASK_DEF_CONTAINER_NAME); skipping auto-trigger for node %s", computeNodeID)
+	if cluster == "" || taskDefContainerName == "" || securityGroup == "" || os.Getenv("SUBNET_IDS") == "" || os.Getenv("TASK_DEF_ARN") == "" {
+		log.Printf("phase2: launch env not configured on this lambda (CLUSTER_ARN/SUBNET_IDS/SECURITY_GROUP/TASK_DEF_CONTAINER_NAME/TASK_DEF_ARN); skipping auto-trigger for node %s", computeNodeID)
 		return
 	}
 	subnetIDs := strings.Split(os.Getenv("SUBNET_IDS"), ",")
