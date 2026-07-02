@@ -302,6 +302,12 @@ components:
           type: string
           enum: ["Enabled", "Paused", "Pending", "Destroying"]
           description: Current status of the compute node
+        latestVersion:
+          type: string
+          description: Newest released provisioner image tag (vX.Y.Z) available on Docker Hub for this node's provisioner image. Omitted when it cannot be determined.
+        updateAvailable:
+          type: boolean
+          description: True when the node's provisioner tag is behind latestVersion (or is a floating tag such as 'latest'). Always false when latestVersion is unknown.
     computeNodeUpdateRequest:
       type: object
       properties:

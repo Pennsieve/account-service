@@ -85,6 +85,20 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     ]
   }
 
+  // Docker Hub credentials (shared with the ECS provisioner): the service Lambda
+  // reads these to query the private provisioner repo for the latest released
+  // image tag, used to flag outdated compute nodes on GET /compute-nodes.
+  statement {
+    sid    = "AccountServiceDockerHubCredentials"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = [
+      data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn,
+    ]
+  }
+
   statement {
     sid    = "LambdaAccessToDynamoDB"
     effect = "Allow"
@@ -317,6 +331,31 @@ data "aws_iam_policy_document" "health_checker_iam_policy_document" {
     resources = [
       data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_arn,
       "${data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_arn}/*"
+    ]
+  }
+
+  // Reads the provisioner whitelist and writes the shared latest-tag cache that
+  // GET /compute-nodes reads to flag outdated nodes.
+  statement {
+    sid    = "HealthCheckerProvisionerTagCache"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:PutParameter"
+    ]
+    resources = ["arn:aws:ssm:${data.aws_region.current_region.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment_name}/${var.service_name}/*"]
+  }
+
+  // Docker Hub credentials (shared with the ECS provisioner) for querying the
+  // private provisioner repo's tags.
+  statement {
+    sid    = "HealthCheckerDockerHubCredentials"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = [
+      data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn
     ]
   }
 

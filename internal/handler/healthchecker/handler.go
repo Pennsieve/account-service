@@ -29,11 +29,18 @@ type Config struct {
 	AWSCfg aws.Config
 }
 
+// TagRefresher refreshes the shared cache of latest provisioner image tags
+// (implemented by *dockerhub.Resolver). Optional — nil disables the refresh.
+type TagRefresher interface {
+	RefreshAll(ctx context.Context) error
+}
+
 type Handler struct {
 	NodeStore      store_dynamodb.NodeStore
 	HealthLogStore store_dynamodb.HealthCheckLogStore
 	DDBClient      *dynamodb.Client
 	LayersTable    string
+	TagRefresher   TagRefresher
 	Config         Config
 }
 
@@ -45,6 +52,17 @@ type result struct {
 }
 
 func (h *Handler) Handle(ctx context.Context) error {
+	// Refresh the shared latest-provisioner-tag cache so GET /compute-nodes can
+	// flag outdated nodes without hitting Docker Hub on the request path.
+	// Best-effort: a failure here must not fail the health check.
+	if h.TagRefresher != nil {
+		if err := h.TagRefresher.RefreshAll(ctx); err != nil {
+			log.Printf("Provisioner tag refresh failed (continuing): %v", err)
+		} else {
+			log.Println("Provisioner tag cache refreshed")
+		}
+	}
+
 	nodes, err := h.NodeStore.GetAllEnabled(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get enabled nodes: %w", err)
