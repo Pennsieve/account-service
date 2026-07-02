@@ -59,6 +59,9 @@ resource "aws_lambda_function" "service_lambda" {
       STORAGE_WRITE_POLICY_ARN        = aws_iam_policy.storage_write.arn
       STORAGE_TASK_DEF_ARN            = aws_ecs_task_definition.storage_provisioner_task.arn
       STORAGE_TASK_DEF_CONTAINER_NAME = "storage-provisioner"
+      # Docker Hub credentials (shared with the ECS provisioner) used to look up
+      # the latest released provisioner image tag for the outdated-node hint.
+      DOCKER_HUB_CREDENTIALS_SECRET_ARN = data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn
     }
   }
 }
@@ -293,6 +296,9 @@ resource "aws_lambda_function" "health_checker_lambda" {
       COMPUTE_NODES_TABLE       = aws_dynamodb_table.compute_resource_nodes_table.name
       HEALTH_CHECK_LOG_TABLE    = aws_dynamodb_table.health_check_log_table.name
       COMPUTE_NODE_LAYERS_TABLE = data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_name
+      # Docker Hub credentials (shared with the ECS provisioner): the health
+      # checker refreshes the shared latest-provisioner-tag SSM cache each run.
+      DOCKER_HUB_CREDENTIALS_SECRET_ARN = data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn
     }
   }
 }

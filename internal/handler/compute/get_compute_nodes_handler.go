@@ -224,6 +224,10 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// Apply account status override and owner info to nodes
 	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, accountOwnerMap, nil)
 
+	// Annotate each node with the latest available provisioner version (from
+	// Docker Hub) so the frontend can hint when a node is outdated.
+	annotateLatestVersions(ctx, cfg, jsonNodes)
+
 	m, err := json.Marshal(jsonNodes)
 	if err != nil {
 		log.Println(err.Error())

@@ -47,6 +47,14 @@ type Node struct {
 	Status                 string          `json:"status"`
 	HealthStatus           string          `json:"healthStatus,omitempty"`
 	LastHealthCheck        string          `json:"lastHealthCheck,omitempty"`
+	// LatestVersion is the newest real vX.Y.Z provisioner image tag available on
+	// Docker Hub for this node's ProvisionerImage. Empty when it can't be
+	// determined (Docker Hub unreachable, no released versions, etc.).
+	LatestVersion string `json:"latestVersion,omitempty"`
+	// UpdateAvailable is true when the node's provisioner tag is behind
+	// LatestVersion (or is a floating tag like "latest"). Always false when
+	// LatestVersion is unknown.
+	UpdateAvailable bool `json:"updateAvailable"`
 }
 
 type NodeAccount struct {
