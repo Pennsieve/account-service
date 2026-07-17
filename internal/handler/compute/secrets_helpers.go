@@ -140,7 +140,33 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		region = "us-east-1"
 	}
 
-	pc := clients.NewProvisionerClient(node.ComputeNodeGatewayUrl, region, cfg)
+	// Look up the compute account so we can assume its cross-account role. Signing the
+	// gateway call as an in-account principal (rather than account-service's own
+	// Pennsieve identity) keeps the request from being denied by customer AWS
+	// Organizations guardrails (RCPs) that block callers from outside their org.
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	account, err := accountStore.GetById(ctx, node.AccountUuid)
+	if err != nil {
+		log.Printf("Error getting account %s for node %s: %v", node.AccountUuid, nodeUuid, err)
+		resp := events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}
+		return nil, &resp
+	}
+
+	crossAccountCfg, err := clients.AssumeComputeRoleConfig(ctx, cfg, account.AccountId, account.RoleName, region)
+	if err != nil {
+		log.Printf("Error assuming cross-account role for account %s (node %s): %v", account.AccountId, nodeUuid, err)
+		resp := events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}
+		return nil, &resp
+	}
+
+	pc := clients.NewProvisionerClient(node.ComputeNodeGatewayUrl, region, crossAccountCfg)
 
 	return &secretsContext{
 		UserID:            userId,
