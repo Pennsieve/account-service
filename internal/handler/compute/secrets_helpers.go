@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -135,9 +136,10 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		return nil, &resp
 	}
 
-	region := os.Getenv("AWS_REGION")
+	// Get the region from the compute node's gateway URL
+	region := regionFromGatewayURL(node.ComputeNodeGatewayUrl)
 	if region == "" {
-		region = "us-east-1"
+		region = os.Getenv("AWS_REGION")
 	}
 
 	// Look up the compute account so we can assume its cross-account role. Signing the
@@ -174,6 +176,17 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		Node:              node,
 		ProvisionerClient: pc,
 	}, nil
+}
+
+func regionFromGatewayURL(gatewayURL string) string {
+	// URL form: https://{url-id}.lambda-url.{region}.on.aws/
+	parts := strings.Split(gatewayURL, ".")
+	if len(parts) < 3 || parts[1] != "lambda-url" {
+		return ""
+	}
+	region := parts[2]
+
+	return region
 }
 
 func checkNodeAccess(ctx context.Context, lambdaClient *lambda.Client, dynamoDBClient *dynamodb.Client, handlerName, userId, nodeUuid, organizationId string) *events.APIGatewayV2HTTPResponse {

@@ -221,9 +221,7 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
   }
 
   # Assume the compute node's in-account role so gateway calls (secrets,
-  # allowed-processors) are signed as an in-account principal. Without this,
-  # customer Organizations guardrails (RCPs) reject account-service's own
-  # (external) identity even though InvokeComputeGatewayUrl above allows it.
+  # allowed-processors) are signed as an in-account principal.
   statement {
     sid    = "AllowAssumeComputeRole"
     effect = "Allow"
