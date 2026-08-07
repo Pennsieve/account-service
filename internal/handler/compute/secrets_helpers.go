@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -135,12 +136,36 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		return nil, &resp
 	}
 
-	region := os.Getenv("AWS_REGION")
+	// Get the region from the compute node's gateway URL
+	region := regionFromGatewayURL(node.ComputeNodeGatewayUrl)
 	if region == "" {
-		region = "us-east-1"
+		region = os.Getenv("AWS_REGION")
 	}
 
-	pc := clients.NewProvisionerClient(node.ComputeNodeGatewayUrl, region, cfg)
+	// Look up the compute account so we can assume its cross-account role. 
+	accountsTable := os.Getenv("ACCOUNTS_TABLE")
+	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	account, err := accountStore.GetById(ctx, node.AccountUuid)
+	if err != nil {
+		log.Printf("Error getting account %s for node %s: %v", node.AccountUuid, nodeUuid, err)
+		resp := events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+		}
+		return nil, &resp
+	}
+
+	crossAccountCfg, err := clients.AssumeComputeRoleConfig(ctx, cfg, account.AccountId, account.RoleName, region)
+	if err != nil {
+		log.Printf("Error assuming cross-account role for account %s (node %s): %v", account.AccountId, nodeUuid, err)
+		resp := events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrConfig),
+		}
+		return nil, &resp
+	}
+
+	pc := clients.NewProvisionerClient(node.ComputeNodeGatewayUrl, region, crossAccountCfg)
 
 	return &secretsContext{
 		UserID:            userId,
@@ -148,6 +173,17 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		Node:              node,
 		ProvisionerClient: pc,
 	}, nil
+}
+
+func regionFromGatewayURL(gatewayURL string) string {
+	// URL form: https://{url-id}.lambda-url.{region}.on.aws/
+	parts := strings.Split(gatewayURL, ".")
+	if len(parts) < 3 || parts[1] != "lambda-url" {
+		return ""
+	}
+	region := parts[2]
+
+	return region
 }
 
 func checkNodeAccess(ctx context.Context, lambdaClient *lambda.Client, dynamoDBClient *dynamodb.Client, handlerName, userId, nodeUuid, organizationId string) *events.APIGatewayV2HTTPResponse {
