@@ -142,10 +142,7 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		region = os.Getenv("AWS_REGION")
 	}
 
-	// Look up the compute account so we can assume its cross-account role. Signing the
-	// gateway call as an in-account principal (rather than account-service's own
-	// Pennsieve identity) keeps the request from being denied by customer AWS
-	// Organizations guardrails (RCPs) that block callers from outside their org.
+	// Look up the compute account so we can assume its cross-account role. 
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
 	account, err := accountStore.GetById(ctx, node.AccountUuid)
