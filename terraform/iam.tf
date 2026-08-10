@@ -230,6 +230,7 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     ]
     resources = [
       "arn:aws:iam::*:role/Pennsieve-Compute-*",
+      "arn:aws:iam::*:role/ROLE-*",
     ]
   }
 
