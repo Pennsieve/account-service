@@ -542,11 +542,97 @@ components:
         notes:
           type: string
           description: Free-text notes (e.g. why this user has a custom limit).
+    nodeQuota:
+      type: object
+      description: |
+        One row of pipeline spend policy on a compute node. Which scope it
+        applies to is given by `scope`.
+
+        Every limit is nullable, and null means this row sets no limit on that
+        axis — resolution falls through to the next tier, and the axis is
+        UNLIMITED if no tier sets it. An explicitly stored 0 is a real limit
+        meaning "block everything", distinct from null.
+
+        Unlimited-by-default differs from the LLM quota axes, which always land
+        on a small platform safety cap. Pipeline compute runs in the node
+        owner's own AWS account, so defaulting a customer-owned node to a few
+        dollars a day would throttle work the customer pays for themselves.
+      properties:
+        nodeUuid:
+          type: string
+          description: UUID of the compute node this policy applies to.
+        scope:
+          type: string
+          enum: [node, default, user]
+          description: |
+            `node` = the whole node across all users; `default` = the per-user
+            default; `user` = one user's override.
+        userId:
+          type: string
+          description: Set only when scope is `user`.
+        dailyCostUsd:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            Spend cap for the UTC day. On the `node` row this covers all users
+            combined; on default/user rows it covers a single user.
+        monthlyCostUsd:
+          type: number
+          format: double
+          nullable: true
+          description: Spend cap for the UTC month.
+        perRunCostUsd:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            Ceiling on a single run's total cost. Only meaningful on
+            default/user rows — a per-run ceiling is not a node-wide aggregate.
+        maxConcurrentRuns:
+          type: integer
+          nullable: true
+          description: |
+            Bound on simultaneous non-terminal runs. Run cost is only known at
+            finalize, so concurrent runs are invisible to a pre-flight spend
+            check; this bounds the resulting overrun.
+        notes:
+          type: string
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    resolvedLimit:
+      type: object
+      description: |
+        One resolved axis, plus the policy tier that supplied it. Both value
+        fields absent means the axis is unlimited, in which case `source` is
+        `unlimited`.
+      properties:
+        usd:
+          type: number
+          format: double
+          description: Present on spend axes that have a ceiling.
+        runs:
+          type: integer
+          description: Present on concurrency axes that have a ceiling.
+        source:
+          type: string
+          enum: [user, node-default, node, unlimited]
+          description: Which policy row supplied this value.
+      required:
+        - source
+
     chatUserQuota:
       type: object
       description: |
         A per-(user, compute-node) cost ceiling. A row with userId == "__default__"
         is the node-wide default applied to any user without an explicit override.
+
+        **LLM spend only.** Pipeline compute limits live on a separate table and
+        are exposed at `/compute-nodes/{id}/pipeline-quotas` — see `nodeQuota`.
       properties:
         computeNodeId:
           type: string
@@ -2621,6 +2707,315 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '5XX':
           $ref: '#/components/responses/Error'
+
+  /compute-nodes/{id}/pipeline-quotas:
+    get:
+      summary: List pipeline spend limits for a compute node
+      description: |
+        Returns every pipeline spend policy row on this node: the node-wide cap
+        (`node`), the per-user default (`default`), and any per-user overrides.
+
+        These are **separate** from the LLM quotas at `/user-quotas`, and have
+        different default semantics: an axis with no policy row is UNLIMITED,
+        whereas LLM axes fall back to a small platform safety cap. Pipeline
+        compute runs in the node owner's own AWS account, so capping is opt-in
+        per node rather than a platform default.
+
+        **Permissions:** Node owner or workspace administrator on public accounts.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: listNodeQuotas
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+      responses:
+        '200':
+          description: Policy rows on this node
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodeUuid:
+                    type: string
+                  quotas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/nodeQuota'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+
+  /compute-nodes/{id}/pipeline-quotas/{scope}:
+    put:
+      summary: Create or replace one pipeline spend policy row
+      description: |
+        Writes the policy row for `scope`.
+
+        Every axis is optional, and **null clears that axis**, letting it fall
+        through to the next resolution tier (and to unlimited if no tier sets
+        it). An explicitly stored `0` is a real cap meaning "block everything",
+        which is distinct from null. The write replaces the whole row, so an
+        omitted axis is cleared rather than preserved.
+
+        `perRunCostUsd` is rejected on the `node` scope: a per-run ceiling is a
+        property of a single run, not a node-wide aggregate, so accepting it
+        there would store a value that never applies.
+
+        **Permissions:** Node owner or workspace administrator — for **every**
+        scope, including a user's own. A user raising their own cap would defeat
+        the purpose of having one.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: putNodeQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: scope
+          required: true
+          schema:
+            type: string
+          description: |
+            `node` (node-wide cap across all users), `default` (per-user
+            default), a Pennsieve user node id, or the literal `me`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dailyCostUsd:
+                  type: number
+                  nullable: true
+                  description: Spend cap for the UTC day. Null clears the axis.
+                monthlyCostUsd:
+                  type: number
+                  nullable: true
+                  description: Spend cap for the UTC month. Null clears the axis.
+                perRunCostUsd:
+                  type: number
+                  nullable: true
+                  description: Ceiling on one run's total cost. Not valid on the `node` scope.
+                maxConcurrentRuns:
+                  type: integer
+                  nullable: true
+                  description: |
+                    Bound on simultaneous non-terminal runs. Run cost is only
+                    known at finalize, so concurrent runs are invisible to a
+                    pre-flight spend check; this is what bounds the resulting
+                    overrun.
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: The stored policy row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/nodeQuota'
+        '400':
+          description: |
+            Invalid body, missing scope, or `perRunCostUsd` set on the `node` scope.
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    get:
+      summary: Get one stored pipeline spend policy row
+      description: |
+        Returns the row as stored, or 404 if no policy is set for this scope.
+        Use `/effective` instead to see the resolved limits after fallback.
+
+        **Permissions:** `node` and `default` are policy data and stay
+        owner-only. A user may read their own scope (pass `me`) if they have
+        access to the node.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getNodeQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: scope
+          required: true
+          schema:
+            type: string
+          description: '`node`, `default`, a user node id, or `me`.'
+      responses:
+        '200':
+          description: The stored policy row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/nodeQuota'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No policy row set for this scope
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+    delete:
+      summary: Delete one pipeline spend policy row
+      description: |
+        Removes the row, restoring fallback for every axis it set. Deleting an
+        absent row succeeds, so the call is idempotent.
+
+        **Permissions:** Node owner or workspace administrator.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: deleteNodeQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: scope
+          required: true
+          schema:
+            type: string
+          description: '`node`, `default`, a user node id, or `me`.'
+      responses:
+        '204':
+          description: Deleted, or already absent
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+
+  /compute-nodes/{id}/pipeline-quotas/{scope}/effective:
+    get:
+      summary: Resolved pipeline spend limits, with source attribution
+      description: |
+        Applies the resolution tiers and returns the limits that actually apply,
+        with the tier that supplied each axis. Use this rather than the raw GET
+        when you want to know what is in force, or to confirm an override took
+        effect.
+
+        Resolution is axis-by-axis:
+
+        - node-wide axes come from the `node` row only — there is no per-user
+          override for what the whole node may spend
+        - per-user axes: user override → node default → unlimited
+
+        `configured: false` means the node imposes no pipeline ceilings at all,
+        the normal state for a customer-owned node.
+
+        **Note:** this reports limits only, not spend. The pipeline usage table
+        is owned by workflow-service, so remaining allowance comes from
+        `GET /compute-nodes/{nodeId}/budget` there — which resolves with the
+        same logic the run gate enforces, so the two cannot disagree.
+
+        **Permissions:** `node` and `default` stay owner-only. A user may read
+        their own scope (pass `me`) if they have access to the node.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: getNodeEffectiveQuota
+      security:
+        - token_auth: [ ]
+      tags:
+        - Compute Nodes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The UUID of the compute node
+        - in: path
+          name: scope
+          required: true
+          schema:
+            type: string
+          description: '`node`, `default`, a user node id, or `me`.'
+      responses:
+        '200':
+          description: Resolved limits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodeUuid:
+                    type: string
+                  userId:
+                    type: string
+                  configured:
+                    type: boolean
+                    description: False when no axis imposes a ceiling
+                  limits:
+                    type: object
+                    properties:
+                      nodeDaily:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      nodeMonthly:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      nodeMaxConcurrent:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      userDaily:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      userMonthly:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      userMaxConcurrent:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      perRun:
+                        $ref: '#/components/schemas/resolvedLimit'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
+
   /app-store/access:
     post:
       summary: Grant App Store ECR access
