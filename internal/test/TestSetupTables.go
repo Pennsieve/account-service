@@ -26,6 +26,7 @@ const (
     TEST_WORKSPACE_TABLE           = "test-workspace-table"
     TEST_STORAGE_NODES_TABLE       = "test-storage-nodes-table"
     TEST_STORAGE_NODE_WORKSPACE_TABLE = "test-storage-node-workspace-table"
+    TEST_NODE_QUOTA_TABLE             = "test-node-quota-table"
 )
 
 var globalTestClient *dynamodb.Client
@@ -61,6 +62,7 @@ func SetupPackageTables() error {
         {TEST_WORKSPACE_TABLE, createSharedWorkspaceTable},
         {TEST_STORAGE_NODES_TABLE, createSharedStorageNodesTable},
         {TEST_STORAGE_NODE_WORKSPACE_TABLE, createSharedStorageNodeWorkspaceTable},
+        {TEST_NODE_QUOTA_TABLE, createSharedNodeQuotaTable},
     }
 
     for _, table := range tables {
@@ -160,6 +162,36 @@ func createSharedNodesTable() error {
             },
         },
         TableName:   aws.String(TEST_NODES_TABLE),
+        BillingMode: types.BillingModePayPerRequest,
+    })
+    return err
+}
+
+// createSharedNodeQuotaTable mirrors the node_quota_table in terraform:
+// pk/sk composite, no GSI, no TTL.
+func createSharedNodeQuotaTable() error {
+    _, err := globalTestClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+        AttributeDefinitions: []types.AttributeDefinition{
+            {
+                AttributeName: aws.String("pk"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
+            {
+                AttributeName: aws.String("sk"),
+                AttributeType: types.ScalarAttributeTypeS,
+            },
+        },
+        KeySchema: []types.KeySchemaElement{
+            {
+                AttributeName: aws.String("pk"),
+                KeyType:       types.KeyTypeHash,
+            },
+            {
+                AttributeName: aws.String("sk"),
+                KeyType:       types.KeyTypeRange,
+            },
+        },
+        TableName:   aws.String(TEST_NODE_QUOTA_TABLE),
         BillingMode: types.BillingModePayPerRequest,
     })
     return err

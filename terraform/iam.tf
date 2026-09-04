@@ -130,7 +130,9 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
       aws_dynamodb_table.chat_user_quota_table.arn,
       "${aws_dynamodb_table.chat_user_quota_table.arn}/*",
       aws_dynamodb_table.chat_user_usage_table.arn,
-      "${aws_dynamodb_table.chat_user_usage_table.arn}/*"
+      "${aws_dynamodb_table.chat_user_usage_table.arn}/*",
+      aws_dynamodb_table.node_quota_table.arn,
+      "${aws_dynamodb_table.node_quota_table.arn}/*"
     ]
 
   }

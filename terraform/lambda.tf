@@ -27,6 +27,13 @@ resource "aws_lambda_function" "service_lambda" {
       CHAT_USER_QUOTA_TABLE   = aws_dynamodb_table.chat_user_quota_table.name
       CHAT_USER_USAGE_TABLE   = aws_dynamodb_table.chat_user_usage_table.name
 
+      // Pipeline spend limits per compute node. Unlike the LLM caps below,
+      // these have no platform-wide default: pipeline compute runs in the node
+      // owner's own AWS account, so an absent policy row means unlimited.
+      // Capping is opt-in per node, which is what keeps customer-owned nodes
+      // unaffected. workflow-service reads this table to gate run creation.
+      NODE_QUOTA_TABLE = aws_dynamodb_table.node_quota_table.name
+
       // Platform safety cap for per-user chat & workflow LLM spend. MUST
       // mirror the values set on the chat-service Lambda — both services
       // resolve effective quotas the same way (user row → __default__ →

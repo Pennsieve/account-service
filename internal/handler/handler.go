@@ -92,6 +92,20 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	router.GET("/compute-nodes/{id}/user-quotas/{userId}/effective", computeHandler.GetChatUserEffectiveQuotaHandler)
 	router.GET("/compute-nodes/{id}/user-usage/{userId}", computeHandler.GetChatUserUsageHandler)
 
+	// Pipeline spend limits. Separate from the LLM quotas above: these cover all
+	// pipeline compute and live in their own table, where the scope is part of
+	// the key rather than riding a per-user sentinel row.
+	//
+	// {scope} is `node` (node-wide cap), `default` (per-user default), a user
+	// node id, or `me`. Writes are owner-only for every scope — a user raising
+	// their own cap would defeat the purpose. Reads of `node`/`default` are
+	// owner-only (policy data); a user may read their own scope and /effective.
+	router.GET("/compute-nodes/{id}/pipeline-quotas", computeHandler.ListNodeQuotasHandler)
+	router.PUT("/compute-nodes/{id}/pipeline-quotas/{scope}", computeHandler.PutNodeQuotaHandler)
+	router.GET("/compute-nodes/{id}/pipeline-quotas/{scope}", computeHandler.GetNodeQuotaHandler)
+	router.DELETE("/compute-nodes/{id}/pipeline-quotas/{scope}", computeHandler.DeleteNodeQuotaHandler)
+	router.GET("/compute-nodes/{id}/pipeline-quotas/{scope}/effective", computeHandler.GetNodeEffectiveQuotaHandler)
+
 	// App Store access endpoint
 	router.POST("/app-store/access", computeHandler.PostAppStoreAccessHandler)
 
