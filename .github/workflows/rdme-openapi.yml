@@ -22,10 +22,14 @@ jobs:
           find: "Unused"
           replace: "Authorization"
           include: "terraform/packages-service.yml"
+      # Strips x-internal operations, then any path left with no operations, then
+      # any declared tag no longer used by a surviving operation. Without the
+      # last step, a tag whose only endpoints are internal renders as an empty
+      # section in the published docs.
       - name: Strip internal endpoints
         uses: mikefarah/yq@master
         with:
-          cmd: yq 'del(.paths[][] | select(.x-internal == true)) | del(.paths[] | select(length == 0))' terraform/accounts-service.yml > terraform/accounts-service-public.yml
+          cmd: yq 'del(.paths[][] | select(.x-internal == true)) | del(.paths[] | select(length == 0)) | [.paths[][].tags[]] as $used | .tags |= map(select(.name as $n | $used | any_c(. == $n)))' terraform/accounts-service.yml > terraform/accounts-service-public.yml
       - name: Run `openapi` command 🚀
         uses: readmeio/rdme@v9
         with:
