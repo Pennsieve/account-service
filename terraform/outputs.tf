@@ -75,6 +75,16 @@ output "storage_node_workspace_table_name" {
   value = aws_dynamodb_table.storage_node_workspace_table.name
 }
 
+// workflow-service reads this table directly to gate run creation, so it needs
+// both the name (env var) and the ARN (IAM policy) from remote state.
+output "node_quota_table_arn" {
+  value = aws_dynamodb_table.node_quota_table.arn
+}
+
+output "node_quota_table_name" {
+  value = aws_dynamodb_table.node_quota_table.name
+}
+
 output "chat_user_quota_table_arn" {
   value = aws_dynamodb_table.chat_user_quota_table.arn
 }
