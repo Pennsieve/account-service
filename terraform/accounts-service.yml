@@ -20,13 +20,79 @@ servers:
 externalDocs:
   description: Find more info here
   url: https://docs.pennsieve.io
+# Tag order here controls the order sections appear in the rendered docs, and
+# each description becomes that section's introduction. Every tag used on an
+# operation must be declared here — an undeclared tag still renders, but with no
+# description and in arbitrary position.
+#
+# Ordered as a reader would work through it: register an account, create a node,
+# configure it, share it, then the optional per-feature controls.
 tags:
-  - name: Accounts Service
-    description: Management of external accounts that can provide compute and/or storage capabilities.
+  - name: Accounts
+    description: |
+      Registration and management of external cloud accounts that provide compute
+      and/or storage capacity to the Pennsieve platform. An account must be
+      registered before a compute or storage node can be created in it.
     externalDocs:
       url: https://docs.pennsieve.io/reference
   - name: Compute Nodes
-    description: Management of compute nodes for running analytical workflows on the Pennsieve platform.
+    description: |
+      Lifecycle of compute nodes — the infrastructure that runs analytical
+      workflows. Creating a node provisions real cloud resources in the
+      registered account that owns it.
+  - name: Compute Node Configuration
+    description: |
+      Runtime settings on an existing compute node: GPU and interactive-session
+      capacity, the processor image allow-list, and re-provisioning a node after
+      its configuration or image tag changes.
+  - name: Compute Node Access
+    description: |
+      Who may use a compute node. Access is granted explicitly to users, teams,
+      or a whole workspace; a node may also be attached to or detached from an
+      organization.
+  - name: Compute Node Secrets
+    description: |
+      Secrets made available to workflows running on a compute node. Node secrets
+      are scoped to a single node; shared secrets are available to every node in
+      the owning account.
+  - name: LLM Access
+    description: |
+      Enabling and configuring LLM access on a compute node, including the model
+      allow-list and the BAA acknowledgement required before enabling it.
+  - name: LLM Quotas & Usage
+    description: |
+      Per-user spend limits and recorded usage for LLM calls on a compute node.
+
+      Distinct from Pipeline Budgets, and with different defaults: an LLM axis
+      with no quota row falls back to a small platform safety cap, so LLM spend
+      is bounded even on an unconfigured node.
+  - name: Pipeline Budgets
+    description: |
+      Spend limits for analysis pipelines on a compute node — all pipeline
+      compute, not just LLM calls. Limits resolve per-user override, then node
+      default, then unlimited.
+
+      Note the default differs from LLM Quotas: an axis with no policy row is
+      UNLIMITED. Pipeline compute runs in the node owner's own cloud account, so
+      capping is opt-in per node rather than a platform default.
+
+      These endpoints report limits only. Remaining allowance comes from
+      workflow-service's `GET /compute-nodes/{nodeId}/budget`, which resolves
+      with the same logic the run gate enforces.
+  - name: Storage Nodes
+    description: |
+      Lifecycle of storage nodes and their attachment to workspaces, including the
+      impact assessment used before detaching or deleting one.
+  - name: Interactive Sessions
+    description: |
+      Supporting endpoints for interactive (human-in-the-loop) workflow sessions,
+      such as the public JWKS used to verify session tokens.
+  - name: Reference
+    description: |
+      Read-only reference data needed when registering an account or configuring a
+      node, such as available GPU tiers and the IAM policy an account must grant.
+  - name: App Store
+    description: Internal endpoints for App Store registry access.
 components:
   x-amazon-apigateway-integrations:
     account-service:
@@ -828,7 +894,7 @@ paths:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getInteractiveJwks
       tags:
-        - Interactive
+        - Interactive Sessions
       responses:
         '200':
           description: JWKS document
@@ -851,7 +917,7 @@ paths:
       security:
         - token_workspace_auth: [ ]
       tags:
-        - Compute Nodes
+        - Reference
       responses:
         '200':
           description: List of GPU tiers
@@ -896,7 +962,7 @@ paths:
       security:
         - token_workspace_auth: [ ]
       tags:
-        - Account
+        - Accounts
       parameters:
         - in: path
           name: uuid
@@ -939,7 +1005,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Accounts
       parameters:
         - in: path
           name: uuid
@@ -973,7 +1039,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Accounts
       requestBody:
         description: Payload
         required: true
@@ -1033,7 +1099,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Accounts
       responses:
         '200':
           description: The requested compute resource accounts
@@ -1058,7 +1124,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Accounts
       parameters:
         - in: path
           name: id
@@ -1088,7 +1154,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Accounts
       parameters:
         - in: path
           name: id
@@ -1137,7 +1203,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Accounts
       parameters:
         - in: path
           name: id
@@ -1437,7 +1503,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - compute-nodes
+        - Compute Node Configuration
       parameters:
         - in: path
           name: id
@@ -1483,7 +1549,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1526,7 +1592,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1574,7 +1640,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1621,7 +1687,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1668,7 +1734,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1714,7 +1780,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1756,7 +1822,7 @@ paths:
       security:
         - token_workspace_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1799,7 +1865,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Access
       parameters:
         - in: path
           name: id
@@ -1839,7 +1905,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Secrets
+        - Compute Node Secrets
       parameters:
         - in: path
           name: id
@@ -1885,7 +1951,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Secrets
+        - Compute Node Secrets
       parameters:
         - in: path
           name: id
@@ -1920,7 +1986,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Secrets
+        - Compute Node Secrets
       parameters:
         - in: path
           name: id
@@ -1975,7 +2041,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Secrets
+        - Compute Node Secrets
       parameters:
         - in: path
           name: id
@@ -2020,7 +2086,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Secrets
+        - Compute Node Secrets
       parameters:
         - in: path
           name: id
@@ -2056,7 +2122,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Secrets
+        - Compute Node Secrets
       parameters:
         - in: path
           name: id
@@ -2108,7 +2174,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Configuration
       parameters:
         - in: path
           name: id
@@ -2144,7 +2210,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Configuration
       parameters:
         - in: path
           name: id
@@ -2190,7 +2256,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Configuration
       parameters:
         - in: path
           name: id
@@ -2236,7 +2302,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Compute Node Configuration
       parameters:
         - in: path
           name: id
@@ -2288,7 +2354,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Access
       parameters:
         - in: path
           name: id
@@ -2350,7 +2416,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Access
       parameters:
         - in: path
           name: id
@@ -2395,7 +2461,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Quotas & Usage
       parameters:
         - in: path
           name: id
@@ -2442,7 +2508,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Quotas & Usage
       parameters:
         - in: path
           name: id
@@ -2504,7 +2570,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Quotas & Usage
       parameters:
         - in: path
           name: id
@@ -2547,7 +2613,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Quotas & Usage
       parameters:
         - in: path
           name: id
@@ -2605,7 +2671,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Quotas & Usage
       parameters:
         - in: path
           name: id
@@ -2652,7 +2718,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - LLM Quotas & Usage
       parameters:
         - in: path
           name: id
@@ -2728,7 +2794,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Pipeline Budgets
       parameters:
         - in: path
           name: id
@@ -2784,7 +2850,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Pipeline Budgets
       parameters:
         - in: path
           name: id
@@ -2862,7 +2928,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Pipeline Budgets
       parameters:
         - in: path
           name: id
@@ -2904,7 +2970,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Pipeline Budgets
       parameters:
         - in: path
           name: id
@@ -2961,7 +3027,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - Pipeline Budgets
       parameters:
         - in: path
           name: id
@@ -3030,7 +3096,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Compute Nodes
+        - App Store
       requestBody:
         description: Account requesting App Store access
         required: true
@@ -3068,7 +3134,7 @@ paths:
       security:
         - token_auth: [ ]
       tags:
-        - Account
+        - Reference
       responses:
         '200':
           description: The IAM permission policy document
