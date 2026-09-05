@@ -36,16 +36,23 @@ jobs:
         with:
           cmd: yq 'del(.paths[][] | select(.x-internal == true)) | del(.paths[] | select(length == 0)) | [.paths[][].tags[]] as $used | .tags |= map(select(.name as $n | $used | any_c(. == $n)))' terraform/accounts-service.yml > terraform/accounts-service-public.yml
 
-      # --slug is pinned deliberately. rdme infers the slug from the spec's path
-      # when it isn't given, which for `terraform/accounts-service-public.yml`
-      # would be `terraform-accounts-service-public.yml` — a slug that doesn't
-      # exist, so the upload would silently create a SECOND definition instead of
-      # updating the live one. The value below must match the definition's slug
-      # in ReadMe.
+      # --slug is pinned deliberately, and pinned to the *repo name*.
+      #
+      # Left unset, rdme infers the slug from the spec's path — for
+      # `terraform/accounts-service-public.yml` that is
+      # `terraform-accounts-service-public.yml`, which both leaks the build
+      # layout into a public URL and, since no such slug exists, would silently
+      # create a SECOND definition rather than updating the live one.
+      #
+      # Convention for the ~10 Pennsieve repos publishing to this ReadMe project:
+      # slug == repo name. Predictable, stable across spec-file renames, and it
+      # matches what people call the service. (Note the spec file is
+      # `accounts-service.yml` while the repo is `account-service`; the repo name
+      # wins.)
       #
       # --confirm-overwrite is required in CI: without it the command prompts
       # before overwriting and there is nothing to answer the prompt.
       - name: Upload API definition 🚀
         uses: readmeio/rdme@v10
         with:
-          rdme: openapi upload terraform/accounts-service-public.yml --key=${{ secrets.README_API_KEY }} --slug=accounts-service.json --confirm-overwrite
+          rdme: openapi upload terraform/accounts-service-public.yml --key=${{ secrets.README_API_KEY }} --slug=account-service --confirm-overwrite
