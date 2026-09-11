@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -141,6 +142,14 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 }
 
 func launchStorageUpdateTask(ctx context.Context, cfg aws.Config, account store_dynamodb.Account, node models.DynamoDBStorageNode) error {
+	// The task acts on the account that actually owns the bucket, not the one
+	// the record names. This used to fail inside the task, long after the API
+	// had answered 202 — a wrong account record is now caught here instead.
+	access, err := ResolveBucketAccess(ctx, cfg, account, node)
+	if err != nil {
+		return fmt.Errorf("failed to resolve bucket access for update: %w", err)
+	}
+
 	storageTaskDefArn := os.Getenv("STORAGE_TASK_DEF_ARN")
 	subIdStr := os.Getenv("SUBNET_IDS")
 	subNetIds := strings.Split(subIdStr, ",")
@@ -171,10 +180,10 @@ func launchStorageUpdateTask(ctx context.Context, cfg aws.Config, account store_
 						{Name: aws.String("ACTION"), Value: aws.String("UPDATE")},
 						{Name: aws.String("STORAGE_NODE_ID"), Value: aws.String(node.Uuid)},
 						{Name: aws.String("BUCKET_NAME"), Value: aws.String(node.StorageLocation)},
-						{Name: aws.String("ACCOUNT_ID"), Value: aws.String(account.AccountId)},
+						{Name: aws.String("ACCOUNT_ID"), Value: aws.String(access.AccountID)},
 						{Name: aws.String("ENV"), Value: aws.String(os.Getenv("ENV"))},
 						{Name: aws.String("REGION"), Value: aws.String(node.Region)},
-						{Name: aws.String("ROLE_NAME"), Value: aws.String(account.RoleName)},
+						{Name: aws.String("ROLE_NAME"), Value: aws.String(access.RoleName)},
 					},
 				},
 			},

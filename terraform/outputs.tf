@@ -110,3 +110,8 @@ output "storage_write_policy_arn" {
   value       = aws_iam_policy.storage_write.arn
   description = "ARN of the managed IAM policy for storage bucket write access"
 }
+
+output "storage_metadata_policy_arn" {
+  value       = aws_iam_policy.storage_metadata.arn
+  description = "ARN of the managed IAM policy for storage bucket configuration reads (no object access)"
+}

@@ -64,6 +64,7 @@ resource "aws_lambda_function" "service_lambda" {
       STORAGE_NODE_WORKSPACE_TABLE    = aws_dynamodb_table.storage_node_workspace_table.name
       STORAGE_READ_POLICY_ARN         = aws_iam_policy.storage_read.arn
       STORAGE_WRITE_POLICY_ARN        = aws_iam_policy.storage_write.arn
+      STORAGE_METADATA_POLICY_ARN     = aws_iam_policy.storage_metadata.arn
       STORAGE_TASK_DEF_ARN            = aws_ecs_task_definition.storage_provisioner_task.arn
       STORAGE_TASK_DEF_CONTAINER_NAME = "storage-provisioner"
       # Docker Hub credentials (shared with the ECS provisioner) used to look up
@@ -100,6 +101,7 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
       STORAGE_NODE_WORKSPACE_TABLE = aws_dynamodb_table.storage_node_workspace_table.name
       STORAGE_READ_POLICY_ARN      = aws_iam_policy.storage_read.arn
       STORAGE_WRITE_POLICY_ARN     = aws_iam_policy.storage_write.arn
+      STORAGE_METADATA_POLICY_ARN  = aws_iam_policy.storage_metadata.arn
       # Parent zone (compute.pennsieve.net) for interactive-session subdomain
       # NS delegation. Empty disables delegation (no-op).
       INTERACTIVE_PARENT_ZONE_ID = try(aws_route53_zone.interactive_parent[0].zone_id, "")

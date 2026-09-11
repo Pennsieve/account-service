@@ -11,13 +11,10 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/runner"
@@ -147,6 +144,16 @@ func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	needsProvisioning := node.ProviderType == "s3" && storageTaskDefArn != "" && envValue != "DOCKER" && envValue != "TEST"
 
 	if needsProvisioning {
+		// Resolve access BEFORE marking the node Destroying: a node we cannot
+		// act on must not be left stranded in a transitional status.
+		access, err := ResolveBucketAccess(ctx, cfg, account, node)
+		if err != nil {
+			log.Printf("Error resolving bucket access for %s: %v", node.StorageLocation, err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.ComputeHandlerError(handlerName, errors.ErrCheckingAccess),
+			}, nil
+		}
 		// Set status to Destroying and launch Fargate destroy task
 		node.Status = "Destroying"
 		err = storageNodeStore.Put(ctx, node)
@@ -159,7 +166,7 @@ func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}
 		log.Printf("Set storage node %s status to Destroying", nodeId)
 
-		if err := launchStorageDestroyTask(ctx, cfg, account, node); err != nil {
+		if err := launchStorageDestroyTask(ctx, cfg, access, node); err != nil {
 			log.Printf("Error launching storage destroy task: %v", err)
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
@@ -214,22 +221,16 @@ func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 }
 
 // checkDeleteTag verifies the bucket has the "pennsieve:allow-delete" = "true" tag.
-// Uses the cross-account role to read tags from the customer's bucket.
+// Reaches the bucket however it needs to be reached — the platform's own
+// credentials for a platform-managed bucket, the cross-account role otherwise
+// (see access.go for why the storage node's account record does not decide).
 func checkDeleteTag(ctx context.Context, cfg aws.Config, account store_dynamodb.Account, node models.DynamoDBStorageNode) (bool, error) {
-	// Assume the cross-account role to access the bucket
-	stsClient := sts.NewFromConfig(cfg)
-	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", account.AccountId, account.RoleName)
-	crossAccountCfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(node.Region),
-		config.WithCredentialsProvider(
-			stscreds.NewAssumeRoleProvider(stsClient, roleArn),
-		),
-	)
+	access, err := ResolveBucketAccess(ctx, cfg, account, node)
 	if err != nil {
-		return false, fmt.Errorf("failed to assume role for tag check: %w", err)
+		return false, fmt.Errorf("failed to reach bucket for tag check: %w", err)
 	}
 
-	s3Client := s3.NewFromConfig(crossAccountCfg)
+	s3Client := s3.NewFromConfig(access.Config)
 	output, err := s3Client.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{
 		Bucket: aws.String(node.StorageLocation),
 	})
@@ -250,7 +251,10 @@ func checkDeleteTag(ctx context.Context, cfg aws.Config, account store_dynamodb.
 	return false, nil
 }
 
-func launchStorageDestroyTask(ctx context.Context, cfg aws.Config, account store_dynamodb.Account, node models.DynamoDBStorageNode) error {
+// The task acts on the account that actually owns the bucket, not the one the
+// record names, and a platform-managed bucket is handed no ROLE_NAME at all —
+// see BucketAccess for the contract the provisioner is expected to honour.
+func launchStorageDestroyTask(ctx context.Context, cfg aws.Config, access BucketAccess, node models.DynamoDBStorageNode) error {
 	storageTaskDefArn := os.Getenv("STORAGE_TASK_DEF_ARN")
 	subIdStr := os.Getenv("SUBNET_IDS")
 	subNetIds := strings.Split(subIdStr, ",")
@@ -281,10 +285,10 @@ func launchStorageDestroyTask(ctx context.Context, cfg aws.Config, account store
 						{Name: aws.String("ACTION"), Value: aws.String("DELETE")},
 						{Name: aws.String("STORAGE_NODE_ID"), Value: aws.String(node.Uuid)},
 						{Name: aws.String("BUCKET_NAME"), Value: aws.String(node.StorageLocation)},
-						{Name: aws.String("ACCOUNT_ID"), Value: aws.String(account.AccountId)},
+						{Name: aws.String("ACCOUNT_ID"), Value: aws.String(access.AccountID)},
 						{Name: aws.String("ENV"), Value: aws.String(os.Getenv("ENV"))},
 						{Name: aws.String("REGION"), Value: aws.String(node.Region)},
-						{Name: aws.String("ROLE_NAME"), Value: aws.String(account.RoleName)},
+						{Name: aws.String("ROLE_NAME"), Value: aws.String(access.RoleName)},
 					},
 				},
 			},
