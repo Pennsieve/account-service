@@ -35,6 +35,15 @@ Pennsieve deploys the following resources in your account:
 | **DynamoDB** | Tracks LLM usage and budgets (if LLM access is enabled) |
 | **SSM Parameter Store** | Stores configuration such as LLM budget limits |
 | **Auto Scaling** | Manages GPU instance capacity for GPU-enabled workflows |
+| **CloudWatch Metrics** | **Read-only.** Reads metric values (for example the daily size of your storage bucket) so Pennsieve can report on the resources it deployed. No metrics are written, no alarms are read or changed. |
+
+One note on CloudWatch Metrics, for completeness: AWS does not support
+restricting metric *reads* to a particular namespace or resource — the
+`cloudwatch:namespace` condition key applies only when publishing metrics, and
+the read APIs accept no resource ARNs. The grant is therefore read-only but
+account-wide, rather than limited to the metrics of the resources Pennsieve
+deployed. It allows reading metric names and values only; it does not permit
+writing metrics, reading or changing alarms, or reading logs.
 
 ## How we limit scope
 
