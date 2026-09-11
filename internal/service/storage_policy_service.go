@@ -59,9 +59,13 @@ func (s *StoragePolicyService) RegenerateStoragePolicies(ctx context.Context) er
 	}
 
 	var resources []string
+	// Bucket-level ARNs only: the metadata policy grants bucket configuration
+	// reads, which take no object ARN and must not carry object access.
+	var bucketResources []string
 	if len(bucketSet) == 0 {
 		// Use a placeholder so the policy is valid but grants no access
 		resources = []string{"arn:aws:s3:::placeholder"}
+		bucketResources = resources
 	} else {
 		// Sort for deterministic output
 		var buckets []string
@@ -73,6 +77,7 @@ func (s *StoragePolicyService) RegenerateStoragePolicies(ctx context.Context) er
 		for _, bucket := range buckets {
 			resources = append(resources, fmt.Sprintf("arn:aws:s3:::%s", bucket))
 			resources = append(resources, fmt.Sprintf("arn:aws:s3:::%s/*", bucket))
+			bucketResources = append(bucketResources, fmt.Sprintf("arn:aws:s3:::%s", bucket))
 		}
 	}
 
@@ -120,6 +125,30 @@ func (s *StoragePolicyService) RegenerateStoragePolicies(ctx context.Context) er
 		},
 	}
 
+	// Bucket configuration, for consumers that need to know how a storage
+	// bucket is set up without being able to read a byte of what is in it —
+	// the infra dashboard's Fleet screen is the first. Kept as its own policy
+	// rather than folded into the read policy so that reporting on a bucket
+	// never implies access to research data.
+	metadataPolicy := iamPolicyDocument{
+		Version: "2012-10-17",
+		Statement: []iamPolicyStatement{
+			{
+				Sid:    "StorageBucketMetadata",
+				Effect: "Allow",
+				Action: []string{
+					"s3:GetBucketLocation",
+					"s3:GetEncryptionConfiguration",
+					"s3:GetBucketVersioning",
+					"s3:GetBucketPublicAccessBlock",
+					"s3:GetBucketPolicyStatus",
+					"s3:GetBucketTagging",
+				},
+				Resource: bucketResources,
+			},
+		},
+	}
+
 	iamClient := iam.NewFromConfig(s.AWSConfig)
 
 	if err := s.updateManagedPolicy(ctx, iamClient, readPolicyArn, readPolicy); err != nil {
@@ -128,6 +157,16 @@ func (s *StoragePolicyService) RegenerateStoragePolicies(ctx context.Context) er
 
 	if err := s.updateManagedPolicy(ctx, iamClient, writePolicyArn, writePolicy); err != nil {
 		return fmt.Errorf("error updating write policy: %w", err)
+	}
+
+	// Optional, so an environment that has not applied the terraform for it
+	// yet keeps regenerating read/write instead of failing the whole run.
+	if metadataPolicyArn := os.Getenv("STORAGE_METADATA_POLICY_ARN"); metadataPolicyArn != "" {
+		if err := s.updateManagedPolicy(ctx, iamClient, metadataPolicyArn, metadataPolicy); err != nil {
+			return fmt.Errorf("error updating metadata policy: %w", err)
+		}
+	} else {
+		log.Println("STORAGE_METADATA_POLICY_ARN not set — skipping the bucket metadata policy")
 	}
 
 	log.Printf("Successfully regenerated storage policies with %d buckets", len(bucketSet))
