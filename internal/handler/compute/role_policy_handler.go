@@ -22,9 +22,19 @@ import (
 // The policy uses permissions boundaries to prevent privilege escalation:
 // - Statement 1: Allow service actions (no IAM mutation, plus iam:CreateServiceLinkedRole)
 // - Statement 2: Allow IAM role/policy management for Terraform
-// - Statement 3: Deny CreateRole without permissions boundary attached
-// - Statement 4: Deny removing permissions boundaries from roles
-// - Statement 5: Deny modifying the cross-account role itself (Pennsieve-Compute-* and legacy ROLE-*)
+// - Statement 3: Allow read-only CloudWatch metric reads (no writes, no alarms, no logs)
+// - Statement 4: Deny CreateRole without permissions boundary attached
+// - Statement 5: Deny removing permissions boundaries from roles
+// - Statement 6: Deny modifying the cross-account role itself (Pennsieve-Compute-* and legacy ROLE-*)
+//
+// AllowMetricReads deliberately carries no Condition. A
+// `cloudwatch:namespace` condition reads like tighter scoping, but that key
+// is only evaluated for publish actions (PutMetricData) — on ListMetrics,
+// GetMetricData and GetMetricStatistics it is never satisfied, so adding it
+// denies every read instead of narrowing it. Verified empirically: the same
+// policy with the condition returns AccessDenied for AWS/S3, without it
+// returns the data. CloudWatch metric reads support no resource-level
+// scoping either, hence Resource "*".
 const rolePolicyDocument = `{
 	"Version": "2012-10-17",
 	"Statement": [
@@ -110,6 +120,16 @@ const rolePolicyDocument = `{
 				"iam:ListPolicyVersions",
 				"iam:CreatePolicyVersion",
 				"iam:DeletePolicyVersion"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AllowMetricReads",
+			"Effect": "Allow",
+			"Action": [
+				"cloudwatch:ListMetrics",
+				"cloudwatch:GetMetricData",
+				"cloudwatch:GetMetricStatistics"
 			],
 			"Resource": "*"
 		},
