@@ -2,45 +2,41 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/aws/smithy-go"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
 
-// Reaching a storage node's bucket takes one of two paths, and the storage
-// node's account RECORD must not be what decides which.
+// There are two kinds of storage node and no data fix collapses them: some
+// buckets live in a customer's AWS account and are reached by assuming that
+// account's cross-account role, and some are the platform's own, sitting in
+// the account this service already runs in. Assuming a role into yourself is
+// ceremony at best, and a Pennsieve-Compute-* role minted in the platform
+// account would be a broad, self-trusting near-admin role created for no
+// reason — so platform-owned storage nodes carry an account row naming the
+// platform account with NO RoleName, and that is what marks them.
 //
-// Some storage buckets live in a customer's AWS account and are reached by
-// assuming that account's cross-account role. Others are the platform's own
-// buckets, sitting in the very account this service runs in — there is no
-// role to assume, and assuming one is at best a no-op.
+// The record decides the path; it does not get to decide it unchecked.
+// Every S3 call made on a storage node's bucket carries ExpectedBucketOwner,
+// so a record that has drifted fails the call instead of quietly acting on a
+// bucket it has misidentified. That costs nothing — it is a parameter on
+// calls already being made — and it is what keeps a hand-maintained table
+// from being load-bearing.
 //
-// Deriving that from `account.AccountId` is what the old code did, and it is
-// wrong in a way that hides: the account a storage node points at is written
-// by hand and can name an account that does not own the bucket. It does
-// today — in prod, both platform-owned storage nodes point at an account
-// record that carries a different account's ID. The symptom is not a loud
-// error but an AccessDenied inside a Fargate task nobody is watching, while
-// the API has already answered 202.
-//
-// So ownership is asked of S3 instead of asserted from DynamoDB.
-// ExpectedBucketOwner makes the question exact: S3 refuses the call unless
-// the bucket really is owned by the account we name. "Platform-managed"
-// becomes a fact about the bucket rather than a claim in a table, and a
-// record that disagrees can no longer send an operation at the wrong
-// account — the worst it can do now is be logged.
+// This matters because such drift is not hypothetical: in prod, both
+// platform-owned storage nodes point at an account row carrying the DEV
+// platform account's ID. The stakes are bounded — S3 bucket names are
+// globally unique, so a wrong account can only make an operation fail, never
+// aim it at a different bucket — but "fails loudly at the call" is the
+// behaviour we want, not "fails eventually, inside a task, after the API
+// answered 202".
 
 var (
 	platformAccountOnce sync.Once
@@ -62,62 +58,7 @@ func PlatformAccountID(ctx context.Context, cfg aws.Config) (string, error) {
 	return platformAccountID, platformAccountErr
 }
 
-// BucketOwnerAPI is the one S3 call ownership needs, so the decision can be
-// tested without an AWS account behind it.
-type BucketOwnerAPI interface {
-	HeadBucket(ctx context.Context, in *s3.HeadBucketInput, opts ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
-}
-
-// IsPlatformManaged reports whether this bucket is owned by platformAccountID,
-// by asking S3 rather than by trusting the storage node's account record.
-//
-// A bucket the platform does not own answers 403 here even when a bucket
-// policy grants us data access, because ExpectedBucketOwner is checked before
-// anything else — which is precisely the discrimination we want.
-func IsPlatformManaged(ctx context.Context, api BucketOwnerAPI, platformAccountID string,
-	node models.DynamoDBStorageNode) (bool, error) {
-
-	_, err := api.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket:              aws.String(node.StorageLocation),
-		ExpectedBucketOwner: aws.String(platformAccountID),
-	})
-	if err == nil {
-		return true, nil
-	}
-	if deniedOrMissing(err) {
-		return false, nil
-	}
-	// A throttle or a network fault is not evidence of ownership either way,
-	// and guessing here would route a destructive operation at the wrong
-	// account. Report it and let the caller refuse.
-	return false, fmt.Errorf("checking whether %s is platform-owned: %w", node.StorageLocation, err)
-}
-
-// deniedOrMissing distinguishes "this bucket is not ours" from "we could not
-// find out". 403 is the ExpectedBucketOwner mismatch (or no access at all)
-// and 404 is a bucket that is not there; both mean the platform does not own
-// it. HeadBucket returns bare HTTP status codes rather than typed errors.
-func deniedOrMissing(err error) bool {
-	var nf *s3types.NotFound
-	if errors.As(err, &nf) {
-		return true
-	}
-	var api smithy.APIError
-	if errors.As(err, &api) {
-		switch api.ErrorCode() {
-		case "Forbidden", "AccessDenied", "NotFound", "NoSuchBucket":
-			return true
-		}
-	}
-	var re *awshttp.ResponseError
-	if errors.As(err, &re) {
-		return re.HTTPStatusCode() == 403 || re.HTTPStatusCode() == 404
-	}
-	return false
-}
-
-// BucketAccess is how a storage node's bucket should be reached, resolved
-// from the bucket itself.
+// BucketAccess is how a storage node's bucket should be reached.
 type BucketAccess struct {
 	// Config carries credentials that can act on the bucket: the service's
 	// own for a platform-managed bucket, the assumed cross-account role
@@ -125,9 +66,11 @@ type BucketAccess struct {
 	Config aws.Config
 	// PlatformManaged is true when the bucket lives in this service's account.
 	PlatformManaged bool
-	// AccountID and RoleName are what a provisioner task should act as, and
-	// they are the verified account — not whatever the storage node's record
-	// happens to claim.
+	// AccountID is the account expected to own the bucket. Pass it as
+	// ExpectedBucketOwner on every S3 call so a drifted record fails the call
+	// rather than acting on the wrong bucket.
+	AccountID string
+	// RoleName is the cross-account role to assume, empty when there is none.
 	//
 	// CONTRACT for the storage node provisioner (not yet built): a task
 	// receives ACCOUNT_ID always, and ROLE_NAME only when there is a role to
@@ -135,16 +78,17 @@ type BucketAccess struct {
 	// account and the task must act with its own credentials rather than
 	// assuming into itself. Requiring ROLE_NAME unconditionally would make
 	// platform-owned storage nodes unserviceable.
-	AccountID string
-	RoleName  string
+	RoleName string
 }
+
+// Owner is the ExpectedBucketOwner to send with S3 calls on this bucket.
+func (a BucketAccess) Owner() *string { return aws.String(a.AccountID) }
 
 // ResolveBucketAccess decides how to reach a storage node's bucket.
 //
-// When the storage node's account record disagrees with S3 about who owns the
-// bucket, the bucket wins and the disagreement is logged: that record is a
-// data bug someone needs to fix, but it must not be able to point an
-// operation at the wrong AWS account while it goes unfixed.
+// An account row naming this account marks a platform-owned bucket; one
+// naming another account must carry a role to assume, and a row that names
+// another account with no role is refused rather than guessed at.
 func ResolveBucketAccess(ctx context.Context, cfg aws.Config, account store_dynamodb.Account,
 	node models.DynamoDBStorageNode) (BucketAccess, error) {
 
@@ -152,28 +96,37 @@ func ResolveBucketAccess(ctx context.Context, cfg aws.Config, account store_dyna
 	if err != nil {
 		return BucketAccess{}, err
 	}
+	return ResolveBucketAccessWithPlatform(ctx, cfg, platform, account, node)
+}
 
-	platformManaged, err := IsPlatformManaged(ctx, s3.NewFromConfig(regionalCopy(cfg, node)), platform, node)
-	if err != nil {
-		return BucketAccess{}, err
-	}
+// ResolveBucketAccessWithPlatform is ResolveBucketAccess for a caller that
+// already knows which account it is running in.
+func ResolveBucketAccessWithPlatform(ctx context.Context, cfg aws.Config, platform string,
+	account store_dynamodb.Account, node models.DynamoDBStorageNode) (BucketAccess, error) {
 
-	if platformManaged {
-		if account.AccountId != "" && account.AccountId != platform {
-			log.Printf("storage node %s: bucket %s is owned by this account (%s) but its account "+
-				"record %s claims %s — using platform credentials; the record needs correcting",
-				node.Uuid, node.StorageLocation, platform, account.Uuid, account.AccountId)
+	if account.AccountId == platform || (account.AccountId == "" && account.RoleName == "") {
+		if account.RoleName != "" {
+			log.Printf("storage node %s: account row %s names this account (%s) but also a role "+
+				"(%s) — ignoring the role; a bucket in our own account is not reached by assuming "+
+				"into ourselves", node.Uuid, account.Uuid, platform, account.RoleName)
 		}
-		return BucketAccess{Config: regionalCopy(cfg, node), PlatformManaged: true,
-			AccountID: platform}, nil
+		return BucketAccess{
+			Config:          regionalCopy(cfg, node),
+			PlatformManaged: true,
+			AccountID:       platform,
+		}, nil
 	}
 
-	if account.AccountId == "" || account.RoleName == "" {
+	if account.RoleName == "" {
 		return BucketAccess{}, fmt.Errorf(
-			"storage node %s: bucket %s is not owned by this account and its account record has no "+
-				"role to assume", node.Uuid, node.StorageLocation)
+			"storage node %s: account row %s names account %s but carries no role to assume",
+			node.Uuid, account.Uuid, account.AccountId)
 	}
 
+	// The role's account is also the account asserted as the bucket's owner.
+	// If those ever diverge — a bucket owned by one account reached through a
+	// role in another — the call fails closed, which is the outcome we want
+	// until someone has decided what that arrangement should mean.
 	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", account.AccountId, account.RoleName)
 	crossAccount, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(BucketRegion(cfg, node)),
@@ -185,8 +138,11 @@ func ResolveBucketAccess(ctx context.Context, cfg aws.Config, account store_dyna
 		return BucketAccess{}, fmt.Errorf("assuming %s: %w", roleArn, err)
 	}
 
-	return BucketAccess{Config: crossAccount, AccountID: account.AccountId,
-		RoleName: account.RoleName}, nil
+	return BucketAccess{
+		Config:    crossAccount,
+		AccountID: account.AccountId,
+		RoleName:  account.RoleName,
+	}, nil
 }
 
 // BucketRegion is the region whose S3 endpoint can answer about this bucket.

@@ -230,9 +230,14 @@ func checkDeleteTag(ctx context.Context, cfg aws.Config, account store_dynamodb.
 		return false, fmt.Errorf("failed to reach bucket for tag check: %w", err)
 	}
 
+	// ExpectedBucketOwner is what keeps a drifted account record from being
+	// load-bearing: if the row names an account that does not own this
+	// bucket, S3 refuses the call and the delete is blocked, rather than the
+	// tag check answering about a bucket we have misidentified.
 	s3Client := s3.NewFromConfig(access.Config)
 	output, err := s3Client.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{
-		Bucket: aws.String(node.StorageLocation),
+		Bucket:              aws.String(node.StorageLocation),
+		ExpectedBucketOwner: access.Owner(),
 	})
 	if err != nil {
 		// NoSuchTagSet means bucket has no tags — treat as missing tag
