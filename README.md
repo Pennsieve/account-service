@@ -34,6 +34,7 @@ This service is built as a serverless application using:
 | `POST` | `/compute-nodes` | Create a new compute node |
 | `GET` | `/compute-nodes` | List compute nodes (`{ nodes, latestVersion }`) |
 | `GET` | `/compute-nodes/{id}` | Get compute node details |
+| `PUT` | `/compute-nodes/{id}` | Re-provision a node with a given provisioner image/tag |
 | `DELETE` | `/compute-nodes/{id}` | Delete a compute node |
 | `GET` | `/compute-nodes/{id}/permissions` | Get node permissions |
 | `PUT` | `/compute-nodes/{id}/permissions` | Set node access scope |
@@ -191,6 +192,25 @@ The system uses PostgreSQL `organization_user` table to determine workspace role
   ]
 }
 ```
+
+### Pinning a Specific Provisioner Tag
+
+The web app only offers a one-click update to the newest released provisioner
+tag (`latestVersion` from `GET /compute-nodes`). To deploy a specific tag, for
+example to test a pre-release build or roll back, call the update endpoint
+directly. The node owner's token is required.
+
+```bash
+curl -X PUT "https://api2.pennsieve.net/compute/resources/compute-nodes/<node-uuid>" \
+  -H "Authorization: Bearer $PENNSIEVE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"provisionerImage": "pennsieve/compute-node-aws-provisioner-v2", "provisionerImageTag": "v1.4.2"}'
+```
+
+Use `https://api2.pennsieve.io` for production. The image must be on the SSM
+provisioner whitelist. Omitting `provisionerImageTag` pins the node to the
+newest released tag. Re-provisioning typically takes 6-8 minutes; the app will
+show "Update available" while the pinned tag is behind the latest release.
 
 ## Development
 
