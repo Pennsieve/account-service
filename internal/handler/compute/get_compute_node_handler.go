@@ -158,7 +158,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		responseOrganizationId = ""
 	}
 
-	m, err := json.Marshal(models.Node{
+	nodes := []models.Node{{
 		Uuid:        computeNode.Uuid,
 		Name:        computeNode.Name,
 		Description: computeNode.Description,
@@ -184,7 +184,10 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		MaxInteractiveSessions: computeNode.MaxInteractiveSessions,
 		AccessScope:            accessScope,
 		Status:                 nodeStatus,
-	})
+	}}
+	annotateLatestVersions(ctx, cfg, nodes)
+
+	m, err := json.Marshal(nodes[0])
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

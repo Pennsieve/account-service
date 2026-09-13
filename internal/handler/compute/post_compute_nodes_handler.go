@@ -274,7 +274,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		req.ProvisionerImage = "pennsieve/compute-node-aws-provisioner-v2"
 	}
 	if req.ProvisionerImageTag == "" {
-		req.ProvisionerImageTag = "latest"
+		req.ProvisionerImageTag = resolveDefaultProvisionerTag(ctx, cfg, req.ProvisionerImage)
 	}
 
 	// Default deploymentMode to "basic" if not provided
