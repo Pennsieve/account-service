@@ -57,6 +57,15 @@ type Node struct {
 	UpdateAvailable bool `json:"updateAvailable"`
 }
 
+// NodesListResponse is the body of GET /compute-nodes. LatestVersion is the
+// newest released provisioner tag for the default provisioner image, reported
+// at the root so callers can pin a new node correctly even when the list is
+// empty. Empty when it can't be determined.
+type NodesListResponse struct {
+	Nodes         []Node `json:"nodes"`
+	LatestVersion string `json:"latestVersion,omitempty"`
+}
+
 type NodeAccount struct {
 	Uuid        string `json:"uuid"`
 	AccountId   string `json:"accountId"`

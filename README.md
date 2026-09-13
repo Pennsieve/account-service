@@ -32,7 +32,7 @@ This service is built as a serverless application using:
 | `POST` | `/accounts/{uuid}/workspaces` | Enable a workspace for an account |
 | `DELETE` | `/accounts/{uuid}/workspaces/{workspaceId}` | Disable a workspace for an account |
 | `POST` | `/compute-nodes` | Create a new compute node |
-| `GET` | `/compute-nodes` | List compute nodes |
+| `GET` | `/compute-nodes` | List compute nodes (`{ nodes, latestVersion }`) |
 | `GET` | `/compute-nodes/{id}` | Get compute node details |
 | `DELETE` | `/compute-nodes/{id}` | Delete a compute node |
 | `GET` | `/compute-nodes/{id}/permissions` | Get node permissions |

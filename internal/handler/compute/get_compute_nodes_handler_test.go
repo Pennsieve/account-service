@@ -118,9 +118,10 @@ func TestGetComputeNodesHandler_UserOwnedNodes(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode)
 
 	// Parse response body
-	var nodes []models.Node
-	err = json.Unmarshal([]byte(response.Body), &nodes)
+	var listResponse models.NodesListResponse
+	err = json.Unmarshal([]byte(response.Body), &listResponse)
 	assert.NoError(t, err)
+	nodes := listResponse.Nodes
 
 	// Should return at least one user-owned node (may be limited by DynamoDB GSI constraints)
 	assert.GreaterOrEqual(t, len(nodes), 1)
@@ -228,9 +229,10 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode)
 
 	// Parse response body
-	var nodes []models.Node
-	err = json.Unmarshal([]byte(response.Body), &nodes)
+	var listResponse models.NodesListResponse
+	err = json.Unmarshal([]byte(response.Body), &listResponse)
 	assert.NoError(t, err)
+	nodes := listResponse.Nodes
 
 	// Should return only nodes from the specified organization
 	assert.Len(t, nodes, 2)
@@ -292,9 +294,10 @@ func TestGetComputeNodesHandler_AccountOwnerMode(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode)
 
 	// Parse response body
-	var nodes []models.Node
-	err = json.Unmarshal([]byte(response.Body), &nodes)
+	var listResponse models.NodesListResponse
+	err = json.Unmarshal([]byte(response.Body), &listResponse)
 	assert.NoError(t, err)
+	nodes := listResponse.Nodes
 
 	// Should return all nodes on user's accounts
 	assert.Len(t, nodes, 2)
@@ -371,12 +374,14 @@ func TestGetComputeNodesHandler_EmptyResults(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode)
 
 	// Parse response body
-	var nodes []models.Node
-	err = json.Unmarshal([]byte(response.Body), &nodes)
+	var listResponse models.NodesListResponse
+	err = json.Unmarshal([]byte(response.Body), &listResponse)
 	assert.NoError(t, err)
+	nodes := listResponse.Nodes
 
-	// Should return empty array
+	// Should return an empty (non-null) nodes array
 	assert.Len(t, nodes, 0)
+	assert.Contains(t, response.Body, `"nodes":[]`)
 }
 
 func TestGetComputeNodesHandler_MissingNodeAccessTable(t *testing.T) {
@@ -491,9 +496,10 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 	assert.Equal(t, 200, response.StatusCode)
 
 	// Parse response body
-	var nodes []models.Node
-	err = json.Unmarshal([]byte(response.Body), &nodes)
+	var listResponse models.NodesListResponse
+	err = json.Unmarshal([]byte(response.Body), &listResponse)
 	assert.NoError(t, err)
+	nodes := listResponse.Nodes
 
 	// Should return all nodes regardless of access type (owner, write, read)
 	assert.Len(t, nodes, 3)

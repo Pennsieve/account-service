@@ -2,6 +2,7 @@ package compute
 
 import (
 	"context"
+	"log"
 	"os"
 	"sync"
 
@@ -32,17 +33,33 @@ func getResolver(cfg aws.Config) *dockerhub.Resolver {
 	return resolver
 }
 
+// resolveDefaultProvisionerTag returns the newest released vX.Y.Z tag for image,
+// used when a create/update request omits the provisioner tag so new nodes are
+// pinned to a real release. The floating "latest" tag is only a last resort when
+// the release can't be determined.
+func resolveDefaultProvisionerTag(ctx context.Context, cfg aws.Config, image string) string {
+	if image == "" {
+		image = defaultProvisionerImage
+	}
+	if latest := getResolver(cfg).LatestVersion(ctx, image); latest != "" {
+		return latest
+	}
+	log.Printf("could not resolve latest provisioner release for %s; falling back to 'latest'", image)
+	return "latest"
+}
+
 // annotateLatestVersions fills LatestVersion/UpdateAvailable on each node by
 // looking up the newest released provisioner tag on Docker Hub (cached per
-// image). It degrades gracefully: if a lookup fails, LatestVersion stays empty
-// and UpdateAvailable stays false — the list call never fails over this.
-func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.Node) {
-	if len(nodes) == 0 {
-		return
-	}
+// image), and returns the latest tag for the default provisioner image so the
+// list response can report it even when there are no nodes. It degrades
+// gracefully: if a lookup fails, LatestVersion stays empty and UpdateAvailable
+// stays false — the list call never fails over this.
+func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.Node) string {
 	r := getResolver(cfg)
 
-	latestByImage := make(map[string]string)
+	latestByImage := map[string]string{
+		defaultProvisionerImage: r.LatestVersion(ctx, defaultProvisionerImage),
+	}
 	for i := range nodes {
 		image := nodes[i].ProvisionerImage
 		if image == "" {
@@ -56,4 +73,5 @@ func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.
 		nodes[i].LatestVersion = latest
 		nodes[i].UpdateAvailable = dockerhub.IsOutdated(nodes[i].ProvisionerImageTag, latest)
 	}
+	return latestByImage[defaultProvisionerImage]
 }
