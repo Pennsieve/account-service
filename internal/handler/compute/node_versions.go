@@ -2,6 +2,7 @@ package compute
 
 import (
 	"context"
+	"log"
 	"os"
 	"sync"
 
@@ -30,6 +31,21 @@ func getResolver(cfg aws.Config) *dockerhub.Resolver {
 		resolver = dockerhub.NewResolver(sm, ssmClient, os.Getenv("DOCKER_HUB_CREDENTIALS_SECRET_ARN"), os.Getenv("ENV"))
 	})
 	return resolver
+}
+
+// resolveDefaultProvisionerTag returns the newest released vX.Y.Z tag for image,
+// used when a create/update request omits the provisioner tag so new nodes are
+// pinned to a real release. The floating "latest" tag is only a last resort when
+// the release can't be determined.
+func resolveDefaultProvisionerTag(ctx context.Context, cfg aws.Config, image string) string {
+	if image == "" {
+		image = defaultProvisionerImage
+	}
+	if latest := getResolver(cfg).LatestVersion(ctx, image); latest != "" {
+		return latest
+	}
+	log.Printf("could not resolve latest provisioner release for %s; falling back to 'latest'", image)
+	return "latest"
 }
 
 // annotateLatestVersions fills LatestVersion/UpdateAvailable on each node by

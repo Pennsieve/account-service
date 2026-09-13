@@ -65,7 +65,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		updateRequest.ProvisionerImage = "pennsieve/compute-node-aws-provisioner-v2"
 	}
 	if updateRequest.ProvisionerImageTag == "" {
-		updateRequest.ProvisionerImageTag = "latest"
+		updateRequest.ProvisionerImageTag = resolveDefaultProvisionerTag(ctx, cfg, updateRequest.ProvisionerImage)
 	}
 
 	subIdStr := os.Getenv("SUBNET_IDS")
