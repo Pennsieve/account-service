@@ -225,10 +225,15 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	jsonNodes := mappers.DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes, accountStatusMap, accountOwnerMap, nil)
 
 	// Annotate each node with the latest available provisioner version (from
-	// Docker Hub) so the frontend can hint when a node is outdated.
-	annotateLatestVersions(ctx, cfg, jsonNodes)
+	// Docker Hub) so the frontend can hint when a node is outdated, and report
+	// the latest version at the root so new nodes can be pinned even when the
+	// list is empty.
+	latestVersion := annotateLatestVersions(ctx, cfg, jsonNodes)
+	if jsonNodes == nil {
+		jsonNodes = []models.Node{}
+	}
 
-	m, err := json.Marshal(jsonNodes)
+	m, err := json.Marshal(models.NodesListResponse{Nodes: jsonNodes, LatestVersion: latestVersion})
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

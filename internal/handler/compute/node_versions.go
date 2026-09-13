@@ -50,15 +50,16 @@ func resolveDefaultProvisionerTag(ctx context.Context, cfg aws.Config, image str
 
 // annotateLatestVersions fills LatestVersion/UpdateAvailable on each node by
 // looking up the newest released provisioner tag on Docker Hub (cached per
-// image). It degrades gracefully: if a lookup fails, LatestVersion stays empty
-// and UpdateAvailable stays false — the list call never fails over this.
-func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.Node) {
-	if len(nodes) == 0 {
-		return
-	}
+// image), and returns the latest tag for the default provisioner image so the
+// list response can report it even when there are no nodes. It degrades
+// gracefully: if a lookup fails, LatestVersion stays empty and UpdateAvailable
+// stays false — the list call never fails over this.
+func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.Node) string {
 	r := getResolver(cfg)
 
-	latestByImage := make(map[string]string)
+	latestByImage := map[string]string{
+		defaultProvisionerImage: r.LatestVersion(ctx, defaultProvisionerImage),
+	}
 	for i := range nodes {
 		image := nodes[i].ProvisionerImage
 		if image == "" {
@@ -72,4 +73,5 @@ func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.
 		nodes[i].LatestVersion = latest
 		nodes[i].UpdateAvailable = dockerhub.IsOutdated(nodes[i].ProvisionerImageTag, latest)
 	}
+	return latestByImage[defaultProvisionerImage]
 }
