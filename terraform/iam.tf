@@ -217,7 +217,13 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     sid    = "InvokeComputeGatewayUrl"
     effect = "Allow"
     actions = [
-      "lambda:InvokeFunctionUrl"
+      "lambda:InvokeFunctionUrl",
+      # Both actions: a Function URL invoked from another AWS Organization
+      # needs lambda:InvokeFunction as well (docs: urls-auth). Same-org
+      # callers get by on InvokeFunctionUrl alone, which hid this for every
+      # node in the platform's org while nodes in the SPARC org and in
+      # customers' own orgs returned 403 at the URL edge.
+      "lambda:InvokeFunction"
     ]
     resources = ["arn:aws:lambda:*:*:function:compute-gateway-*"]
   }
@@ -331,7 +337,13 @@ data "aws_iam_policy_document" "health_checker_iam_policy_document" {
     sid    = "HealthCheckerInvokeComputeGatewayUrl"
     effect = "Allow"
     actions = [
-      "lambda:InvokeFunctionUrl"
+      "lambda:InvokeFunctionUrl",
+      # Both actions: a Function URL invoked from another AWS Organization
+      # needs lambda:InvokeFunction as well (docs: urls-auth). Same-org
+      # callers get by on InvokeFunctionUrl alone, which hid this for every
+      # node in the platform's org while nodes in the SPARC org and in
+      # customers' own orgs returned 403 at the URL edge.
+      "lambda:InvokeFunction"
     ]
     resources = ["arn:aws:lambda:*:*:function:compute-gateway-*"]
   }
