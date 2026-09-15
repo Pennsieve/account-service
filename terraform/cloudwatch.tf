@@ -5,15 +5,6 @@ resource "aws_cloudwatch_log_group" "accounts_service_api_lambda_log_group" {
   tags              = local.common_tags
 }
 
-// Send logs from accounts-service API Lambda to Datadog
-resource "aws_cloudwatch_log_subscription_filter" "accounts_service_api_lambda_datadog_subscription" {
-  name            = "${aws_cloudwatch_log_group.accounts_service_api_lambda_log_group.name}-subscription"
-  log_group_name  = aws_cloudwatch_log_group.accounts_service_api_lambda_log_group.name
-  filter_pattern  = ""
-  destination_arn = data.terraform_remote_state.region.outputs.datadog_delivery_stream_arn
-  role_arn        = data.terraform_remote_state.region.outputs.cw_logs_to_datadog_logs_firehose_role_arn
-}
-
 // Accounts SERVICE API GATEWAY
 resource "aws_cloudwatch_log_group" "accounts_service_gateway_log_group" {
   name = "${var.environment_name}/${var.service_name}/accounts-api-gateway"
@@ -34,13 +25,4 @@ resource "aws_cloudwatch_log_group" "check_access_lambda_log_group" {
   name              = "/aws/lambda/${aws_lambda_function.check_user_node_access.function_name}"
   retention_in_days = 30
   tags              = local.common_tags
-}
-
-// Send logs from check-access Lambda to Datadog
-resource "aws_cloudwatch_log_subscription_filter" "check_access_lambda_datadog_subscription" {
-  name            = "${aws_cloudwatch_log_group.check_access_lambda_log_group.name}-subscription"
-  log_group_name  = aws_cloudwatch_log_group.check_access_lambda_log_group.name
-  filter_pattern  = ""
-  destination_arn = data.terraform_remote_state.region.outputs.datadog_delivery_stream_arn
-  role_arn        = data.terraform_remote_state.region.outputs.cw_logs_to_datadog_logs_firehose_role_arn
 }
