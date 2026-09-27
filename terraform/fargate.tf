@@ -16,6 +16,7 @@ data "template_file" "provisioner_ecs_task_definition" {
     image_url                 = var.image_url
     service_name              = var.service_name
     tier                      = var.tier
+    pennsieve_domain          = var.pennsieve_domain
   }
 }
 

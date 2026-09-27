@@ -115,3 +115,12 @@ locals {
   cors_allowed_origins = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"]
 
 }
+
+# Platform base domain handed to the provisioner (and from it to every node
+# function): api., api2., app. and compute.<domain>. Empty lets the
+# provisioner derive it from ENV (prod = pennsieve.io, else pennsieve.net);
+# an environment on another domain (clin: pennsieve.ai, with ENV=prod) must
+# set it.
+variable "pennsieve_domain" {
+  default = ""
+}
