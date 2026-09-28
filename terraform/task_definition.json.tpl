@@ -11,6 +11,7 @@
     "environment": [
       { "name" : "ENVIRONMENT", "value": "${environment_name}" },
       { "name" : "ENV", "value": "${environment_name}" },
+      { "name" : "PENNSIEVE_DOMAIN", "value": "${pennsieve_domain}" },
       { "name" : "REGION", "value": "${aws_region}" }
     ],
     "mountPoints": [],
