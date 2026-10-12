@@ -263,7 +263,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	roleNameValue := account.RoleName
 
 	// Create a dynamic task definition with the custom provisioner image (using function from post_compute_nodes_handler.go)
-	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
+	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("Error creating dynamic task definition: %v", err)
 		return events.APIGatewayV2HTTPResponse{

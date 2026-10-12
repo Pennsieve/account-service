@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
@@ -220,5 +222,51 @@ func TestLatestVersion_NoCredsConfigured(t *testing.T) {
 	r.http = &fakeHTTP{tags: []string{"v1.0.0"}}
 	if got := r.LatestVersion(context.Background(), "pennsieve/img"); got != "" {
 		t.Errorf("expected empty (no creds), got %q", got)
+	}
+}
+
+type fakeECR struct {
+	pages [][]string
+	calls int
+}
+
+func (f *fakeECR) ListImages(ctx context.Context, in *ecr.ListImagesInput, optFns ...func(*ecr.Options)) (*ecr.ListImagesOutput, error) {
+	page := f.pages[f.calls]
+	f.calls++
+	out := &ecr.ListImagesOutput{}
+	for _, t := range page {
+		out.ImageIds = append(out.ImageIds, ecrtypes.ImageIdentifier{ImageTag: aws.String(t)})
+	}
+	if f.calls < len(f.pages) {
+		out.NextToken = aws.String("next")
+	}
+	return out, nil
+}
+
+func TestECRResolver_ListsAllPagesWithoutDockerHub(t *testing.T) {
+	e := &fakeECR{pages: [][]string{{"v1.8.9", "v1.8.12-rc1"}, {"v1.8.12", "v1.8.10"}}}
+	r := NewECRResolver(e, newFakeSSM(), "test")
+	r.http = &fakeHTTP{failTags: true} // any Docker Hub call would fail the lookup
+
+	got, err := r.Refresh(context.Background(), "pennsieve/compute-node-aws-provisioner-v2")
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if got != "v1.8.12" {
+		t.Errorf("Refresh = %q, want v1.8.12", got)
+	}
+	if e.calls != 2 {
+		t.Errorf("ListImages calls = %d, want 2", e.calls)
+	}
+}
+
+func TestNewResolverFromEnv_DockerHubUnlessRegistrySet(t *testing.T) {
+	t.Setenv("PROVISIONER_IMAGE_REGISTRY", "")
+	if r := NewResolverFromEnv(aws.Config{Region: "us-east-1"}); r.ecr != nil {
+		t.Error("without PROVISIONER_IMAGE_REGISTRY the resolver must use Docker Hub")
+	}
+	t.Setenv("PROVISIONER_IMAGE_REGISTRY", "123456789012.dkr.ecr.us-east-1.amazonaws.com")
+	if r := NewResolverFromEnv(aws.Config{Region: "us-east-1"}); r.ecr == nil {
+		t.Error("with PROVISIONER_IMAGE_REGISTRY the resolver must use ECR")
 	}
 }

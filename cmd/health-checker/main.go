@@ -8,8 +8,6 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/pennsieve/account-service/internal/dockerhub"
 	"github.com/pennsieve/account-service/internal/handler/healthchecker"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
@@ -32,12 +30,7 @@ func handler(ctx context.Context) error {
 
 	ddbClient := dynamodb.NewFromConfig(cfg)
 
-	tagRefresher := dockerhub.NewResolver(
-		secretsmanager.NewFromConfig(cfg),
-		ssm.NewFromConfig(cfg),
-		os.Getenv("DOCKER_HUB_CREDENTIALS_SECRET_ARN"),
-		os.Getenv("ENV"),
-	)
+	tagRefresher := dockerhub.NewResolverFromEnv(cfg)
 
 	h := &healthchecker.Handler{
 		NodeStore:      store_dynamodb.NewNodeDatabaseStore(ddbClient, nodesTable),
