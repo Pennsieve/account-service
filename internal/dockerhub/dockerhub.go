@@ -9,6 +9,9 @@
 // frequently-called list endpoint stays fast and we don't hit Docker Hub rate
 // limits; on a lookup error we serve the last good (stale) value rather than
 // failing the caller.
+//
+// Where PROVISIONER_IMAGE_REGISTRY is set (clin), the provisioner images come
+// from that account's own ECR instead, and tags are listed there.
 package dockerhub
 
 import (
@@ -19,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -27,6 +31,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
@@ -63,6 +69,11 @@ type SSMAPI interface {
 	PutParameter(ctx context.Context, in *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 }
 
+// ECRAPI is the subset of the ECR client used to list a repo's tags.
+type ECRAPI interface {
+	ListImages(ctx context.Context, in *ecr.ListImagesInput, optFns ...func(*ecr.Options)) (*ecr.ListImagesOutput, error)
+}
+
 // HTTPClient is the subset of *http.Client used here (for testing).
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -79,6 +90,7 @@ type cacheEntry struct {
 type Resolver struct {
 	sm        SecretsAPI
 	ssm       SSMAPI
+	ecr       ECRAPI // set: list tags in this account's ECR instead of Docker Hub
 	http      HTTPClient
 	secretArn string
 	env       string
@@ -112,6 +124,22 @@ func NewResolver(sm SecretsAPI, ssmClient SSMAPI, secretArn, env string) *Resolv
 		now:       time.Now,
 		cache:     make(map[string]cacheEntry),
 	}
+}
+
+// NewECRResolver builds a resolver that lists tags in this account's ECR.
+func NewECRResolver(ecrClient ECRAPI, ssmClient SSMAPI, env string) *Resolver {
+	r := NewResolver(nil, ssmClient, "", env)
+	r.ecr = ecrClient
+	return r
+}
+
+// NewResolverFromEnv uses ECR when PROVISIONER_IMAGE_REGISTRY is set, and
+// Docker Hub with DOCKER_HUB_CREDENTIALS_SECRET_ARN otherwise.
+func NewResolverFromEnv(cfg aws.Config) *Resolver {
+	if os.Getenv("PROVISIONER_IMAGE_REGISTRY") != "" {
+		return NewECRResolver(ecr.NewFromConfig(cfg), ssm.NewFromConfig(cfg), os.Getenv("ENV"))
+	}
+	return NewResolver(secretsmanager.NewFromConfig(cfg), ssm.NewFromConfig(cfg), os.Getenv("DOCKER_HUB_CREDENTIALS_SECRET_ARN"), os.Getenv("ENV"))
 }
 
 // LatestVersion returns the highest real vX.Y.Z tag for image (e.g.
@@ -234,6 +262,14 @@ func (r *Resolver) whitelistImages(ctx context.Context) ([]string, error) {
 }
 
 func (r *Resolver) fetchLatest(ctx context.Context, image string) (string, error) {
+	if r.ecr != nil {
+		tags, err := r.listECRTags(ctx, image)
+		if err != nil {
+			return "", err
+		}
+		return highestSemver(tags), nil
+	}
+
 	creds, err := r.getCreds(ctx)
 	if err != nil {
 		return "", err
@@ -346,6 +382,26 @@ func (r *Resolver) listTags(ctx context.Context, image, token string) ([]string,
 		return nil, fmt.Errorf("decode docker hub tags: %w", err)
 	}
 	return body.Tags, nil
+}
+
+func (r *Resolver) listECRTags(ctx context.Context, image string) ([]string, error) {
+	var tags []string
+	p := ecr.NewListImagesPaginator(r.ecr, &ecr.ListImagesInput{
+		RepositoryName: aws.String(image),
+		Filter:         &ecrtypes.ListImagesFilter{TagStatus: ecrtypes.TagStatusTagged},
+	})
+	for p.HasMorePages() {
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list ecr tags for %s: %w", image, err)
+		}
+		for _, id := range page.ImageIds {
+			if id.ImageTag != nil {
+				tags = append(tags, *id.ImageTag)
+			}
+		}
+	}
+	return tags, nil
 }
 
 // highestSemver returns the highest vX.Y.Z tag (preserving its original "v"

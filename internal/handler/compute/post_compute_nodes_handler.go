@@ -88,7 +88,7 @@ func validateProvisionerImage(ctx context.Context, cfg aws.Config, image string)
 }
 
 // createDynamicTaskDefinition creates or reuses an ECS task definition with a custom provisioner image
-func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image, tag, envName string) (*types.TaskDefinition, error) {
+func createDynamicTaskDefinition(ctx context.Context, cfg aws.Config, client *ecs.Client, image, tag, envName string) (*types.TaskDefinition, error) {
 	// Get the base task definition configuration from environment variables
 	baseTaskDefArn := os.Getenv("TASK_DEF_ARN")
 	if baseTaskDefArn == "" {
@@ -108,23 +108,31 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 		return nil, fmt.Errorf("base task definition has no container definitions")
 	}
 
+	imageRef, tag, err := provisionerImageRef(ctx, cfg, image, tag)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new container definition with the custom image
+	newContainerDef := baseDef.ContainerDefinitions[0] // Copy the first container
+	newContainerDef.Image = aws.String(imageRef)
+	if os.Getenv("PROVISIONER_IMAGE_REGISTRY") != "" {
+		newContainerDef.RepositoryCredentials = nil // ECR pulls use the execution role
+	}
+
 	// Create a unique family name for the dynamic task definition
 	sanitizedTag := strings.ReplaceAll(tag, ".", "-")
 	familyName := fmt.Sprintf("%s-custom-%s-%s", *baseDef.Family, strings.ReplaceAll(image, "/", "-"), sanitizedTag)
 
 	// Check if a valid task definition for this image already exists
-	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName, baseDef)
+	existingTaskDef, err := findExistingTaskDefinition(ctx, client, familyName, baseDef, newContainerDef)
 	if err != nil {
 		log.Printf("Error checking for existing task definition: %v", err)
 		// Continue with creating a new one
 	} else if existingTaskDef != nil {
-		log.Printf("Reusing existing task definition: %s with image %s:%s", *existingTaskDef.TaskDefinitionArn, image, tag)
+		log.Printf("Reusing existing task definition: %s with image %s", *existingTaskDef.TaskDefinitionArn, imageRef)
 		return existingTaskDef, nil
 	}
-
-	// Create a new container definition with the custom image
-	newContainerDef := baseDef.ContainerDefinitions[0] // Copy the first container
-	newContainerDef.Image = aws.String(fmt.Sprintf("%s:%s", image, tag))
 
 	// Create the new task definition
 	registerInput := &ecs.RegisterTaskDefinitionInput{
@@ -144,13 +152,13 @@ func createDynamicTaskDefinition(ctx context.Context, client *ecs.Client, image,
 		return nil, fmt.Errorf("failed to register dynamic task definition: %w", err)
 	}
 
-	log.Printf("Created new dynamic task definition: %s with image %s:%s", *registerResult.TaskDefinition.TaskDefinitionArn, image, tag)
+	log.Printf("Created new dynamic task definition: %s with image %s", *registerResult.TaskDefinition.TaskDefinitionArn, imageRef)
 	return registerResult.TaskDefinition, nil
 }
 
 // findExistingTaskDefinition checks if a task definition family already exists and returns the latest active revision.
-// It validates that the cached definition matches the base definition to detect configuration drift.
-func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyName string, baseDef *types.TaskDefinition) (*types.TaskDefinition, error) {
+// It validates that the cached definition matches the base definition and the wanted container to detect configuration drift.
+func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyName string, baseDef *types.TaskDefinition, container types.ContainerDefinition) (*types.TaskDefinition, error) {
 	// Try to describe the latest task definition for this family
 	describeResult, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(familyName),
@@ -180,20 +188,13 @@ func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyN
 		return nil, nil
 	}
 
-	// Validate container-level fields match (comparing everything except Image)
-	if len(taskDef.ContainerDefinitions) == 0 || len(baseDef.ContainerDefinitions) == 0 {
+	// Validate the container matches, image included: a family cached with a
+	// Docker Hub image must not be reused once images come from ECR.
+	if len(taskDef.ContainerDefinitions) == 0 {
 		return nil, nil
 	}
-	cachedContainer := taskDef.ContainerDefinitions[0]
-	baseContainer := baseDef.ContainerDefinitions[0]
 
-	// Temporarily set the image to match so we can compare the rest
-	cachedImage := cachedContainer.Image
-	cachedContainer.Image = baseContainer.Image
-	containersMatch := reflect.DeepEqual(cachedContainer, baseContainer)
-	cachedContainer.Image = cachedImage
-
-	if !containersMatch {
+	if !reflect.DeepEqual(taskDef.ContainerDefinitions[0], container) {
 		log.Printf("Cached task definition %s container config has drifted from base - creating new revision", familyName)
 		return nil, nil
 	}
@@ -486,7 +487,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		log.Printf("Initiating new Provisioning Fargate Task with image: %s:%s", req.ProvisionerImage, req.ProvisionerImageTag)
 
 		// Create a dynamic task definition with the custom provisioner image
-		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, req.ProvisionerImage, req.ProvisionerImageTag, envValue)
+		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, req.ProvisionerImage, req.ProvisionerImageTag, envValue)
 		if err != nil {
 			log.Printf("Error creating dynamic task definition: %v", err)
 			return events.APIGatewayV2HTTPResponse{

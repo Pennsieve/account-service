@@ -183,7 +183,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	log.Printf("Initiating delete Fargate Task with image: %s:%s", provisionerImage, provisionerImageTag)
 
 	// Create a dynamic task definition with the provisioner image
-	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, client, provisionerImage, provisionerImageTag, envValue)
+	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, provisionerImage, provisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("Error creating dynamic task definition: %v", err)
 		return events.APIGatewayV2HTTPResponse{

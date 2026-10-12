@@ -67,7 +67,7 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 	}
 
 	client := ecs.NewFromConfig(cfg)
-	taskDef, err := createDynamicTaskDefinition(ctx, client, provisionerImage, provisionerImageTag, envValue)
+	taskDef, err := createDynamicTaskDefinition(ctx, cfg, client, provisionerImage, provisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("phase2: task def for node %s: %v", computeNodeID, err)
 		return
