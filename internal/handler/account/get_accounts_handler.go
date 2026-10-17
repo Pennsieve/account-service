@@ -63,8 +63,13 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		}, nil
 	}
 
+	// Accounts returned only because the requester is an org admin and the
+	// account is Admin Managed (IsPublic) in the filtered workspace.
+	adminVisibleUuids := make(map[string]bool)
+	workspaceFilter := queryParams["organization_id"]
+
 	// If workspace filter is provided, filter accounts by workspace enablement
-	if workspaceFilter, ok := queryParams["organization_id"]; ok && workspaceFilter != "" {
+	if workspaceFilter != "" {
 		enablementStore := store_dynamodb.NewAccountWorkspaceStore(dynamoDBClient, enablementTable)
 
 		// Get all enablements for the workspace
@@ -117,6 +122,10 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 						if !ownedUuids[uuid] {
 							account, err := accountStore.GetById(ctx, uuid)
 							if err == nil && account.Uuid != "" {
+								// Role-assumption details stay with the account owner
+								account.ExternalId = ""
+								account.RoleName = ""
+								adminVisibleUuids[uuid] = true
 								filteredAccounts = append(filteredAccounts, account)
 							}
 						}
@@ -139,6 +148,17 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 				log.Println(err.Error())
 				// Continue without enablements rather than failing
 				enablements = []store_dynamodb.AccountWorkspace{}
+			}
+
+			// Admins of one workspace should not see the account's other workspaces
+			if adminVisibleUuids[account.Uuid] {
+				var scoped []store_dynamodb.AccountWorkspace
+				for _, e := range enablements {
+					if e.WorkspaceId == workspaceFilter {
+						scoped = append(scoped, e)
+					}
+				}
+				enablements = scoped
 			}
 
 			modelEnablements := make([]models.AccountWorkspaceEnablement, len(enablements))
