@@ -184,7 +184,9 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	organizationIdKey := "ORG_ID"
 	organizationIdValue := computeNode.OrganizationId
 	userIdKey := "USER_ID"
-	userIdValue := userId
+	// Always the node owner, not the requester: an org admin updating an
+	// Admin Managed node must not become its owner (matches reprovision_phase2).
+	userIdValue := computeNode.UserId
 	actionKey := "ACTION"
 	actionValue := "UPDATE"
 	tableKey := "COMPUTE_NODES_TABLE"
