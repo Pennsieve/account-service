@@ -151,7 +151,7 @@ func TestPostComputeNodesHandler_BadRequest(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: "{invalid json",
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("test-user", "test-org"),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("test-user"), "test-org"),
 		},
 	}
 
@@ -181,7 +181,7 @@ func TestPostComputeNodesHandler_MissingAccountUuid(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(requestBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("test-user", ""),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("test-user"), ""),
 		},
 	}
 
@@ -213,7 +213,7 @@ func TestPostComputeNodesHandler_AccountNotFound(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(requestBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("test-user", ""),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("test-user"), ""),
 		},
 	}
 
@@ -700,8 +700,8 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		_, err = db.Exec(`
 			INSERT INTO pennsieve.users (id, email, first_name, last_name, node_id, cognito_id)
 			VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT (id) DO NOTHING
-		`, adminUserId, "admin@test.com", "Admin", "User", "100", adminCognitoId)
+			ON CONFLICT (id) DO UPDATE SET node_id = $5
+		`, adminUserId, "admin@test.com", "Admin", "User", test.UserNodeId("admin-100"), adminCognitoId)
 		if err != nil {
 			t.Logf("Warning: Could not create admin user: %v", err)
 		}
@@ -715,7 +715,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		adminRequest := events.APIGatewayV2HTTPRequest{
 			Body: string(requestBody),
 			RequestContext: events.APIGatewayV2HTTPRequestContext{
-				Authorizer: test.CreateTestAuthorizer("100", orgId), // Use string version of adminUserId
+				Authorizer: test.CreateTestAuthorizer(test.UserNodeId("admin-100"), orgId),
 			},
 		}
 
@@ -731,8 +731,8 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		_, err = db.Exec(`
 			INSERT INTO pennsieve.users (id, email, first_name, last_name, node_id, cognito_id)
 			VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT (id) DO NOTHING
-		`, nonAdminUserId, "user@test.com", "Test", "User", "101", nonAdminCognitoId)
+			ON CONFLICT (id) DO UPDATE SET node_id = $5
+		`, nonAdminUserId, "user@test.com", "Test", "User", test.UserNodeId("user-101"), nonAdminCognitoId)
 		if err != nil {
 			t.Logf("Warning: Could not create non-admin user: %v", err)
 		}
@@ -745,7 +745,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		nonAdminRequest := events.APIGatewayV2HTTPRequest{
 			Body: string(requestBody),
 			RequestContext: events.APIGatewayV2HTTPRequestContext{
-				Authorizer: test.CreateTestAuthorizer("101", orgId), // Use string version of nonAdminUserId
+				Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-101"), orgId),
 			},
 		}
 
