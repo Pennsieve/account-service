@@ -325,8 +325,8 @@ func TestNodeStore_PutStoresTheTenantAndTheLegacyOrganizationId(t *testing.T) {
     userTenant, err := tenant.FromUserNodeId(userNodeId)
     require.NoError(t, err)
 
-    orgNode := models.DynamoDBNode{Uuid: uuid.New().String(), Tenant: orgTenant, UserId: userNodeId}
-    userNode := models.DynamoDBNode{Uuid: uuid.New().String(), Tenant: userTenant, UserId: userNodeId}
+    orgNode := models.DynamoDBNode{Uuid: uuid.New().String(), AccountUuid: uuid.New().String(), Tenant: orgTenant, UserId: userNodeId}
+    userNode := models.DynamoDBNode{Uuid: uuid.New().String(), AccountUuid: uuid.New().String(), Tenant: userTenant, UserId: userNodeId}
     require.NoError(t, store.Put(ctx, orgNode))
     require.NoError(t, store.Put(ctx, userNode))
 
@@ -353,6 +353,7 @@ func TestNodeStore_ARecordFromBeforeTenantsGetsOne(t *testing.T) {
         TableName: aws.String(store.(*store_dynamodb.NodeDatabaseStore).TableName),
         Item: map[string]types.AttributeValue{
             "uuid":           &types.AttributeValueMemberS{Value: nodeUuid},
+            "accountUuid":    &types.AttributeValueMemberS{Value: uuid.New().String()},
             "organizationId": &types.AttributeValueMemberS{Value: "INDEPENDENT"},
             "userId":         &types.AttributeValueMemberS{Value: userNodeId},
         },
