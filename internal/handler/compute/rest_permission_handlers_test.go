@@ -101,6 +101,15 @@ func TestSetNodeAccessScopeHandler_ValidationErrors(t *testing.T) {
 			expectedCode:  403,
 			expectedError: "only owner can change permissions",
 		},
+		{
+			// A user-owned node is private only; it used to skip the check.
+			name:          "UserOwnedNodeCannotBeWorkspaceScoped",
+			nodeId:        testNode.Uuid,
+			requestBody:   `{"accessScope":"workspace"}`,
+			userId:        testNode.UserId,
+			expectedCode:  400,
+			expectedError: "organization-independent nodes cannot be shared",
+		},
 	}
 
 	for _, tc := range testCases {

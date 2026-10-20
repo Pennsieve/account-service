@@ -1,6 +1,7 @@
 package compute
 
 import (
+	goerrors "errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -165,6 +166,12 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 
 	// Update access scope using the permission service to ensure owner access is preserved
 	err = permissionService.SetNodePermissions(ctx, nodeUuid, accessRequest, node.UserId, node.OrganizationNodeId(), userId)
+	if goerrors.Is(err, models.ErrOrganizationIndependentNodeCannotBeShared) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
+		}, nil
+	}
 	if err != nil {
 		log.Printf("error updating access scope: %v", err)
 		return events.APIGatewayV2HTTPResponse{
