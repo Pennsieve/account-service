@@ -52,19 +52,19 @@ package:
 	@echo "***********************"
 	@echo ""
 	@echo "Building API Lambda..."
-	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/api/bootstrap $(WORKING_DIR)/cmd/api; \
+	env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/api/bootstrap $(WORKING_DIR)/cmd/api; \
 	cd $(WORKING_DIR)/bin/api/; \
 		zip -r $(WORKING_DIR)/bin/api/$(PACKAGE_NAME) .
 	@echo "Building EventBridge Handler Lambda..."
-	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/eventbridge/bootstrap $(WORKING_DIR)/cmd/eventbridge-handler; \
+	env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/eventbridge/bootstrap $(WORKING_DIR)/cmd/eventbridge-handler; \
 	cd $(WORKING_DIR)/bin/eventbridge/; \
 		zip -r $(WORKING_DIR)/bin/eventbridge/$(EVENTBRIDGE_PACKAGE_NAME) .
 	@echo "Building Check Access Lambda..."
-	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/check-access/bootstrap $(WORKING_DIR)/cmd/check-access; \
+	env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/check-access/bootstrap $(WORKING_DIR)/cmd/check-access; \
 	cd $(WORKING_DIR)/bin/check-access/; \
 		zip -r $(WORKING_DIR)/bin/check-access/$(CHECK_ACCESS_PACKAGE_NAME) .
 	@echo "Building Health Checker Lambda..."
-	env GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/health-checker/bootstrap $(WORKING_DIR)/cmd/health-checker; \
+	env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o $(WORKING_DIR)/bin/health-checker/bootstrap $(WORKING_DIR)/cmd/health-checker; \
 	cd $(WORKING_DIR)/bin/health-checker/; \
 		zip -r $(WORKING_DIR)/bin/health-checker/$(HEALTH_CHECKER_PACKAGE_NAME) .
 

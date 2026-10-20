@@ -1,5 +1,5 @@
 resource "aws_lambda_function" "service_lambda" {
-  description   = "Account Service"
+  description   = "Account Service (image_tag: ${var.image_tag})"
   function_name = "${var.environment_name}-${var.service_name}-service-lambda-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
   handler       = "bootstrap"
   runtime       = "provided.al2"
@@ -10,6 +10,8 @@ resource "aws_lambda_function" "service_lambda" {
   s3_bucket     = var.lambda_bucket
   s3_key        = "${var.service_name}/${var.service_name}-${var.image_tag}.zip"
 
+  tags = merge(local.common_tags, { ImageTag = var.image_tag })
+
   vpc_config {
     subnet_ids         = tolist(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
     security_group_ids = [data.terraform_remote_state.platform_infrastructure.outputs.upload_v2_security_group_id]
@@ -17,6 +19,7 @@ resource "aws_lambda_function" "service_lambda" {
 
   environment {
     variables = {
+      IMAGE_TAG               = var.image_tag
       ENV                     = var.environment_name
       PENNSIEVE_DOMAIN        = data.terraform_remote_state.account.outputs.domain_name,
       REGION                  = var.aws_region,
@@ -76,7 +79,7 @@ resource "aws_lambda_function" "service_lambda" {
 
 # EventBridge Handler Lambda Function
 resource "aws_lambda_function" "eventbridge_handler_lambda" {
-  description   = "Account Service EventBridge Handler"
+  description   = "Account Service EventBridge Handler (image_tag: ${var.image_tag})"
   function_name = "${var.environment_name}-${var.service_name}-eventbridge-handler-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
   handler       = "bootstrap"
   runtime       = "provided.al2"
@@ -87,6 +90,8 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
   s3_bucket     = var.lambda_bucket
   s3_key        = "${var.service_name}/${var.service_name}-eventbridge-handler-${var.image_tag}.zip"
 
+  tags = merge(local.common_tags, { ImageTag = var.image_tag })
+
   vpc_config {
     subnet_ids         = tolist(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
     security_group_ids = [data.terraform_remote_state.platform_infrastructure.outputs.upload_v2_security_group_id]
@@ -94,6 +99,7 @@ resource "aws_lambda_function" "eventbridge_handler_lambda" {
 
   environment {
     variables = {
+      IMAGE_TAG                    = var.image_tag
       ENV                          = var.environment_name
       REGION                       = var.aws_region
       COMPUTE_NODES_TABLE          = aws_dynamodb_table.compute_resource_nodes_table.name
@@ -233,6 +239,7 @@ resource "aws_cloudwatch_log_group" "storage_provisioner_log_group" {
 
 # Lambda function for checking user access to compute nodes
 resource "aws_lambda_function" "check_user_node_access" {
+  description   = "Account Service check user node access (image_tag: ${var.image_tag})"
   function_name = "${var.environment_name}-${var.service_name}-check-access-lambda-use1"
   role          = aws_iam_role.check_access_lambda_role.arn
 
@@ -247,6 +254,7 @@ resource "aws_lambda_function" "check_user_node_access" {
 
   environment {
     variables = {
+      IMAGE_TAG                     = var.image_tag
       ENV                           = var.environment_name
       NODE_ACCESS_TABLE             = aws_dynamodb_table.compute_node_access_table.name
       DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
@@ -266,6 +274,7 @@ resource "aws_lambda_function" "check_user_node_access" {
   tags = merge(
     local.common_tags,
     {
+      ImageTag         = var.image_tag
       "lambda:purpose" = "internal-access-check"
       "lambda:trigger" = "direct-invocation"
     }
@@ -282,7 +291,7 @@ resource "aws_lambda_permission" "allow_same_account_lambdas" {
 
 # Health Checker Lambda Function
 resource "aws_lambda_function" "health_checker_lambda" {
-  description   = "Account Service Health Checker"
+  description   = "Account Service Health Checker (image_tag: ${var.image_tag})"
   function_name = "${var.environment_name}-${var.service_name}-health-checker-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
   handler       = "bootstrap"
   runtime       = "provided.al2"
@@ -293,6 +302,8 @@ resource "aws_lambda_function" "health_checker_lambda" {
   s3_bucket     = var.lambda_bucket
   s3_key        = "${var.service_name}/${var.service_name}-health-checker-${var.image_tag}.zip"
 
+  tags = merge(local.common_tags, { ImageTag = var.image_tag })
+
   vpc_config {
     subnet_ids         = tolist(data.terraform_remote_state.vpc.outputs.private_subnet_ids)
     security_group_ids = [data.terraform_remote_state.platform_infrastructure.outputs.upload_v2_security_group_id]
@@ -300,6 +311,7 @@ resource "aws_lambda_function" "health_checker_lambda" {
 
   environment {
     variables = {
+      IMAGE_TAG                 = var.image_tag
       ENV                       = var.environment_name
       REGION                    = var.aws_region
       COMPUTE_NODES_TABLE       = aws_dynamodb_table.compute_resource_nodes_table.name
