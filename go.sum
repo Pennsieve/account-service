@@ -77,8 +77,8 @@ github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
-github.com/pennsieve/pennsieve-go-core v1.21.0 h1:PMMQgDnt/pj+TaJ8ouZBqYMnZ9PqBkZXah3Bai+MWnU=
-github.com/pennsieve/pennsieve-go-core v1.21.0/go.mod h1:CmufE7ldm2RcRX4+HA9M43SAzutjdgwwbh2RXkeJ4oU=
+github.com/pennsieve/pennsieve-go-core v1.22.0 h1:asghbNbCC0lPKYyV/UjGd+sYCpx7PLGzPkgU9bgyiRQ=
+github.com/pennsieve/pennsieve-go-core v1.22.0/go.mod h1:iWjy3lGvbFiq4uWM99ObGXCl+3GR42YbTzyVlGbapSw=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
 github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=

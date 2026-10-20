@@ -703,3 +703,14 @@ func ensureTableFreshState(client *dynamodb.Client, tableName string, createFunc
 
     return nil
 }
+
+// UserNodeId is a stable user node id (N:user:{uuid}) for label, so tests
+// can name users readably and still pass tenant validation.
+func UserNodeId(label string) string {
+    return "N:user:" + uuid.NewSHA1(uuid.NameSpaceOID, []byte("user:"+label)).String()
+}
+
+// OrgNodeId is a stable organization node id (N:organization:{uuid}) for label.
+func OrgNodeId(label string) string {
+    return "N:organization:" + uuid.NewSHA1(uuid.NameSpaceOID, []byte("org:"+label)).String()
+}

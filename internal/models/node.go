@@ -3,6 +3,7 @@ package models
 import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/pennsieve/pennsieve-go-core/pkg/models/tenant"
 )
 
 // CreateComputeNodeRequest is the request body for POST /compute-nodes
@@ -92,17 +93,22 @@ type NodeUpdateRequest struct {
 
 // DynamoDBNode represents the DynamoDB storage structure for compute nodes
 type DynamoDBNode struct {
-	Uuid                   string `dynamodbav:"uuid"`
-	Name                   string `dynamodbav:"name"`
-	Description            string `dynamodbav:"description"`
-	ComputeNodeGatewayUrl  string `dynamodbav:"computeNodeGatewayUrl"`
-	EfsId                  string `dynamodbav:"efsId"`
-	QueueUrl               string `dynamodbav:"queueUrl"`
-	Env                    string `dynamodbav:"environment"`
-	AccountUuid            string `dynamodbav:"accountUuid"`
-	AccountId              string `dynamodbav:"accountId"`
-	AccountType            string `dynamodbav:"accountType"`
-	CreatedAt              string `dynamodbav:"createdAt"`
+	Uuid                  string `dynamodbav:"uuid"`
+	Name                  string `dynamodbav:"name"`
+	Description           string `dynamodbav:"description"`
+	ComputeNodeGatewayUrl string `dynamodbav:"computeNodeGatewayUrl"`
+	EfsId                 string `dynamodbav:"efsId"`
+	QueueUrl              string `dynamodbav:"queueUrl"`
+	Env                   string `dynamodbav:"environment"`
+	AccountUuid           string `dynamodbav:"accountUuid"`
+	AccountId             string `dynamodbav:"accountId"`
+	AccountType           string `dynamodbav:"accountType"`
+	CreatedAt             string `dynamodbav:"createdAt"`
+	// Tenant owns, and pays for, the node: its organization, or the user who
+	// created it when it has none. It is the source of truth for both.
+	Tenant tenant.Tenant `dynamodbav:"tenant"`
+	// OrganizationId is derived from Tenant when the node is stored (see
+	// LegacyOrganizationId); read the organization with OrganizationNodeId.
 	OrganizationId         string `dynamodbav:"organizationId"`
 	UserId                 string `dynamodbav:"userId"`
 	Identifier             string `dynamodbav:"identifier"`
@@ -127,4 +133,64 @@ func (i DynamoDBNode) GetKey() map[string]types.AttributeValue {
 	}
 
 	return map[string]types.AttributeValue{"uuid": uuid}
+}
+
+// legacyUserOwnedOrganizationId is the organizationId stored for a node a
+// user owns. workflow-service and the provisioner read that value, so it is
+// written until they read the tenant instead.
+const legacyUserOwnedOrganizationId = "INDEPENDENT"
+
+// NodeTenant is the tenant of a node created for organizationId (an
+// organization node id), or for userId (a user node id) when organizationId
+// is empty.
+func NodeTenant(organizationId, userId string) (tenant.Tenant, error) {
+	if organizationId != "" {
+		return tenant.FromOrgNodeId(organizationId)
+	}
+	return tenant.FromUserNodeId(userId)
+}
+
+// LegacyOrganizationId is the organizationId stored, and passed to the
+// provisioner, for a node with tenant t.
+func LegacyOrganizationId(t tenant.Tenant) string {
+	return tenant.Match(t,
+		func(orgNodeId string) string { return orgNodeId },
+		func(string) string { return legacyUserOwnedOrganizationId },
+	)
+}
+
+// OrganizationFromLegacy reads an organizationId that may hold the legacy
+// value for a user-owned node, as callers outside this service still send:
+// the organization node id, or "" when there is none.
+func OrganizationFromLegacy(organizationId string) string {
+	if organizationId == legacyUserOwnedOrganizationId {
+		return ""
+	}
+	return organizationId
+}
+
+// WithTenant returns n with its tenant set from organizationId and userId
+// when it predates tenants.
+func (n DynamoDBNode) WithTenant() (DynamoDBNode, error) {
+	if !n.Tenant.IsZero() {
+		return n, nil
+	}
+	t, err := NodeTenant(OrganizationFromLegacy(n.OrganizationId), n.UserId)
+	if err != nil {
+		return n, err
+	}
+	n.Tenant = t
+	return n, nil
+}
+
+// OrganizationNodeId is the node's organization, or "" when a user owns it
+// (or, for a record without a tenant, when it has none).
+func (n DynamoDBNode) OrganizationNodeId() string {
+	if n.Tenant.IsZero() {
+		return OrganizationFromLegacy(n.OrganizationId)
+	}
+	return tenant.Match(n.Tenant,
+		func(orgNodeId string) string { return orgNodeId },
+		func(string) string { return "" },
+	)
 }

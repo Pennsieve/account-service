@@ -198,7 +198,7 @@ func TestDeleteAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Create account owned by a different user
-	differentUserId := "different-user-" + testId
+	differentUserId := test.UserNodeId("different-user-" + testId)
 	account, enablement := createTestAccountWithEnablement(ctx, accountStore, workspaceStore, differentUserId, workspaceId, testId, true)
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)

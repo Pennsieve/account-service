@@ -96,7 +96,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		((store_dynamodb.Account{}) != account && account.UserId == userId)
 
 	if !canDelete {
-		canDelete = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, computeNode.OrganizationId, computeNode.AccountUuid)
+		canDelete = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, computeNode.OrganizationNodeId(), computeNode.AccountUuid)
 	}
 
 	if !canDelete {

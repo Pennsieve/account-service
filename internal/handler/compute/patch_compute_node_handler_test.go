@@ -227,7 +227,7 @@ func TestPatchComputeNodeHandler_Forbidden_NotOwner(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create request with different user (not the owner)
-	differentUser := "different-user-" + testId
+	differentUser := test.UserNodeId("different-user-" + testId)
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"id": testNode.Uuid,

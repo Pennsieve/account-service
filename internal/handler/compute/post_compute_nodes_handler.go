@@ -234,11 +234,16 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	userIntId := claims.UserClaim.Id
 	userId := claims.UserClaim.NodeId
 
-	// Use organizationId from request body - use "INDEPENDENT" for organization-independent nodes
-	// to work around DynamoDB GSI constraint that doesn't allow empty strings
+	// The organization named in the request owns the node, or the caller
+	// when it names none (an organization-independent node).
 	organizationId := req.OrganizationId
-	if organizationId == "" {
-		organizationId = "INDEPENDENT"
+	nodeTenant, err := models.NodeTenant(organizationId, userId)
+	if err != nil {
+		log.Printf("Invalid tenant for new node (organization %q, user %q): %v", organizationId, userId, err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrInvalidOrganizationIdFormat),
+		}, nil
 	}
 
 	// Get the account UUID from the request
@@ -317,8 +322,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
-	// If organizationId is provided and not INDEPENDENT, check workspace enablement and permissions
-	if organizationId != "" && organizationId != "INDEPENDENT" {
+	// If organizationId is provided, check workspace enablement and permissions
+	if organizationId != "" {
 		// Validate organization ID format
 		if !strings.HasPrefix(organizationId, "N:organization:") {
 			log.Printf("Invalid organization ID format: %s (expected format: N:organization:uuid)", organizationId)
@@ -455,7 +460,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			AccountId:             account.AccountId,
 			AccountType:           account.AccountType,
 			CreatedAt:             time.Now().UTC().String(),
-			OrganizationId:        organizationId,
+			Tenant:                nodeTenant,
 			UserId:                userId,
 			Identifier:            nodeIdentifier,
 			WorkflowManagerTag:    req.ProvisionerImageTag,
@@ -502,7 +507,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		accountTypeKey := "ACCOUNT_TYPE"
 		accountTypeValue := account.AccountType
 		organizationIdKey := "ORG_ID"
-		organizationIdValue := organizationId
+		organizationIdValue := models.LegacyOrganizationId(nodeTenant)
 		userIdKey := "USER_ID"
 		userIdValue := userId
 		actionKey := "ACTION"
@@ -697,11 +702,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// In test environment, return the created node details
 	if envValue == "DOCKER" || envValue == "TEST" {
-		// Convert INDEPENDENT back to empty string for API response consistency
 		responseOrganizationId := organizationId
-		if organizationId == "INDEPENDENT" {
-			responseOrganizationId = ""
-		}
 
 		createdNode := models.Node{
 			Uuid:        nodeUuid,

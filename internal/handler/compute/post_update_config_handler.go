@@ -143,7 +143,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		((store_dynamodb.Account{}) != account && account.UserId == userId)
 
 	if !canUpdate {
-		canUpdate = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, computeNode.OrganizationId, computeNode.AccountUuid)
+		canUpdate = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, computeNode.OrganizationNodeId(), computeNode.AccountUuid)
 	}
 
 	if !canUpdate {

@@ -101,7 +101,7 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "user-" + testId,
+		UserId:      test.UserNodeId("user-" + testId),
 	}
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
@@ -237,7 +237,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPrivateAccount(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "account-owner-" + testId,
+		UserId:      test.UserNodeId("account-owner-" + testId),
 	}
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
@@ -283,7 +283,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPrivateAccount(t *testing.T) {
 
 	// Test case 2: Non-account owner cannot create nodes (private account)
 	t.Run("RandomUser_CannotCreateNode", func(t *testing.T) {
-		randomUserId := "random-user-" + testId
+		randomUserId := test.UserNodeId("random-user-" + testId)
 		request := events.APIGatewayV2HTTPRequest{
 			Body: string(requestBody),
 			RequestContext: events.APIGatewayV2HTTPRequestContext{
@@ -309,7 +309,7 @@ func TestPostComputeNodesHandler_WorkspaceNotEnabled(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "account-owner-" + testId,
+		UserId:      test.UserNodeId("account-owner-" + testId),
 	}
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
@@ -352,7 +352,7 @@ func TestPostComputeNodesHandler_MissingEnvironmentVariables(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "user-" + testId,
+		UserId:      test.UserNodeId("user-" + testId),
 	}
 	accountStore, _, _ := setupPostComputeNodesHandlerTest(t)
 	err := accountStore.Insert(ctx, testAccount)
@@ -371,7 +371,7 @@ func TestPostComputeNodesHandler_MissingEnvironmentVariables(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(requestBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("user-" + testId, "123"),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), "123"),
 		},
 	}
 
@@ -410,7 +410,7 @@ func TestPostComputeNodesHandler_DifferentAccountTypes(t *testing.T) {
 				Uuid:        uuid.New().String(),
 				AccountId:   "test-account-" + testId + "-" + tc.accountType,
 				AccountType: tc.accountType,
-				UserId:      "user-" + testId,
+				UserId:      test.UserNodeId("user-" + testId),
 			}
 			err := accountStore.Insert(ctx, testAccount)
 			require.NoError(t, err)
@@ -453,7 +453,7 @@ func TestPostComputeNodesHandler_NodeFieldValidation(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "user-" + testId,
+		UserId:      test.UserNodeId("user-" + testId),
 	}
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
@@ -533,7 +533,7 @@ func TestPostComputeNodesHandler_InitialPermissions(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "user-" + testId,
+		UserId:      test.UserNodeId("user-" + testId),
 	}
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
@@ -583,7 +583,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		Uuid:        uuid.New().String(),
 		AccountId:   "test-account-" + testId,
 		AccountType: "aws",
-		UserId:      "account-owner-" + testId, // Different from test user
+		UserId:      test.UserNodeId("account-owner-" + testId), // Different from test user
 	}
 	err := accountStore.Insert(ctx, testAccount)
 	require.NoError(t, err)
@@ -636,7 +636,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 	// Note: This test will skip PostgreSQL checking when POSTGRES_URL is not set
 	// In real environment, the PostgreSQL admin check would verify workspace admin status
 	t.Run("WorkspaceAdmin_CanCreateNode", func(t *testing.T) {
-		adminUserId := "admin-user-" + testId
+		adminUserId := test.UserNodeId("admin-user-" + testId)
 		request := events.APIGatewayV2HTTPRequest{
 			Body: string(requestBody),
 			RequestContext: events.APIGatewayV2HTTPRequestContext{
@@ -690,7 +690,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 			INSERT INTO pennsieve.organizations (id, name, slug, encryption_key_id, node_id)
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (id) DO UPDATE SET node_id = $5
-		`, orgIdInt, "test-org-"+testId, "test-org-"+testId, "test-key", orgId)
+		`, orgIdInt, test.OrgNodeId("test-org-" + testId), test.OrgNodeId("test-org-" + testId), "test-key", orgId)
 		if err != nil {
 			t.Logf("Warning: Could not create organization: %v", err)
 		}
@@ -760,7 +760,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 
 	// Test case 4: Non-admin user when PostgreSQL is not available
 	t.Run("NonAdmin_CannotCreateNode_NoPostgreSQL", func(t *testing.T) {
-		nonAdminUserId := "non-admin-user-" + testId
+		nonAdminUserId := test.UserNodeId("non-admin-user-" + testId)
 		request := events.APIGatewayV2HTTPRequest{
 			Body: string(requestBody),
 			RequestContext: events.APIGatewayV2HTTPRequestContext{

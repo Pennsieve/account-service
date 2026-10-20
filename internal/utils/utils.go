@@ -113,7 +113,7 @@ func GetContainer(ctx context.Context, awsConfig aws.Config) (*container.Contain
 // Returns an API Gateway response for any validation errors, or nil if validation passes.
 func ValidateOrganizationMembership(ctx context.Context, cfg aws.Config, userId, organizationId, handlerName string) *events.APIGatewayV2HTTPResponse {
     if organizationId == "" {
-        return nil // No validation needed for INDEPENDENT nodes
+        return nil // No validation needed for organization-independent nodes
     }
 
     // Skip validation in test environments where the authorizer Lambda doesn't exist

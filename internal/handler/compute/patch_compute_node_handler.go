@@ -111,7 +111,7 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// Only the owner or org admin (if IsPublic) can update the node
 	canUpdate := node.UserId == userId
 	if !canUpdate {
-		canUpdate = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
+		canUpdate = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationNodeId(), node.AccountUuid)
 	}
 	if !canUpdate {
 		return events.APIGatewayV2HTTPResponse{
@@ -167,11 +167,7 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
-	// Convert INDEPENDENT back to empty string for API response consistency
-	responseOrganizationId := node.OrganizationId
-	if node.OrganizationId == "INDEPENDENT" {
-		responseOrganizationId = ""
-	}
+	responseOrganizationId := node.OrganizationNodeId()
 
 	// Return updated node
 	m, err := json.Marshal(models.Node{

@@ -41,7 +41,7 @@ func TestDeleteAccountHandler_Success(t *testing.T) {
 	ctx := context.Background()
 
 	accountUuid := "del-account-" + testId
-	userId := "del-user-" + testId
+	userId := test.UserNodeId("del-user-" + testId)
 
 	testAccount := store_dynamodb.Account{
 		Uuid:        accountUuid,
@@ -84,7 +84,7 @@ func TestDeleteAccountHandler_MissingId(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("user-"+testId, ""),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), ""),
 		},
 	}
 
@@ -100,7 +100,7 @@ func TestDeleteAccountHandler_NotFound(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{"id": "nonexistent-" + testId},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer("user-"+testId, ""),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), ""),
 		},
 	}
 
@@ -114,7 +114,7 @@ func TestDeleteAccountHandler_Forbidden(t *testing.T) {
 	ctx := context.Background()
 
 	accountUuid := "del-forbidden-" + testId
-	ownerUserId := "owner-" + testId
+	ownerUserId := test.UserNodeId("owner-" + testId)
 	otherUserId := "other-" + testId
 
 	testAccount := store_dynamodb.Account{
@@ -145,7 +145,7 @@ func TestDeleteAccountHandler_ConflictActiveNodes(t *testing.T) {
 	ctx := context.Background()
 
 	accountUuid := "del-conflict-" + testId
-	userId := "del-conflict-user-" + testId
+	userId := test.UserNodeId("del-conflict-user-" + testId)
 
 	testAccount := store_dynamodb.Account{
 		Uuid:        accountUuid,
@@ -161,7 +161,7 @@ func TestDeleteAccountHandler_ConflictActiveNodes(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           "node-" + testId,
 		AccountUuid:    accountUuid,
-		OrganizationId: "N:organization:conflict-" + testId,
+		OrganizationId: test.OrgNodeId("conflict-" + testId),
 		Status:         "Enabled",
 	}
 	err = nodeStore.Put(ctx, testNode)
@@ -190,7 +190,7 @@ func TestDeleteAccountHandler_ForceDeleteWithNodes(t *testing.T) {
 	ctx := context.Background()
 
 	accountUuid := "del-force-" + testId
-	userId := "del-force-user-" + testId
+	userId := test.UserNodeId("del-force-user-" + testId)
 
 	testAccount := store_dynamodb.Account{
 		Uuid:        accountUuid,
@@ -206,7 +206,7 @@ func TestDeleteAccountHandler_ForceDeleteWithNodes(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           "node-force-" + testId,
 		AccountUuid:    accountUuid,
-		OrganizationId: "N:organization:force-" + testId,
+		OrganizationId: test.OrgNodeId("force-" + testId),
 		Status:         "Enabled",
 	}
 	err = nodeStore.Put(ctx, testNode)
@@ -234,7 +234,7 @@ func TestDeleteAccountHandler_DeletesWorkspaceEnablements(t *testing.T) {
 	ctx := context.Background()
 
 	accountUuid := "del-ws-" + testId
-	userId := "del-ws-user-" + testId
+	userId := test.UserNodeId("del-ws-user-" + testId)
 
 	testAccount := store_dynamodb.Account{
 		Uuid:        accountUuid,

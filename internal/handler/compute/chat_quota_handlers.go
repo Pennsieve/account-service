@@ -119,7 +119,7 @@ func initQuotaContext(ctx context.Context, request events.APIGatewayV2HTTPReques
 	// to use, never anyone else's.
 	isOwner := node.UserId == userId
 	if !isOwner {
-		isOwner = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
+		isOwner = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationNodeId(), node.AccountUuid)
 	}
 
 	switch mode {
@@ -145,7 +145,7 @@ func initQuotaContext(ctx context.Context, request events.APIGatewayV2HTTPReques
 				return nil, &resp
 			}
 			lambdaClient := lambda.NewFromConfig(cfg)
-			if errResp := checkNodeAccess(ctx, lambdaClient, dynamoDBClient, handlerName, userId, nodeUuid, node.OrganizationId); errResp != nil {
+			if errResp := checkNodeAccess(ctx, lambdaClient, dynamoDBClient, handlerName, userId, nodeUuid, node.OrganizationNodeId()); errResp != nil {
 				return nil, errResp
 			}
 		}
