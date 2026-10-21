@@ -6,8 +6,8 @@
 // first without -apply: it lists every record and any whose ids can't name a
 // tenant, which the service would refuse to store again.
 //
-//	go run ./scripts/backfill-node-tenant -table <env>-compute-nodes-table-use1
-//	go run ./scripts/backfill-node-tenant -table <env>-compute-nodes-table-use1 -apply
+//	go run ./scripts/backfill-node-tenant -table <env>-compute-resource-nodes-table-use1
+//	go run ./scripts/backfill-node-tenant -table <env>-compute-resource-nodes-table-use1 -apply
 package main
 
 import (
