@@ -3,6 +3,7 @@ package store_dynamodb
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -50,7 +51,7 @@ func (r *NodeDatabaseStore) GetById(ctx context.Context, uuid string) (models.Dy
 		return node, fmt.Errorf("error unmarshaling node: %w", err)
 	}
 
-	return node, nil
+	return withTenant(node), nil
 }
 
 func (r *NodeDatabaseStore) Get(ctx context.Context, filter string) ([]models.DynamoDBNode, error) {
@@ -77,10 +78,18 @@ func (r *NodeDatabaseStore) Get(ctx context.Context, filter string) ([]models.Dy
 		return nodes, fmt.Errorf("error unmarshaling nodes: %w", err)
 	}
 
-	return nodes, nil
+	return withTenants(nodes), nil
 }
 
+// Put stores node, with organizationId derived from its tenant. A node read
+// before it had a tenant gets one from its organizationId and userId.
 func (r *NodeDatabaseStore) Put(ctx context.Context, node models.DynamoDBNode) error {
+	node, err := node.WithTenant()
+	if err != nil {
+		return fmt.Errorf("error resolving tenant of node %s: %w", node.Uuid, err)
+	}
+	node.OrganizationId = models.LegacyOrganizationId(node.Tenant)
+
 	item, err := attributevalue.MarshalMap(node)
 	if err != nil {
 		return fmt.Errorf("error marshaling node: %w", err)
@@ -122,7 +131,7 @@ func (r *NodeDatabaseStore) GetByAccount(ctx context.Context, accountUuid string
 		return nodes, fmt.Errorf("error unmarshaling nodes: %w", err)
 	}
 
-	return nodes, nil
+	return withTenants(nodes), nil
 }
 
 func (r *NodeDatabaseStore) UpdateStatus(ctx context.Context, uuid string, status string) error {
@@ -196,7 +205,7 @@ func (r *NodeDatabaseStore) GetAllEnabled(ctx context.Context) ([]models.DynamoD
 		lastKey = response.LastEvaluatedKey
 	}
 
-	return nodes, nil
+	return withTenants(nodes), nil
 }
 
 func (r *NodeDatabaseStore) UpdateHealthStatus(ctx context.Context, uuid string, healthStatus string, lastHealthCheck string) error {
@@ -223,4 +232,22 @@ func (r *NodeDatabaseStore) UpdateHealthStatus(ctx context.Context, uuid string,
 	}
 
 	return nil
+}
+// withTenant sets the tenant of a node stored before nodes had one. A node
+// whose organizationId and userId don't name a tenant is returned as read,
+// so one bad record doesn't hide the rest of a listing; storing it fails.
+func withTenant(node models.DynamoDBNode) models.DynamoDBNode {
+	withT, err := node.WithTenant()
+	if err != nil {
+		log.Printf("compute node %s has no tenant: %v", node.Uuid, err)
+		return node
+	}
+	return withT
+}
+
+func withTenants(nodes []models.DynamoDBNode) []models.DynamoDBNode {
+	for i := range nodes {
+		nodes[i] = withTenant(nodes[i])
+	}
+	return nodes
 }

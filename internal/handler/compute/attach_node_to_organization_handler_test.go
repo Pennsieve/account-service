@@ -46,7 +46,7 @@ func TestAttachNodeToOrganizationHandler_Success(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(),
 		OrganizationId: "INDEPENDENT", // Organization-independent node
 	}
@@ -66,7 +66,7 @@ func TestAttachNodeToOrganizationHandler_Success(t *testing.T) {
 	err = nodeAccessStore.GrantAccess(ctx, ownerAccess)
 	require.NoError(t, err)
 
-	targetOrganizationId := "org-" + testId
+	targetOrganizationId := test.OrgNodeId("org-" + testId)
 
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
@@ -104,7 +104,7 @@ func TestAttachNodeToOrganizationHandler_ValidationErrors(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(),
 		OrganizationId: "INDEPENDENT",
 	}
@@ -135,7 +135,7 @@ func TestAttachNodeToOrganizationHandler_ValidationErrors(t *testing.T) {
 		{
 			name:           "MissingNodeId",
 			nodeId:         "",
-			organizationId: "org-" + testId,
+			organizationId: test.OrgNodeId("org-" + testId),
 			userId:         testNode.UserId,
 			expectedCode:   400,
 			expectedError:  "missing node uuid",
@@ -151,7 +151,7 @@ func TestAttachNodeToOrganizationHandler_ValidationErrors(t *testing.T) {
 		{
 			name:           "NodeNotFound",
 			nodeId:         uuid.New().String(),
-			organizationId: "org-" + testId,
+			organizationId: test.OrgNodeId("org-" + testId),
 			userId:         testNode.UserId,
 			expectedCode:   403,
 			expectedError:  "forbidden",
@@ -159,7 +159,7 @@ func TestAttachNodeToOrganizationHandler_ValidationErrors(t *testing.T) {
 		{
 			name:           "NotNodeOwner",
 			nodeId:         testNode.Uuid,
-			organizationId: "org-" + testId,
+			organizationId: test.OrgNodeId("org-" + testId),
 			userId:         "different-user",
 			expectedCode:   403,
 			expectedError:  "forbidden",
@@ -200,11 +200,11 @@ func TestAttachNodeToOrganizationHandler_NodeAlreadyAttached(t *testing.T) {
 	testId := test.GenerateTestId()
 
 	// Create a node that's already attached to an organization
-	existingOrganizationId := "existing-org-" + testId
+	existingOrganizationId := test.OrgNodeId("existing-org-" + testId)
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(),
 		OrganizationId: existingOrganizationId, // Already attached
 	}
@@ -225,7 +225,7 @@ func TestAttachNodeToOrganizationHandler_NodeAlreadyAttached(t *testing.T) {
 	err = nodeAccessStore.GrantAccess(ctx, ownerAccess)
 	require.NoError(t, err)
 
-	targetOrganizationId := "new-org-" + testId
+	targetOrganizationId := test.OrgNodeId("new-org-" + testId)
 
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
@@ -274,10 +274,10 @@ func TestAttachNodeToOrganizationHandler_MissingEnvironmentVariables(t *testing.
 					"id": uuid.New().String(),
 				},
 				QueryStringParameters: map[string]string{
-					"organization_id": "org-" + testId,
+					"organization_id": test.OrgNodeId("org-" + testId),
 				},
 				RequestContext: events.APIGatewayV2HTTPRequestContext{
-					Authorizer: test.CreateTestAuthorizer("user-"+testId, "org-"+testId),
+					Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), test.OrgNodeId("org-" + testId)),
 				},
 			}
 
@@ -298,7 +298,7 @@ func TestAttachNodeToOrganizationHandler_PermissionService_Integration(t *testin
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(),
 		OrganizationId: "INDEPENDENT",
 	}
@@ -318,7 +318,7 @@ func TestAttachNodeToOrganizationHandler_PermissionService_Integration(t *testin
 	err = nodeAccessStore.GrantAccess(ctx, ownerAccess)
 	require.NoError(t, err)
 
-	targetOrganizationId := "org-" + testId
+	targetOrganizationId := test.OrgNodeId("org-" + testId)
 
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{

@@ -1,6 +1,7 @@
 package compute
 
 import (
+	goerrors "errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -146,7 +147,7 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	// Only the owner or org admin (if IsPublic) can change access scope
 	canManage := node.UserId == userId
 	if !canManage {
-		canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
+		canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationNodeId(), node.AccountUuid)
 	}
 	if !canManage {
 		return events.APIGatewayV2HTTPResponse{
@@ -164,7 +165,13 @@ func SetNodeAccessScopeHandler(ctx context.Context, request events.APIGatewayV2H
 	}
 
 	// Update access scope using the permission service to ensure owner access is preserved
-	err = permissionService.SetNodePermissions(ctx, nodeUuid, accessRequest, node.UserId, node.OrganizationId, userId)
+	err = permissionService.SetNodePermissions(ctx, nodeUuid, accessRequest, node.UserId, node.OrganizationNodeId(), userId)
+	if goerrors.Is(err, models.ErrOrganizationIndependentNodeCannotBeShared) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
+		}, nil
+	}
 	if err != nil {
 		log.Printf("error updating access scope: %v", err)
 		return events.APIGatewayV2HTTPResponse{
@@ -400,7 +407,7 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	// Only the owner or org admin (if IsPublic) can grant access
 	canManage := node.UserId == userId
 	if !canManage {
-		canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
+		canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationNodeId(), node.AccountUuid)
 	}
 	if !canManage {
 		return events.APIGatewayV2HTTPResponse{
@@ -410,10 +417,10 @@ func grantEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPReque
 	}
 
 	// Get organization ID from the node. We require the node to be attached to a workspace before sharing.
-	organizationId := node.OrganizationId
+	organizationId := node.OrganizationNodeId()
 
-	// Reject sharing for INDEPENDENT nodes
-	if organizationId == "INDEPENDENT" {
+	// Reject sharing for organization-independent (user-owned) nodes
+	if organizationId == "" {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOrganizationIndependentNodeCannotBeShared),
@@ -606,7 +613,7 @@ func revokeEntityAccess(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	// Only the owner or org admin (if IsPublic) can revoke access
 	canManage := node.UserId == userId
 	if !canManage {
-		canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
+		canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationNodeId(), node.AccountUuid)
 	}
 	if !canManage {
 		return events.APIGatewayV2HTTPResponse{

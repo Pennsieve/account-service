@@ -176,7 +176,7 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 					log.Printf("Error fetching node %s: %v", nodeUuid, err)
 					continue // Skip nodes that can't be fetched
 				}
-				if node.Uuid != "" && node.OrganizationId == organizationId { // Only include nodes from the specified organization
+				if node.Uuid != "" && node.OrganizationNodeId() == organizationId { // Only include nodes from the specified organization
 					dynamoNodes = append(dynamoNodes, node)
 				}
 			}

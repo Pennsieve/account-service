@@ -77,10 +77,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 	}
 
 	// Use the node's own organization for access checks
-	organizationId := ""
-	if node.OrganizationId != "" && node.OrganizationId != "INDEPENDENT" {
-		organizationId = node.OrganizationId
-	}
+	organizationId := node.OrganizationNodeId()
 	
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetNodeStore(nodeStore)

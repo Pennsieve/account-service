@@ -23,7 +23,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/lib/pq v1.10.9
-	github.com/pennsieve/pennsieve-go-core v1.21.0
+	github.com/pennsieve/pennsieve-go-core v1.22.0
 	github.com/stretchr/testify v1.12.1
 )
 

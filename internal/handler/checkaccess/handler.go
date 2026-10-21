@@ -43,6 +43,10 @@ type CheckUserNodeAccessResponse struct {
 // This handler is designed for internal service-to-service communication only.
 // Authentication is handled through IAM roles and Lambda invocation permissions.
 func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccessRequest) (CheckUserNodeAccessResponse, error) {
+	// Callers pass the node's stored organizationId, which names no
+	// organization for a user-owned node.
+	request.OrganizationId = models.OrganizationFromLegacy(request.OrganizationId)
+
 	log.Printf("CheckUserNodeAccessHandler: Checking access for user %s to node %s in org %s",
 		request.UserNodeId, request.NodeUuid, request.OrganizationId)
 

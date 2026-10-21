@@ -39,11 +39,7 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			accessScope = accessScopeMap[c.Uuid]
 		}
 
-		// Convert INDEPENDENT back to empty string for API response consistency
-		responseOrganizationId := c.OrganizationId
-		if c.OrganizationId == "INDEPENDENT" {
-			responseOrganizationId = ""
-		}
+		responseOrganizationId := c.OrganizationNodeId()
 
 		nodes = append(nodes, models.Node{
 			Uuid:        c.Uuid,
@@ -83,11 +79,7 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 	nodes := []models.Node{}
 
 	for _, c := range dynamoNodes {
-		// Convert INDEPENDENT back to empty string for API response consistency
-		responseOrganizationId := c.OrganizationId
-		if c.OrganizationId == "INDEPENDENT" {
-			responseOrganizationId = ""
-		}
+		responseOrganizationId := c.OrganizationNodeId()
 		
 		nodes = append(nodes, models.Node{
 			Uuid:        c.Uuid,

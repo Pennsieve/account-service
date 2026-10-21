@@ -468,7 +468,7 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 				EntityRawId:    node.UserId,
 				NodeUuid:       nodeUuid,
 				AccessType:     models.AccessTypeOwner,
-				OrganizationId: node.OrganizationId,
+				OrganizationId: node.OrganizationNodeId(),
 				GrantedBy:      node.UserId, // Self-granted for auto-healing
 			}
 			
@@ -483,7 +483,7 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 				// Successfully restored owner access - update response
 				response.Owner = node.UserId
 				if response.OrganizationId == "" {
-					response.OrganizationId = node.OrganizationId
+					response.OrganizationId = node.OrganizationNodeId()
 				}
 			}
 		}

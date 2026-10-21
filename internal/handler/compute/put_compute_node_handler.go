@@ -97,10 +97,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	organizationId := ""
-	if computeNode.OrganizationId != "" && computeNode.OrganizationId != "INDEPENDENT" {
-		organizationId = computeNode.OrganizationId
-	}
+	organizationId := computeNode.OrganizationNodeId()
 
 	// Load account (needed for permission check and RoleName for Fargate task)
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")

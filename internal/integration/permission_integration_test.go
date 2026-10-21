@@ -165,8 +165,8 @@ func TestPermissionWorkflow_SharedAccessManagement(t *testing.T) {
     ctx := context.Background()
     // Use unique IDs to avoid conflicts with parallel tests
     nodeUuid := "shared-mgmt-node-" + testId
-    ownerId := "owner-" + testId
-    organizationId := "org-" + testId
+    ownerId := test.UserNodeId("owner-" + testId)
+    organizationId := test.OrgNodeId("org-" + testId)
     grantedBy := ownerId
 
     // Step 1: Start with shared access to some users
@@ -252,8 +252,8 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
 
     ctx := context.Background()
     // Use unique IDs to avoid conflicts with parallel tests
-    userId := "test-user-" + testId
-    organizationId := "org-" + testId
+    userId := test.UserNodeId("test-user-" + testId)
+    organizationId := test.OrgNodeId("org-" + testId)
 
     // Create multiple nodes with different access patterns
     nodeConfigs := []struct {
@@ -263,13 +263,13 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
         sharedUsers []string
     }{
         {
-            nodeUuid:    "user-owned-node-" + testId,
+            nodeUuid:    test.UserNodeId("user-owned-node-" + testId),
             ownerId:     userId,
             accessScope: models.AccessScopePrivate,
         },
         {
-            nodeUuid:    "user-shared-node-" + testId,
-            ownerId:     "other-owner-" + testId,
+            nodeUuid:    test.UserNodeId("user-shared-node-" + testId),
+            ownerId:     test.UserNodeId("other-owner-" + testId),
             accessScope: models.AccessScopeShared,
             sharedUsers: []string{userId},
         },
@@ -344,8 +344,8 @@ func TestPermissionWorkflow_AccessibleNodesQuery(t *testing.T) {
     // Should NOT have access to:
     // 5. no-access-node (private, not owned)
 
-    assert.True(t, nodeMap["user-owned-node-" + testId], "Should have access to owned node")
-    assert.True(t, nodeMap["user-shared-node-" + testId], "Should have access to shared node")
+    assert.True(t, nodeMap[test.UserNodeId("user-owned-node-" + testId)], "Should have access to owned node")
+    assert.True(t, nodeMap[test.UserNodeId("user-shared-node-" + testId)], "Should have access to shared node")
     assert.True(t, nodeMap["workspace-node-1-" + testId], "Should have access to workspace node 1")
     assert.True(t, nodeMap["workspace-node-2-" + testId], "Should have access to workspace node 2")
     assert.False(t, nodeMap["no-access-node-" + testId], "Should NOT have access to private node")
@@ -373,8 +373,8 @@ func TestPermissionWorkflow_NodeDeletion(t *testing.T) {
 
     ctx := context.Background()
     nodeUuid := "integration-test-node-deletion-" + testId
-    ownerId := "owner-delete-test-" + testId
-    organizationId := "org-delete-test-" + testId
+    ownerId := test.UserNodeId("owner-delete-test-" + testId)
+    organizationId := test.OrgNodeId("org-delete-test-" + testId)
 
     // Create node with multiple access entries
     req := models.NodeAccessRequest{
@@ -415,8 +415,8 @@ func TestPermissionWorkflow_BatchOperations(t *testing.T) {
 
     ctx := context.Background()
     nodeUuid := "integration-test-node-batch-" + testId
-    ownerId := "owner-batch-test-" + testId
-    organizationId := "org-batch-test-" + testId
+    ownerId := test.UserNodeId("owner-batch-test-" + testId)
+    organizationId := test.OrgNodeId("org-batch-test-" + testId)
 
     // Create multiple access entries in batch
     accesses := []models.NodeAccess{
@@ -511,8 +511,8 @@ func TestPermissionWorkflow_AccessScopeUpdates(t *testing.T) {
 
     ctx := context.Background()
     nodeUuid := "integration-test-scope-updates-" + testId
-    organizationId := "org-scope-test-" + testId
-    grantedBy := "admin-user-" + testId
+    organizationId := test.OrgNodeId("org-scope-test-" + testId)
+    grantedBy := test.UserNodeId("admin-user-" + testId)
 
     // Test direct access scope updates (bypassing permission service)
 

@@ -317,7 +317,7 @@ func TestPutComputeNodeHandler_PermissionChecks(t *testing.T) {
             Uuid:        uuid.New().String(),
             AccountId:   "test-account-" + testId,
             AccountType: "aws",
-            UserId:      "account-owner-" + testId,
+            UserId:      test.UserNodeId("account-owner-" + testId),
         }
         err := accountStore.Insert(ctx, testAccount)
         require.NoError(t, err)
@@ -325,7 +325,7 @@ func TestPutComputeNodeHandler_PermissionChecks(t *testing.T) {
         // Create node owned by different user but using the test account
         testNode := createTestNode(testId + "_account")
         testNode.AccountUuid = testAccount.Uuid
-        testNode.UserId = "different-user-" + testId // Different from account owner
+        testNode.UserId = test.UserNodeId("different-user-" + testId) // Different from account owner
 
         err = nodeStore.Put(ctx, testNode)
         require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestPutComputeNodeHandler_PermissionChecks(t *testing.T) {
             Uuid:        uuid.New().String(),
             AccountId:   "test-account-" + testId + "_forbidden",
             AccountType: "aws",
-            UserId:      "account-owner-" + testId + "_forbidden",
+            UserId:      test.UserNodeId("account-owner-" + testId) + "_forbidden",
         }
         err := accountStore.Insert(ctx, testAccount)
         require.NoError(t, err)
@@ -367,7 +367,7 @@ func TestPutComputeNodeHandler_PermissionChecks(t *testing.T) {
         require.NoError(t, err)
 
         // Request from random user (neither node owner nor account owner)
-        randomUserId := "random-user-" + testId
+        randomUserId := test.UserNodeId("random-user-" + testId)
         request := events.APIGatewayV2HTTPRequest{
             PathParameters: map[string]string{
                 "id": testNode.Uuid,
@@ -392,7 +392,7 @@ func TestPutComputeNodeHandler_PermissionChecks(t *testing.T) {
         defer func() { _ = os.Setenv("ACCOUNTS_TABLE", originalValue) }()
 
         testNode := createTestNode(testId + "_no_table")
-        testNode.UserId = "different-user-" + testId // Different user to trigger account check
+        testNode.UserId = test.UserNodeId("different-user-" + testId) // Different user to trigger account check
 
         err := nodeStore.Put(ctx, testNode)
         require.NoError(t, err)
@@ -416,7 +416,7 @@ func TestPutComputeNodeHandler_PermissionChecks(t *testing.T) {
     // Test case 5: Account not found
     t.Run("AccountNotFound", func(t *testing.T) {
         testNode := createTestNode(testId + "_no_account")
-        testNode.UserId = "different-user-" + testId
+        testNode.UserId = test.UserNodeId("different-user-" + testId)
         testNode.AccountUuid = "non-existent-account-" + uuid.New().String()
 
         err := nodeStore.Put(ctx, testNode)

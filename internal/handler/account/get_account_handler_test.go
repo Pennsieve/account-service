@@ -184,8 +184,8 @@ func TestGetAccountHandler_Forbidden(t *testing.T) {
 
 	// Create test account owned by one user
 	accountUuid := "account-uuid-" + testId
-	ownerUserId := "owner-user-" + testId
-	differentUserId := "different-user-" + testId
+	ownerUserId := test.UserNodeId("owner-user-" + testId)
+	differentUserId := test.UserNodeId("different-user-" + testId)
 
 	testAccount := store_dynamodb.Account{
 		Uuid:        accountUuid,

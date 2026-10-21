@@ -74,8 +74,8 @@ func createTestNode(testId string) models.DynamoDBNode {
 		AccountId:             "123456789012",
 		AccountType:           "aws",
 		CreatedAt:             "2024-01-25T10:00:00Z",
-		OrganizationId:        "org-" + testId,
-		UserId:                "user-" + testId,
+		OrganizationId:        test.OrgNodeId("org-" + testId),
+		UserId:                test.UserNodeId("user-" + testId),
 		Identifier:            "node-identifier-" + testId,
 		WorkflowManagerTag:    "v1.0.0",
 		Status:                "Enabled",
@@ -288,7 +288,7 @@ func TestGetComputeNodeHandler_NoAccess(t *testing.T) {
 	// NOTE: We deliberately don't grant access to the user
 
 	// Create request with a different user who doesn't have access
-	unauthorizedUserId := "unauthorized-user-" + testId
+	unauthorizedUserId := test.UserNodeId("unauthorized-user-" + testId)
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{
 			"id": testNode.Uuid,

@@ -12,6 +12,7 @@ import (
     "github.com/google/uuid"
     "github.com/pennsieve/account-service/internal/models"
     "github.com/pennsieve/account-service/internal/store_dynamodb"
+    "github.com/pennsieve/pennsieve-go-core/pkg/models/tenant"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
@@ -121,8 +122,8 @@ func TestNodeStore_Put(t *testing.T) {
         AccountId:             "123456789012",
         AccountType:           "aws",
         CreatedAt:             "2024-01-25T10:00:00Z",
-        OrganizationId:        "org-123",
-        UserId:                "user-456",
+        OrganizationId:        test.OrgNodeId("org-123"),
+        UserId:                test.UserNodeId("user-456"),
         Identifier:            "node-identifier-789",
         WorkflowManagerTag:    "v1.0.0",
     }
@@ -165,8 +166,8 @@ func TestNodeStore_GetById_NotFound(t *testing.T) {
 func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
     store := setupNodeStoreTest(t)
     testId := test.GenerateTestId()
-    orgId := "org-123-" + testId
-    otherOrgId := "org-456-" + testId
+    orgId := test.OrgNodeId("org-123-" + testId)
+    otherOrgId := test.OrgNodeId("org-456-" + testId)
 
     // Insert nodes for the test organization
     node1 := models.DynamoDBNode{
@@ -174,7 +175,7 @@ func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
         Name:           "node-1",
         Description:    "First test node",
         OrganizationId: orgId,
-        UserId:         "user-123-" + testId,
+        UserId:         test.UserNodeId("user-123-" + testId),
         AccountUuid:    "account-1-" + testId,
         AccountId:      "account-1-" + testId,
         AccountType:    "aws",
@@ -185,7 +186,7 @@ func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
         Name:           "node-2",
         Description:    "Second test node",
         OrganizationId: orgId,
-        UserId:         "user-123-" + testId,
+        UserId:         test.UserNodeId("user-123-" + testId),
         AccountUuid:    "account-2-" + testId,
         AccountId:      "account-2-" + testId,
         AccountType:    "gcp",
@@ -198,7 +199,7 @@ func TestNodeStore_Get_FilterByOrganization(t *testing.T) {
         Name:           "other-node",
         Description:    "Node in different org",
         OrganizationId: otherOrgId,
-        UserId:         "user-456-" + testId,
+        UserId:         test.UserNodeId("user-456-" + testId),
         AccountUuid:    "account-3-" + testId,
         AccountId:      "account-3-" + testId,
         AccountType:    "aws",
@@ -233,8 +234,8 @@ func TestNodeStore_Delete(t *testing.T) {
         Uuid:           nodeUuid,
         Name:           "test-node-to-delete",
         Description:    "Node that will be deleted",
-        OrganizationId: "org-123",
-        UserId:         "user-123",
+        OrganizationId: test.OrgNodeId("org-123"),
+        UserId:         test.UserNodeId("user-123"),
         AccountUuid:    "account-123",
         AccountId:      "account-123",
         AccountType:    "aws",
@@ -279,8 +280,8 @@ func TestNodeStore_Put_Update(t *testing.T) {
         Description:           "Original description",
         ComputeNodeGatewayUrl: "https://original-gateway.example.com",
         WorkflowManagerTag:    "v1.0.0",
-        OrganizationId:        "org-123",
-        UserId:                "user-123",
+        OrganizationId:        test.OrgNodeId("org-123"),
+        UserId:                test.UserNodeId("user-123"),
         AccountUuid:           "account-123",
         AccountId:             "account-123",
         AccountType:           "aws",
@@ -311,4 +312,74 @@ func TestNodeStore_Put_Update(t *testing.T) {
     assert.Equal(t, updatedNode.WorkflowManagerTag, retrievedNode.WorkflowManagerTag)
     assert.Equal(t, updatedNode.OrganizationId, retrievedNode.OrganizationId)
     assert.Equal(t, updatedNode.UserId, retrievedNode.UserId)
+}
+
+func TestNodeStore_PutStoresTheTenantAndTheLegacyOrganizationId(t *testing.T) {
+    store := setupNodeStoreTest(t)
+    ctx := context.Background()
+
+    orgNodeId := test.OrgNodeId("org-tenant")
+    userNodeId := test.UserNodeId("user-tenant")
+    orgTenant, err := tenant.FromOrgNodeId(orgNodeId)
+    require.NoError(t, err)
+    userTenant, err := tenant.FromUserNodeId(userNodeId)
+    require.NoError(t, err)
+
+    orgNode := models.DynamoDBNode{Uuid: uuid.New().String(), AccountUuid: uuid.New().String(), Tenant: orgTenant, UserId: userNodeId}
+    userNode := models.DynamoDBNode{Uuid: uuid.New().String(), AccountUuid: uuid.New().String(), Tenant: userTenant, UserId: userNodeId}
+    require.NoError(t, store.Put(ctx, orgNode))
+    require.NoError(t, store.Put(ctx, userNode))
+
+    got, err := store.GetById(ctx, orgNode.Uuid)
+    require.NoError(t, err)
+    assert.Equal(t, orgTenant, got.Tenant)
+    assert.Equal(t, orgNodeId, got.OrganizationId)
+
+    got, err = store.GetById(ctx, userNode.Uuid)
+    require.NoError(t, err)
+    assert.Equal(t, userTenant, got.Tenant)
+    assert.Equal(t, "INDEPENDENT", got.OrganizationId, "workflow-service still reads this value")
+    assert.Equal(t, "", got.OrganizationNodeId())
+}
+
+func TestNodeStore_ARecordFromBeforeTenantsGetsOne(t *testing.T) {
+    store := setupNodeStoreTest(t)
+    ctx := context.Background()
+    nodeUuid := uuid.New().String()
+    userNodeId := test.UserNodeId("legacy-owner")
+
+    // Written as the service did before tenants: no tenant attribute.
+    _, err := store.(*store_dynamodb.NodeDatabaseStore).DB.PutItem(ctx, &dynamodb.PutItemInput{
+        TableName: aws.String(store.(*store_dynamodb.NodeDatabaseStore).TableName),
+        Item: map[string]types.AttributeValue{
+            "uuid":           &types.AttributeValueMemberS{Value: nodeUuid},
+            "accountUuid":    &types.AttributeValueMemberS{Value: uuid.New().String()},
+            "organizationId": &types.AttributeValueMemberS{Value: "INDEPENDENT"},
+            "userId":         &types.AttributeValueMemberS{Value: userNodeId},
+        },
+    })
+    require.NoError(t, err)
+
+    got, err := store.GetById(ctx, nodeUuid)
+    require.NoError(t, err)
+    assert.Equal(t, "USER#"+strings.TrimPrefix(userNodeId, "N:user:"), got.Tenant.String())
+
+    // Storing it again writes the tenant.
+    require.NoError(t, store.Put(ctx, got))
+    item, err := store.(*store_dynamodb.NodeDatabaseStore).DB.GetItem(ctx, &dynamodb.GetItemInput{
+        TableName: aws.String(store.(*store_dynamodb.NodeDatabaseStore).TableName),
+        Key:       got.GetKey(),
+    })
+    require.NoError(t, err)
+    assert.Equal(t, &types.AttributeValueMemberS{Value: got.Tenant.String()}, item.Item["tenant"])
+}
+
+func TestNodeStore_PutRefusesANodeWithoutATenant(t *testing.T) {
+    store := setupNodeStoreTest(t)
+    err := store.Put(context.Background(), models.DynamoDBNode{
+        Uuid:           uuid.New().String(),
+        OrganizationId: "org-123",
+        UserId:         "user-123",
+    })
+    assert.Error(t, err)
 }

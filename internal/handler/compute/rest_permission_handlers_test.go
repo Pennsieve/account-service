@@ -46,7 +46,7 @@ func TestSetNodeAccessScopeHandler_ValidationErrors(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(), // Required for DynamoDB GSI
 		OrganizationId: "INDEPENDENT",       // Required for DynamoDB GSI
 	}
@@ -101,6 +101,15 @@ func TestSetNodeAccessScopeHandler_ValidationErrors(t *testing.T) {
 			expectedCode:  403,
 			expectedError: "only owner can change permissions",
 		},
+		{
+			// A user-owned node is private only; it used to skip the check.
+			name:          "UserOwnedNodeCannotBeWorkspaceScoped",
+			nodeId:        testNode.Uuid,
+			requestBody:   `{"accessScope":"workspace"}`,
+			userId:        testNode.UserId,
+			expectedCode:  400,
+			expectedError: "organization-independent nodes cannot be shared",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -135,7 +144,7 @@ func TestGrantUserAccessHandler_ValidationErrors(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(), // Required for DynamoDB GSI
 		OrganizationId: "INDEPENDENT",       // Required for DynamoDB GSI
 	}
@@ -213,7 +222,7 @@ func TestRevokeUserAccessHandler_ValidationErrors(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(), // Required for DynamoDB GSI
 		OrganizationId: "INDEPENDENT",       // Required for DynamoDB GSI
 	}
@@ -287,7 +296,7 @@ func TestGrantTeamAccessHandler_ValidationErrors(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(), // Required for DynamoDB GSI
 		OrganizationId: "INDEPENDENT",       // Required for DynamoDB GSI
 	}
@@ -365,7 +374,7 @@ func TestRevokeTeamAccessHandler_ValidationErrors(t *testing.T) {
 	testNode := models.DynamoDBNode{
 		Uuid:           uuid.New().String(),
 		Name:           "Test Node",
-		UserId:         "user-" + testId,
+		UserId:         test.UserNodeId("user-" + testId),
 		AccountUuid:    uuid.New().String(), // Required for DynamoDB GSI
 		OrganizationId: "INDEPENDENT",       // Required for DynamoDB GSI
 	}
@@ -473,7 +482,7 @@ func TestPermissionHandlers_MissingEnvironmentVariables(t *testing.T) {
 					"id": uuid.New().String(),
 				},
 				RequestContext: events.APIGatewayV2HTTPRequestContext{
-					Authorizer: test.CreateTestAuthorizer("user-"+testId, "org-"+testId),
+					Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), test.OrgNodeId("org-" + testId)),
 				},
 			}
 

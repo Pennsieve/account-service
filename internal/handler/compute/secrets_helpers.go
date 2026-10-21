@@ -112,7 +112,7 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	if requireOwner {
 		canManage := node.UserId == userId
 		if !canManage {
-			canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationId, node.AccountUuid)
+			canManage = checkAdminManageAccess(ctx, cfg, dynamoDBClient, userId, node.OrganizationNodeId(), node.AccountUuid)
 		}
 		if !canManage {
 			resp := events.APIGatewayV2HTTPResponse{
@@ -123,7 +123,7 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		}
 	} else {
 		lambdaClient := lambda.NewFromConfig(cfg)
-		if errResp := checkNodeAccess(ctx, lambdaClient, dynamoDBClient, handlerName, userId, nodeUuid, node.OrganizationId); errResp != nil {
+		if errResp := checkNodeAccess(ctx, lambdaClient, dynamoDBClient, handlerName, userId, nodeUuid, node.OrganizationNodeId()); errResp != nil {
 			return nil, errResp
 		}
 	}
@@ -221,7 +221,7 @@ func checkNodeAccess(ctx context.Context, lambdaClient *lambda.Client, dynamoDBC
 // checkAdminManageAccess checks if the user is an org admin with manage access (IsPublic=true)
 // for the given node's organization and account. Returns true if the user has admin manage access.
 func checkAdminManageAccess(ctx context.Context, cfg aws.Config, dynamoDBClient *dynamodb.Client, userId, organizationId, accountUuid string) bool {
-	if organizationId == "" || organizationId == "INDEPENDENT" {
+	if organizationId == "" {
 		return false
 	}
 	lambdaClient := lambda.NewFromConfig(cfg)

@@ -239,7 +239,7 @@ func TestPatchAccountHandler_Success_PauseWithComputeNodes(t *testing.T) {
 			Uuid:           "node-1-" + testId,
 			AccountUuid:    account.Uuid,
 			UserId:         userId,
-			OrganizationId: "org-" + testId,
+			OrganizationId: test.OrgNodeId("org-" + testId),
 			Name:           "Test Node 1",
 			Status:         "Enabled",
 		},
@@ -247,7 +247,7 @@ func TestPatchAccountHandler_Success_PauseWithComputeNodes(t *testing.T) {
 			Uuid:           "node-2-" + testId,
 			AccountUuid:    account.Uuid,
 			UserId:         userId,
-			OrganizationId: "org-" + testId,
+			OrganizationId: test.OrgNodeId("org-" + testId),
 			Name:           "Test Node 2",
 			Status:         "Enabled",
 		},
@@ -440,7 +440,7 @@ func TestPatchAccountHandler_Error_NotAccountOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Create account owned by a different user
-	account := createTestAccount(ctx, accountStore, "different-user-"+testId, testId)
+	account := createTestAccount(ctx, accountStore, test.UserNodeId("different-user-" + testId), testId)
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
 
@@ -482,7 +482,7 @@ func TestPatchAccountHandler_Success_EnableAccount_DoesNotEnableNodes(t *testing
 		Uuid:           "node-paused-" + testId,
 		AccountUuid:    account.Uuid,
 		UserId:         userId,
-		OrganizationId: "org-" + testId,
+		OrganizationId: test.OrgNodeId("org-" + testId),
 		Name:           "Paused Node",
 		Status:         "Paused",
 	}

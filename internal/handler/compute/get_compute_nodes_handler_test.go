@@ -154,11 +154,11 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 
 	// Create test nodes in specific organization
 	testNode1 := createTestNode(testId + "1")
-	testNode1.OrganizationId = "org-" + testId
+	testNode1.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode2 := createTestNode(testId + "2")
-	testNode2.OrganizationId = "org-" + testId
+	testNode2.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode3 := createTestNode(testId + "3")
-	testNode3.OrganizationId = "different-org-" + testId
+	testNode3.OrganizationId = test.OrgNodeId("different-org-" + testId)
 	
 	err := nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
@@ -214,10 +214,10 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 	// Create request with specific organization_id
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
-			"organization_id": "org-" + testId,
+			"organization_id": test.OrgNodeId("org-" + testId),
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(testNode1.UserId, "org-"+testId),
+			Authorizer: test.CreateTestAuthorizer(testNode1.UserId, test.OrgNodeId("org-" + testId)),
 		},
 	}
 
@@ -239,7 +239,7 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 	
 	// Verify all nodes belong to the correct organization
 	for _, node := range nodes {
-		assert.Equal(t, "org-"+testId, node.OrganizationId)
+		assert.Equal(t, test.OrgNodeId("org-" + testId), node.OrganizationId)
 	}
 	
 	// Verify specific node UUIDs
@@ -254,7 +254,7 @@ func TestGetComputeNodesHandler_AccountOwnerMode(t *testing.T) {
 	ctx := context.Background()
 	testId := test.GenerateTestId()
 
-	userId := "user-" + testId
+	userId := test.UserNodeId("user-" + testId)
 
 	// Create test account owned by user
 	testAccount := createTestAccount(testId, userId)
@@ -265,7 +265,7 @@ func TestGetComputeNodesHandler_AccountOwnerMode(t *testing.T) {
 	testNode1 := createTestNode(testId + "1")
 	testNode1.AccountUuid = testAccount.Uuid
 	testNode1.UserId = userId
-	testNode1.OrganizationId = "org-" + testId
+	testNode1.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode2 := createTestNode(testId + "2")
 	testNode2.AccountUuid = testAccount.Uuid
 	testNode2.UserId = userId
@@ -312,7 +312,7 @@ func TestGetComputeNodesHandler_AccountOwnerMode(t *testing.T) {
 	foundOrgNode := false
 	for _, node := range nodes {
 		if node.Uuid == testNode1.Uuid {
-			assert.Equal(t, "org-"+testId, node.OrganizationId)
+			assert.Equal(t, test.OrgNodeId("org-" + testId), node.OrganizationId)
 			foundOrgNode = true
 		} else if node.Uuid == testNode2.Uuid {
 			assert.Equal(t, "", node.OrganizationId) // Should be converted from INDEPENDENT
@@ -328,7 +328,7 @@ func TestGetComputeNodesHandler_AccountOwnerMode_NotAnOwner(t *testing.T) {
 	ctx := context.Background()
 	testId := test.GenerateTestId()
 
-	userId := "user-without-accounts-" + testId
+	userId := test.UserNodeId("user-without-accounts-" + testId)
 
 	// Create request with account_owner=true but user has no accounts
 	request := events.APIGatewayV2HTTPRequest{
@@ -354,7 +354,7 @@ func TestGetComputeNodesHandler_EmptyResults(t *testing.T) {
 	ctx := context.Background()
 	testId := test.GenerateTestId()
 
-	userId := "user-no-nodes-" + testId
+	userId := test.UserNodeId("user-no-nodes-" + testId)
 
 	// Create request for user with no nodes
 	request := events.APIGatewayV2HTTPRequest{
@@ -393,7 +393,7 @@ func TestGetComputeNodesHandler_MissingNodeAccessTable(t *testing.T) {
 	os.Unsetenv("NODE_ACCESS_TABLE")
 	defer os.Setenv("NODE_ACCESS_TABLE", TEST_ACCESS_TABLE) // Restore after test
 
-	userId := "user-" + testId
+	userId := test.UserNodeId("user-" + testId)
 
 	// Create request
 	request := events.APIGatewayV2HTTPRequest{
@@ -418,15 +418,15 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 	testId := test.GenerateTestId()
 
 	// Use a single user for the test (the requesting user)
-	requestingUserId := "user-" + testId
+	requestingUserId := test.UserNodeId("user-" + testId)
 
 	// Create test nodes in specific organization with different access types
 	testNode1 := createTestNode(testId + "1")
-	testNode1.OrganizationId = "org-" + testId
+	testNode1.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode2 := createTestNode(testId + "2")
-	testNode2.OrganizationId = "org-" + testId
+	testNode2.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode3 := createTestNode(testId + "3")
-	testNode3.OrganizationId = "org-" + testId
+	testNode3.OrganizationId = test.OrgNodeId("org-" + testId)
 	
 	err := nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
@@ -481,10 +481,10 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 	// Create request with organization_id
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
-			"organization_id": "org-" + testId,
+			"organization_id": test.OrgNodeId("org-" + testId),
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(requestingUserId, "org-"+testId),
+			Authorizer: test.CreateTestAuthorizer(requestingUserId, test.OrgNodeId("org-" + testId)),
 		},
 	}
 
@@ -507,7 +507,7 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 	// Verify all nodes belong to the correct organization
 	nodeUuids := make([]string, len(nodes))
 	for i, node := range nodes {
-		assert.Equal(t, "org-"+testId, node.OrganizationId)
+		assert.Equal(t, test.OrgNodeId("org-" + testId), node.OrganizationId)
 		nodeUuids[i] = node.Uuid
 	}
 	

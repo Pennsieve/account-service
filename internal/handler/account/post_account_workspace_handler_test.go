@@ -19,7 +19,7 @@ import (
 func setupPostAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseStore, *store_dynamodb.AccountWorkspaceStoreImpl, string, string) {
 	// Generate unique test IDs for isolation
 	testId := test.GenerateTestId()
-	organizationId := "org-" + testId
+	organizationId := test.OrgNodeId("org-" + testId)
 	
 	// Use shared test client and tables
 	client := test.GetClient()
@@ -238,7 +238,7 @@ func TestPostAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Create account owned by a different user
-	account := createTestAccountForWorkspace(ctx, accountStore, "different-user-"+testId, testId)
+	account := createTestAccountForWorkspace(ctx, accountStore, test.UserNodeId("different-user-" + testId), testId)
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
 

@@ -73,11 +73,8 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Use the node's own organization for access checks (empty for INDEPENDENT nodes)
-	organizationId := ""
-	if computeNode.OrganizationId != "" && computeNode.OrganizationId != "INDEPENDENT" {
-		organizationId = computeNode.OrganizationId
-	}
+	// Use the node's own organization for access checks (empty for a user-owned node)
+	organizationId := computeNode.OrganizationNodeId()
 
 	// Check if user has access to the node
 	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
@@ -152,11 +149,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		accessScope = permissions.AccessScope
 	}
 
-	// Convert INDEPENDENT back to empty string for API response consistency
-	responseOrganizationId := computeNode.OrganizationId
-	if computeNode.OrganizationId == "INDEPENDENT" {
-		responseOrganizationId = ""
-	}
+	responseOrganizationId := computeNode.OrganizationNodeId()
 
 	nodes := []models.Node{{
 		Uuid:        computeNode.Uuid,
