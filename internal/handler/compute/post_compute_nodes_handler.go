@@ -206,7 +206,7 @@ func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyN
 // POST /compute-nodes
 //
 // Required Permissions:
-// - For organization-independent nodes: Any authenticated user can create
+// - For organization-independent nodes: Must be the account owner
 // - For organization nodes with isPublic=false: Must be the account owner
 // - For organization nodes with isPublic=true: Must be a workspace admin in the organization
 func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -319,6 +319,16 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusNotFound,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
+		}, nil
+	}
+
+	// When organizationId is omitted, only the account owner can create a node
+	// (no workspace context, so enablement and admin-on-public paths don't apply).
+	if organizationId == "" && account.UserId != userId {
+		log.Printf("User %s is not the owner of account %s (owner: %s)", userId, accountUuid, account.UserId)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrOnlyAccountOwnerCanCreateNodes),
 		}, nil
 	}
 

@@ -143,6 +143,51 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 	assert.NotEmpty(t, createdNode.Uuid)
 }
 
+func TestPostComputeNodesHandler_IndependentNodeNotAccountOwner(t *testing.T) {
+	accountStore, _, _ := setupPostComputeNodesHandlerTest(t)
+	ctx := context.Background()
+	testId := test.GenerateTestId()
+
+	// Create test account
+	testAccount := store_dynamodb.Account{
+		Uuid:        uuid.New().String(),
+		AccountId:   "test-account-" + testId,
+		AccountType: "aws",
+		UserId:      test.UserNodeId("account-owner-" + testId),
+	}
+	err := accountStore.Insert(ctx, testAccount)
+	require.NoError(t, err)
+
+	// Create node request (organization-independent) on someone else's account
+	nodeRequest := models.CreateComputeNodeRequest{
+		Name:           "Test Node",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
+		OrganizationId: "",
+	}
+	requestBody, err := json.Marshal(nodeRequest)
+	require.NoError(t, err)
+
+	randomUserId := test.UserNodeId("random-user-" + testId)
+	request := events.APIGatewayV2HTTPRequest{
+		Body: string(requestBody),
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(randomUserId, ""),
+		},
+	}
+
+	response, err := compute.PostComputeNodesHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 403, response.StatusCode) // Forbidden
+	assert.Contains(t, response.Body, "only the account owner can create nodes")
+
+	// No node was stored on the account
+	nodeStore := store_dynamodb.NewNodeDatabaseStore(test.GetClient(), TEST_NODES_TABLE)
+	nodes, err := nodeStore.GetByAccount(ctx, testAccount.Uuid)
+	require.NoError(t, err)
+	assert.Empty(t, nodes)
+}
+
 func TestPostComputeNodesHandler_BadRequest(t *testing.T) {
 	_, _, _ = setupPostComputeNodesHandlerTest(t)
 	ctx := context.Background()
