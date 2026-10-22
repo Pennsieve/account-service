@@ -915,7 +915,7 @@ paths:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getGPUTiers
       security:
-        - token_workspace_auth: [ ]
+        - token_auth: [ ]
       tags:
         - Reference
       responses:
