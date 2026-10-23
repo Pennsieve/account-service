@@ -12,7 +12,8 @@
       { "name" : "ENVIRONMENT", "value": "${environment_name}" },
       { "name" : "ENV", "value": "${environment_name}" },
       { "name" : "PENNSIEVE_DOMAIN", "value": "${pennsieve_domain}" },
-      { "name" : "REGION", "value": "${aws_region}" }
+      { "name" : "REGION", "value": "${aws_region}" },
+      { "name" : "INTERACTIVE_GATEWAY_CIDRS", "value": "${interactive_gateway_cidrs}" }
     ],
     "mountPoints": [],
     "name": "${tier}",
