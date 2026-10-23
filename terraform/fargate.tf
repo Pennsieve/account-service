@@ -17,6 +17,10 @@ data "template_file" "provisioner_ecs_task_definition" {
     service_name              = var.service_name
     tier                      = var.tier
     pennsieve_domain          = var.pennsieve_domain
+    # Egress CIDRs of workflow-service's interactive gateway. Basic-mode
+    # compute nodes allow their notebook port only from these; empty until
+    # the gateway is deployed, which keeps basic notebooks refused.
+    interactive_gateway_cidrs = join(",", try(data.terraform_remote_state.workflow_service.outputs.interactive_gateway_egress_cidrs, []))
   }
 }
 
