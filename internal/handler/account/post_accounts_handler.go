@@ -26,7 +26,8 @@ import (
 // - Prevents duplicate account registration per user
 // - Pennsieve must be able to assume the role before it's registered; with an
 //   external ID (agents that asked for one), the role must also require it, and
-//   the account's role can't already be registered by anyone.
+//   the account's role can't already be registered by anyone. Those refusals
+//   carry {"message": ...}, which the agent shows the user.
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account
@@ -41,7 +42,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if !validExternalId(account.ExternalId) {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       errors.HandlerError(handlerName, ErrInvalidExternalId),
+			Body:       errors.ComputeHandlerError(handlerName, ErrInvalidExternalId),
 		}, nil
 	}
 
@@ -105,7 +106,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 			if existing.RoleName == account.RoleName {
 				return events.APIGatewayV2HTTPResponse{
 					StatusCode: http.StatusConflict,
-					Body:       errors.HandlerError(handlerName, errors.ErrRecordAlreadyExists),
+					Body:       errors.ComputeHandlerError(handlerName, ErrRoleAlreadyRegistered),
 				}, nil
 			}
 		}
@@ -114,7 +115,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if err := verifyRole(ctx, NewRoleAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId, time.Sleep); err != nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
-			Body:       errors.HandlerError(handlerName, err),
+			Body:       errors.ComputeHandlerError(handlerName, err),
 		}, nil
 	}
 

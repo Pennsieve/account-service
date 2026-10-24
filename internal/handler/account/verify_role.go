@@ -31,6 +31,8 @@ var (
 	ErrRoleUnusable = errors.New("Pennsieve couldn't use the role: check that it exists in this AWS account and trusts Pennsieve")
 	// ErrRoleNotRestricted: the role can be assumed without its external ID.
 	ErrRoleNotRestricted = errors.New("the role's trust policy doesn't require its external ID: recreate the role with the trust policy Pennsieve provides")
+	// ErrRoleAlreadyRegistered: someone already registered this account's role.
+	ErrRoleAlreadyRegistered = errors.New("this role is already registered with Pennsieve")
 	// ErrInvalidExternalId: not an external ID Pennsieve issues.
 	ErrInvalidExternalId = errors.New("invalid external id: use the one returned with the role configuration")
 )

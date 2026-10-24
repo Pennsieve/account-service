@@ -262,6 +262,7 @@ func TestPostAccountsHandler_RoleRegisteredByAnotherUser(t *testing.T) {
 	}))
 	resp := postAccount(t, testId, models.Account{AccountId: "acct-" + testId, AccountType: "aws", RoleName: "r-" + testId, ExternalId: externalIdFor(testId)})
 	assert.Equal(t, 409, resp.StatusCode)
+	assert.Contains(t, resp.Body, `"message":"this role is already registered with Pennsieve"`)
 }
 
 func TestPostAccountsHandler_LegacyWithoutExternalId(t *testing.T) {
