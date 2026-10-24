@@ -260,6 +260,8 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 
 	roleNameKey := "ROLE_NAME"
 	roleNameValue := account.RoleName
+	externalIdKey := "EXTERNAL_ID"
+	externalIdValue := account.ExternalId
 
 	// Create a dynamic task definition with the custom provisioner image (using function from post_compute_nodes_handler.go)
 	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
@@ -382,6 +384,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &roleNameKey,
 							Value: &roleNameValue,
+						},
+						{
+							Name:  &externalIdKey,
+							Value: &externalIdValue,
 						},
 					},
 				},

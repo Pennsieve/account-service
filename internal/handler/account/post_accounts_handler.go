@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/pennsieve/account-service/internal/utils"
@@ -23,6 +24,9 @@ import (
 // - Must be an authenticated user
 // - Account will be associated with the requesting user (userId)
 // - Prevents duplicate account registration per user
+// - Pennsieve must be able to assume the role before it's registered; with an
+//   external ID (agents that asked for one), the role must also require it, and
+//   the account's role can't already be registered by anyone.
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account
@@ -31,6 +35,13 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
+		}, nil
+	}
+
+	if !validExternalId(account.ExternalId) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.HandlerError(handlerName, ErrInvalidExternalId),
 		}, nil
 	}
 
@@ -76,6 +87,35 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 				Body:       errors.HandlerError(handlerName, errors.ErrRecordAlreadyExists),
 			}, nil
 		}
+	}
+
+	// One registration per role once roles carry an external ID: another
+	// user registering the same account and role is refused, rather than
+	// handed a second record for it.
+	if account.ExternalId != "" {
+		sameAccount, err := accountsStore.GetByAccountId(ctx, account.AccountId)
+		if err != nil {
+			log.Println(err.Error())
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+		for _, existing := range sameAccount {
+			if existing.RoleName == account.RoleName {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusConflict,
+					Body:       errors.HandlerError(handlerName, errors.ErrRecordAlreadyExists),
+				}, nil
+			}
+		}
+	}
+
+	if err := verifyRole(ctx, NewRoleAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId, time.Sleep); err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.HandlerError(handlerName, err),
+		}, nil
 	}
 
 	id := uuid.New()

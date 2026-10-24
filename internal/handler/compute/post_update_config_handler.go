@@ -276,6 +276,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		"ENABLE_INTERACTIVE":       enableInteractive,
 		"DESTROY_INTERACTIVE":      destroyInteractive,
 		"ROLE_NAME":                account.RoleName,
+		"EXTERNAL_ID":              account.ExternalId,
 	})
 
 	runTaskIn := &ecs.RunTaskInput{

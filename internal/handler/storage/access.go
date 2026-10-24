@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/pennsieve/account-service/internal/clients"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
@@ -79,6 +80,9 @@ type BucketAccess struct {
 	// assuming into itself. Requiring ROLE_NAME unconditionally would make
 	// platform-owned storage nodes unserviceable.
 	RoleName string
+	// ExternalId is the sts:ExternalId the role requires, passed to tasks as
+	// EXTERNAL_ID; empty for accounts registered before Pennsieve issued one.
+	ExternalId string
 }
 
 // Owner is the ExpectedBucketOwner to send with S3 calls on this bucket.
@@ -131,7 +135,7 @@ func ResolveBucketAccessWithPlatform(ctx context.Context, cfg aws.Config, platfo
 	crossAccount, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(BucketRegion(cfg, node)),
 		config.WithCredentialsProvider(
-			stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), roleArn),
+			stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), roleArn, clients.WithExternalId(account.ExternalId)),
 		),
 	)
 	if err != nil {
@@ -139,9 +143,10 @@ func ResolveBucketAccessWithPlatform(ctx context.Context, cfg aws.Config, platfo
 	}
 
 	return BucketAccess{
-		Config:    crossAccount,
-		AccountID: account.AccountId,
-		RoleName:  account.RoleName,
+		Config:     crossAccount,
+		AccountID:  account.AccountId,
+		RoleName:   account.RoleName,
+		ExternalId: account.ExternalId,
 	}, nil
 }
 

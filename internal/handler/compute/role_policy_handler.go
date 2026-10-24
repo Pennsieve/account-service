@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/pennsieve/account-service/internal/clients"
 	"github.com/pennsieve/account-service/internal/utils"
 )
 
@@ -179,6 +180,33 @@ type roleConfigResponse struct {
 	RoleName            string          `json:"roleName"`
 	PolicyDocument      json.RawMessage `json:"policyDocument"`
 	TrustPolicyDocument json.RawMessage `json:"trustPolicyDocument"`
+	// ExternalId is the sts:ExternalId the trust policy requires; the agent
+	// registers the account with it. Only for agents that ask (?externalId=true),
+	// so older agents get exactly the configuration they always did.
+	ExternalId string `json:"externalId,omitempty"`
+}
+
+// buildRoleConfig is the role configuration for a new role trusting
+// pennsieveAccountId, with a freshly issued external ID when withExternalId.
+func buildRoleConfig(roleName, pennsieveAccountId string, withExternalId bool, newExternalId func() (string, error)) (roleConfigResponse, error) {
+	externalId := ""
+	if withExternalId {
+		id, err := newExternalId()
+		if err != nil {
+			return roleConfigResponse{}, err
+		}
+		externalId = id
+	}
+	trust, err := clients.TrustPolicy(pennsieveAccountId, externalId)
+	if err != nil {
+		return roleConfigResponse{}, err
+	}
+	return roleConfigResponse{
+		RoleName:            roleName,
+		PolicyDocument:      json.RawMessage(rolePolicyDocument),
+		TrustPolicyDocument: json.RawMessage(trust),
+		ExternalId:          externalId,
+	}, nil
 }
 
 // GetRolePolicyHandler returns the role configuration (name + permission policy +
@@ -215,23 +243,12 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}, nil
 	}
 
-	trustPolicyDocument := fmt.Sprintf(`{
-	"Version": "2012-10-17",
-	"Statement": [
-		{
-			"Effect": "Allow",
-			"Principal": {
-				"AWS": "%s"
-			},
-			"Action": "sts:AssumeRole"
-		}
-	]
-}`, *identity.Account)
-
-	resp := roleConfigResponse{
-		RoleName:            roleName,
-		PolicyDocument:      json.RawMessage(rolePolicyDocument),
-		TrustPolicyDocument: json.RawMessage(trustPolicyDocument),
+	resp, err := buildRoleConfig(roleName, *identity.Account, request.QueryStringParameters["externalId"] == "true", clients.NewRandomExternalId)
+	if err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to build role config"}`,
+		}, nil
 	}
 
 	body, err := json.Marshal(resp)

@@ -326,6 +326,7 @@ func launchStorageProvisionerTask(ctx context.Context, cfg aws.Config, account s
 						{Name: aws.String("ENV"), Value: aws.String(os.Getenv("ENV"))},
 						{Name: aws.String("REGION"), Value: aws.String(req.Region)},
 						{Name: aws.String("ROLE_NAME"), Value: aws.String(account.RoleName)},
+						{Name: aws.String("EXTERNAL_ID"), Value: aws.String(account.ExternalId)},
 						{Name: aws.String("DEPLOYMENT_MODE"), Value: aws.String(deploymentMode)},
 					},
 				},

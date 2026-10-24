@@ -221,6 +221,8 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	nodeNameValue := computeNode.Name
 	roleNameKey := "ROLE_NAME"
 	roleNameValue := account.RoleName
+	externalIdKey := "EXTERNAL_ID"
+	externalIdValue := account.ExternalId
 	// DEPLOYMENT_MODE must be forwarded on DELETE too: the provisioner gates its
 	// shared-infrastructure teardown (last-node VPC/NAT destroy AND the
 	// DESTROY_INTERACTIVE interactive teardown below) on deployment_mode=="secure".
@@ -316,6 +318,10 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 						{
 							Name:  &roleNameKey,
 							Value: &roleNameValue,
+						},
+						{
+							Name:  &externalIdKey,
+							Value: &externalIdValue,
 						},
 						{
 							Name:  &deploymentModeKey,

@@ -184,6 +184,7 @@ func launchStorageUpdateTask(ctx context.Context, cfg aws.Config, account store_
 						{Name: aws.String("ENV"), Value: aws.String(os.Getenv("ENV"))},
 						{Name: aws.String("REGION"), Value: aws.String(node.Region)},
 						{Name: aws.String("ROLE_NAME"), Value: aws.String(access.RoleName)},
+						{Name: aws.String("EXTERNAL_ID"), Value: aws.String(access.ExternalId)},
 					},
 				},
 			},

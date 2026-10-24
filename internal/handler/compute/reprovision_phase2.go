@@ -110,6 +110,7 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 		"MAX_INTERACTIVE_SESSIONS": strconv.Itoa(node.MaxInteractiveSessions),
 		"ENABLE_INTERACTIVE":       "true",
 		"ROLE_NAME":                account.RoleName,
+		"EXTERNAL_ID":              account.ExternalId,
 	})
 
 	runTaskIn := &ecs.RunTaskInput{

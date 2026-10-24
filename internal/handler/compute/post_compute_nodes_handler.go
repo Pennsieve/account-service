@@ -565,6 +565,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 		roleNameKey := "ROLE_NAME"
 		roleNameValue := account.RoleName
+		externalIdKey := "EXTERNAL_ID"
+		externalIdValue := account.ExternalId
 		computeNodeIdKey := "COMPUTE_NODE_ID"
 		computeNodeIdValue := nodeUuid
 
@@ -670,6 +672,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 							{
 								Name:  &roleNameKey,
 								Value: &roleNameValue,
+							},
+							{
+								Name:  &externalIdKey,
+								Value: &externalIdValue,
 							},
 						},
 					},
