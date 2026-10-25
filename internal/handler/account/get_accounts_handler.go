@@ -175,7 +175,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			}
 
 			accountsWithWorkspaces = append(accountsWithWorkspaces, models.AccountWithWorkspaces{
-				Account: models.Account{
+				Account: mappers.WithConnection(models.Account{
 					Uuid:        account.Uuid,
 					AccountId:   account.AccountId,
 					AccountType: account.AccountType,
@@ -185,7 +185,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 					Name:        account.Name,
 					Description: account.Description,
 					Status:      account.Status,
-				},
+				}, account, userId),
 				EnabledWorkspaces: modelEnablements,
 			})
 		}
@@ -205,7 +205,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 	}
 
 	// Return simple account list
-	m, err := json.Marshal(mappers.DynamoDBAccountToJsonAccount(userAccounts))
+	m, err := json.Marshal(mappers.DynamoDBAccountToJsonAccount(userAccounts, userId))
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

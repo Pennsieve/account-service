@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/errors"
@@ -70,7 +71,7 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		}, nil
 	}
 
-	m, err := json.Marshal(models.Account{
+	m, err := json.Marshal(mappers.WithConnection(models.Account{
 		Uuid:        account.Uuid,
 		AccountId:   account.AccountId,
 		AccountType: account.AccountType,
@@ -80,7 +81,7 @@ func GetAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReque
 		Name:        account.Name,
 		Description: account.Description,
 		Status:      account.Status,
-	})
+	}, account, userId))
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{

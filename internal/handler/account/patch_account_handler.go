@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/errors"
@@ -19,6 +20,10 @@ type AccountUpdateRequest struct {
 	Status      *string `json:"status,omitempty"`
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
+	// TemplateVersion records that the account's CloudFormation stack was
+	// updated to that template version (after aws cloudformation
+	// update-stack). Only for accounts connected with CloudFormation.
+	TemplateVersion *string `json:"templateVersion,omitempty"`
 }
 
 // PatchAccountHandler updates account details (status, name, description)
@@ -57,7 +62,14 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 	
 	// Check that at least one field is being updated
-	if updateReq.Status == nil && updateReq.Name == nil && updateReq.Description == nil {
+	if updateReq.TemplateVersion != nil && (*updateReq.TemplateVersion == "" || !validTemplateVersion(*updateReq.TemplateVersion)) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, ErrInvalidTemplateVersion),
+		}, nil
+	}
+
+	if updateReq.Status == nil && updateReq.Name == nil && updateReq.Description == nil && updateReq.TemplateVersion == nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.HandlerError(handlerName, errors.ErrUnmarshaling),
@@ -129,6 +141,17 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if updateReq.Description != nil {
 		account.Description = *updateReq.Description
 	}
+	if updateReq.TemplateVersion != nil {
+		// A legacy account has no stack to update: it upgrades with
+		// POST /accounts/{uuid}/role.
+		if account.Connection != models.ConnectionCloudFormation {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, ErrNotCloudFormation),
+			}, nil
+		}
+		account.TemplateVersion = *updateReq.TemplateVersion
+	}
 	
 	// If account status is being set to "Paused", pause all compute nodes
 	if updateReq.Status != nil && *updateReq.Status == "Paused" {
@@ -163,7 +186,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 
 	// Return updated account
-	response := models.Account{
+	response := mappers.WithConnection(models.Account{
 		Uuid:        account.Uuid,
 		AccountId:   account.AccountId,
 		AccountType: account.AccountType,
@@ -173,7 +196,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		Name:        account.Name,
 		Description: account.Description,
 		Status:      account.Status,
-	}
+	}, account, userId)
 
 	m, err := json.Marshal(response)
 	if err != nil {

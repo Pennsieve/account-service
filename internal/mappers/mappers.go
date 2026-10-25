@@ -1,6 +1,7 @@
 package mappers
 
 import (
+	"os"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
@@ -113,11 +114,11 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 	return nodes
 }
 
-func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account) []models.Account {
+func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account, callerId string) []models.Account {
 	accounts := []models.Account{}
 
 	for _, c := range dynamoAccounts {
-		accounts = append(accounts, models.Account{
+		accounts = append(accounts, WithConnection(models.Account{
 			Uuid:        c.Uuid,
 			AccountId:   c.AccountId,
 			AccountType: c.AccountType,
@@ -127,8 +128,24 @@ func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account) []mod
 			Name:        c.Name,
 			Description: c.Description,
 			Status:      c.Status,
-		})
+		}, c, callerId))
 	}
 
 	return accounts
+}
+
+// WithConnection adds how the account's role was made, and the published
+// template's version, for the account's owner (callerId) only, as with its
+// role name and external ID.
+func WithConnection(m models.Account, a store_dynamodb.Account, callerId string) models.Account {
+	if a.UserId == "" || a.UserId != callerId {
+		return m
+	}
+	m.Connection = a.Connection
+	if m.Connection == "" {
+		m.Connection = models.ConnectionLegacy
+	}
+	m.TemplateVersion = a.TemplateVersion
+	m.LatestTemplateVersion = os.Getenv("CFN_TEMPLATE_VERSION")
+	return m
 }

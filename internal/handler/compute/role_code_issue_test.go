@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/policies"
 )
 
 type recordingRoleCodes struct {
@@ -37,5 +38,17 @@ func TestIssueRoleCode(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("issued %+v, want %+v", got, want)
+	}
+}
+
+// GET /role-policy serves the policy file byte for byte: the same document the
+// CloudFormation template is rendered from.
+func TestRolePolicyIsThePolicyFile(t *testing.T) {
+	resp, err := buildRoleConfig("Pennsieve-Compute-dev-1a2b3c4d", "123456789012", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(resp.PolicyDocument) != policies.ComputeRolePolicy {
+		t.Fatal("the role-policy response's policyDocument differs from policies/compute-role-policy.json")
 	}
 }

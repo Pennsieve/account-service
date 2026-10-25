@@ -42,6 +42,13 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}, nil
 	}
 
+	if !validTemplateVersion(account.TemplateVersion) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, ErrInvalidTemplateVersion),
+		}, nil
+	}
+
 	if !validExternalId(account.ExternalId) {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
@@ -173,6 +180,12 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		Name:        account.Name,
 		Description: account.Description,
 		Status:      "Enabled", // Default status is Enabled
+	}
+	// A role from the published template (the app, or an agent that uses it)
+	// says which version it was made from; any other is a legacy connection.
+	if account.ExternalId != "" && account.TemplateVersion != "" {
+		store_account.Connection = models.ConnectionCloudFormation
+		store_account.TemplateVersion = account.TemplateVersion
 	}
 	err = accountsStore.Insert(ctx, store_account)
 	if err != nil {

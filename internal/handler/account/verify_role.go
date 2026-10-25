@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -31,8 +32,16 @@ var (
 	ErrRoleUnusable = errors.New("Pennsieve couldn't use the role: check that it exists in this AWS account and trusts Pennsieve")
 	// ErrRoleNotRestricted: the role can be assumed without its external ID.
 	ErrRoleNotRestricted = errors.New("the role's trust policy doesn't require its external ID: recreate the role with the trust policy Pennsieve provides")
+	// ErrNotCloudFormation: a template version for an account whose role isn't a stack.
+	ErrNotCloudFormation = errors.New("this account wasn't connected with CloudFormation: upgrade it with POST /accounts/{uuid}/role")
+	// ErrSameRole: an upgrade names the role the account already uses.
+	ErrSameRole = errors.New("this account already uses that role: create a new one from the template to upgrade")
+	// ErrRoleInOtherAccount: the role isn't in the account it's registered for.
+	ErrRoleInOtherAccount = errors.New("the role isn't in this AWS account: create it in the account the registration is for")
 	// ErrRoleAlreadyRegistered: someone already registered this account's role.
 	ErrRoleAlreadyRegistered = errors.New("this role is already registered with Pennsieve")
+	// ErrInvalidTemplateVersion: not a template version (a number).
+	ErrInvalidTemplateVersion = errors.New("invalid template version: use the templateVersion returned with the role configuration")
 	// ErrInvalidExternalId: not an external ID Pennsieve issues.
 	ErrInvalidExternalId = errors.New("invalid external id: use the one returned with the role configuration")
 )
@@ -53,8 +62,9 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 	}
 
 	var err error
+	var out *sts.AssumeRoleOutput
 	for attempt := 0; ; attempt++ {
-		if _, err = assumer.AssumeRole(ctx, in); err == nil {
+		if out, err = assumer.AssumeRole(ctx, in); err == nil {
 			break
 		}
 		if attempt >= len(verifyRetryDelays) || ctx.Err() != nil {
@@ -62,6 +72,14 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 			return ErrRoleUnusable
 		}
 		sleep(verifyRetryDelays[attempt])
+	}
+
+	// The session is the role's in accountId, the account the record is for.
+	if out != nil && out.AssumedRoleUser != nil && out.AssumedRoleUser.Arn != nil {
+		if got := arnAccount(*out.AssumedRoleUser.Arn); got != accountId {
+			log.Printf("registration: assuming %s gave a session in account %q", roleArn, got)
+			return ErrRoleInOtherAccount
+		}
 	}
 
 	if externalId == "" {
@@ -82,4 +100,30 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 // issues; an empty one is a legacy agent's.
 func validExternalId(externalId string) bool {
 	return externalId == "" || clients.ValidExternalId(externalId)
+}
+
+// validTemplateVersion reports whether v, when given, is a template version
+// (the published template's number, e.g. "3").
+func validTemplateVersion(v string) bool {
+	if v == "" {
+		return true
+	}
+	if len(v) > 6 {
+		return false
+	}
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// arnAccount is the account ID in an ARN (arn:aws:sts::<account>:...).
+func arnAccount(arn string) string {
+	parts := strings.SplitN(arn, ":", 6)
+	if len(parts) < 5 {
+		return ""
+	}
+	return parts[4]
 }

@@ -10,7 +10,20 @@ type Account struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 	Status      string `json:"status,omitempty"` // "Enabled" or "Paused"
+	// Connection is how the account's role was made, for its owner:
+	// "cloudformation" (the published template, TemplateVersion) or "legacy"
+	// (before it, or by an agent without it). LatestTemplateVersion is the
+	// published template's, so an older one can show "update available".
+	Connection            string `json:"connection,omitempty"`
+	TemplateVersion       string `json:"templateVersion,omitempty"`
+	LatestTemplateVersion string `json:"latestTemplateVersion,omitempty"`
 }
+
+// How an account's role was made (Account.Connection).
+const (
+	ConnectionCloudFormation = "cloudformation"
+	ConnectionLegacy         = "legacy"
+)
 
 type AccountResponse struct {
 	Uuid string `json:"uuid"`
