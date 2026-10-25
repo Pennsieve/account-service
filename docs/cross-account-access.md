@@ -10,6 +10,8 @@ To do this, Pennsieve needs temporary, scoped access to your AWS account through
 
 1. **You create a role in your account.** During compute node setup, a role named `Pennsieve-Compute-{env}-{id}` (e.g., `Pennsieve-Compute-dev-a3f1b20c`) is created in your AWS account. This role trusts the Pennsieve provisioner account, allowing it to temporarily "assume" the role.
 
+   The role's trust policy also requires an **external ID** that Pennsieve issues for your registration (`pn-` followed by 32 hex characters). Pennsieve sends it every time it assumes the role, and AWS refuses any request without it. That stops anyone else who learns your account ID and role name from registering them on Pennsieve and having Pennsieve act in your account for them (the "confused deputy" problem). Before registering the account, Pennsieve checks that it can assume the role with the external ID, and that it can't without it. Accounts registered before external IDs existed keep working without one.
+
 2. **Pennsieve assumes the role.** When we need to create, update, or remove infrastructure, our provisioner assumes the cross-account role. This gives it temporary credentials (valid for up to 1 hour) that are scoped to the permissions defined on the role.
 
 3. **Terraform runs with those credentials.** We use Terraform (an infrastructure-as-code tool) to manage all resources. Every change is deterministic and reproducible — no manual actions are taken in your account.

@@ -358,3 +358,34 @@ tags = merge(
   },
   )
 }
+
+// The external IDs Pennsieve issues with role configurations (GET
+// /role-policy): to whom, for which role, until when, and whether a
+// registration used it. POST /accounts accepts an external ID only as one of
+// these, issued to the user registering, so a code seen in someone's trust
+// policy can't register their role for anyone else. Rows expire (TTL) a day
+// after issue; a registration uses them up.
+resource "aws_dynamodb_table" "compute_role_codes_table" {
+  name         = "${var.environment_name}-compute-role-codes-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "externalId"
+
+  attribute {
+    name = "externalId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
+
+  tags = merge(
+    local.common_tags,
+    {
+      "Name"         = "${var.environment_name}-compute-role-codes-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+      "name"         = "${var.environment_name}-compute-role-codes-${data.terraform_remote_state.region.outputs.aws_region_shortname}"
+      "service_name" = var.service_name
+    },
+  )
+}

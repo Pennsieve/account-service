@@ -73,22 +73,29 @@ func (r *AccountDatabaseStore) GetByAccountId(ctx context.Context, accountId str
 		return accounts, fmt.Errorf("error building expression: %w", err)
 	}
 
-	response, err := r.DB.Scan(ctx, &dynamodb.ScanInput{
+	// Every page: registration relies on this to find an account's existing
+	// registrations, and a filtered scan stops at 1MB of table per page.
+	input := &dynamodb.ScanInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
 		TableName:                 aws.String(r.TableName),
-	})
-	if err != nil {
-		return accounts, fmt.Errorf("error getting account by accountId: %w", err)
 	}
-
-	err = attributevalue.UnmarshalListOfMaps(response.Items, &accounts)
-	if err != nil {
-		return accounts, fmt.Errorf("error unmarshaling accounts: %w", err)
+	for {
+		response, err := r.DB.Scan(ctx, input)
+		if err != nil {
+			return accounts, fmt.Errorf("error getting account by accountId: %w", err)
+		}
+		var page []Account
+		if err := attributevalue.UnmarshalListOfMaps(response.Items, &page); err != nil {
+			return accounts, fmt.Errorf("error unmarshaling accounts: %w", err)
+		}
+		accounts = append(accounts, page...)
+		if len(response.LastEvaluatedKey) == 0 {
+			return accounts, nil
+		}
+		input.ExclusiveStartKey = response.LastEvaluatedKey
 	}
-
-	return accounts, nil
 }
 
 func (r *AccountDatabaseStore) Get(ctx context.Context, organizationId string, params map[string]string) ([]Account, error) {

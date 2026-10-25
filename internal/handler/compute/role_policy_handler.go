@@ -6,12 +6,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/pennsieve/account-service/internal/clients"
+	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 )
 
@@ -179,6 +184,45 @@ type roleConfigResponse struct {
 	RoleName            string          `json:"roleName"`
 	PolicyDocument      json.RawMessage `json:"policyDocument"`
 	TrustPolicyDocument json.RawMessage `json:"trustPolicyDocument"`
+	// ExternalId is the sts:ExternalId the trust policy requires; the agent
+	// registers the account with it. Only for agents that ask (?externalId=true),
+	// so older agents get exactly the configuration they always did.
+	ExternalId string `json:"externalId,omitempty"`
+}
+
+// buildRoleConfig is the role configuration for a new role trusting
+// pennsieveAccountId, with a freshly issued external ID when withExternalId.
+func buildRoleConfig(roleName, pennsieveAccountId string, withExternalId bool, newExternalId func() (string, error)) (roleConfigResponse, error) {
+	externalId := ""
+	if withExternalId {
+		id, err := newExternalId()
+		if err != nil {
+			return roleConfigResponse{}, err
+		}
+		externalId = id
+	}
+	trust, err := clients.TrustPolicy(pennsieveAccountId, externalId)
+	if err != nil {
+		return roleConfigResponse{}, err
+	}
+	return roleConfigResponse{
+		RoleName:            roleName,
+		PolicyDocument:      json.RawMessage(rolePolicyDocument),
+		TrustPolicyDocument: json.RawMessage(trust),
+		ExternalId:          externalId,
+	}, nil
+}
+
+// issueRoleCode records the external ID in resp as issued to userId, for
+// resp's role, until ExternalIdLifetime from now.
+func issueRoleCode(ctx context.Context, codes store_dynamodb.RoleCodeStore, resp roleConfigResponse, userId string, now time.Time) error {
+	return codes.Issue(ctx, store_dynamodb.RoleCode{
+		ExternalId: resp.ExternalId,
+		UserId:     userId,
+		RoleName:   resp.RoleName,
+		IssuedAt:   now.Unix(),
+		ExpiresAt:  now.Add(clients.ExternalIdLifetime).Unix(),
+	})
 }
 
 // GetRolePolicyHandler returns the role configuration (name + permission policy +
@@ -215,23 +259,33 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}, nil
 	}
 
-	trustPolicyDocument := fmt.Sprintf(`{
-	"Version": "2012-10-17",
-	"Statement": [
-		{
-			"Effect": "Allow",
-			"Principal": {
-				"AWS": "%s"
-			},
-			"Action": "sts:AssumeRole"
-		}
-	]
-}`, *identity.Account)
+	withExternalId := request.QueryStringParameters["externalId"] == "true"
+	resp, err := buildRoleConfig(roleName, *identity.Account, withExternalId, clients.NewRandomExternalId)
+	if err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to build role config"}`,
+		}, nil
+	}
 
-	resp := roleConfigResponse{
-		RoleName:            roleName,
-		PolicyDocument:      json.RawMessage(rolePolicyDocument),
-		TrustPolicyDocument: json.RawMessage(trustPolicyDocument),
+	// Pennsieve remembers whom it gave the code to, for which role: only that
+	// user can register that role with it (POST /accounts).
+	if withExternalId {
+		userId, err := utils.GetUserIdFromRequest(request)
+		if err != nil {
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusUnauthorized,
+				Body:       `{"error":"no user on the request"}`,
+			}, nil
+		}
+		codes := store_dynamodb.NewRoleCodeStore(dynamodb.NewFromConfig(cfg), os.Getenv("ROLE_CODES_TABLE"))
+		if err := issueRoleCode(ctx, codes, resp, userId, time.Now()); err != nil {
+			log.Printf("role-policy: %v", err)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       `{"error":"failed to issue the role's external id"}`,
+			}, nil
+		}
 	}
 
 	body, err := json.Marshal(resp)
