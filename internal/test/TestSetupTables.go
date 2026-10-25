@@ -27,6 +27,7 @@ const (
     TEST_STORAGE_NODES_TABLE       = "test-storage-nodes-table"
     TEST_STORAGE_NODE_WORKSPACE_TABLE = "test-storage-node-workspace-table"
     TEST_NODE_QUOTA_TABLE             = "test-node-quota-table"
+    TEST_ROLE_CODES_TABLE             = "test-role-codes-table"
 )
 
 var globalTestClient *dynamodb.Client
@@ -63,6 +64,7 @@ func SetupPackageTables() error {
         {TEST_STORAGE_NODES_TABLE, createSharedStorageNodesTable},
         {TEST_STORAGE_NODE_WORKSPACE_TABLE, createSharedStorageNodeWorkspaceTable},
         {TEST_NODE_QUOTA_TABLE, createSharedNodeQuotaTable},
+        {TEST_ROLE_CODES_TABLE, createSharedRoleCodesTable},
     }
 
     for _, table := range tables {
@@ -192,6 +194,20 @@ func createSharedNodeQuotaTable() error {
             },
         },
         TableName:   aws.String(TEST_NODE_QUOTA_TABLE),
+        BillingMode: types.BillingModePayPerRequest,
+    })
+    return err
+}
+
+func createSharedRoleCodesTable() error {
+    _, err := globalTestClient.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
+        AttributeDefinitions: []types.AttributeDefinition{
+            {AttributeName: aws.String("externalId"), AttributeType: types.ScalarAttributeTypeS},
+        },
+        KeySchema: []types.KeySchemaElement{
+            {AttributeName: aws.String("externalId"), KeyType: types.KeyTypeHash},
+        },
+        TableName:   aws.String(TEST_ROLE_CODES_TABLE),
         BillingMode: types.BillingModePayPerRequest,
     })
     return err

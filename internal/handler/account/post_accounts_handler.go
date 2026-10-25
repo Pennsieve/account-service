@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	errs "errors"
 	"log"
 	"net/http"
 	"os"
@@ -25,9 +26,11 @@ import (
 // - Account will be associated with the requesting user (userId)
 // - Prevents duplicate account registration per user
 // - Pennsieve must be able to assume the role before it's registered; with an
-//   external ID (agents that asked for one), the role must also require it, and
-//   the account's role can't already be registered by anyone. Those refusals
-//   carry {"message": ...}, which the agent shows the user.
+//   external ID (agents that asked for one), the ID must be one Pennsieve
+//   issued to this user for this role (unexpired and unused, used up here), the
+//   role must also require it, and the account's role can't already be
+//   registered by anyone. Those refusals carry {"message": ...}, which the
+//   agent shows the user.
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account
@@ -90,6 +93,26 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}
 	}
 
+	// An external ID registers only the role it was issued for, and only for
+	// the user it was issued to: seeing it in someone's trust policy isn't
+	// enough. Checked before Pennsieve tries the role at all.
+	roleCodes := store_dynamodb.NewRoleCodeStore(dynamoDBClient, os.Getenv("ROLE_CODES_TABLE"))
+	if account.ExternalId != "" {
+		if err := checkIssuedCode(ctx, roleCodes, account.ExternalId, userId, account.RoleName, time.Now()); err != nil {
+			if errs.Is(err, ErrRoleCodeNotIssued) {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusForbidden,
+					Body:       errors.ComputeHandlerError(handlerName, err),
+				}, nil
+			}
+			log.Println(err.Error())
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+	}
+
 	// One registration per role once roles carry an external ID: another
 	// user registering the same account and role is refused, rather than
 	// handed a second record for it.
@@ -119,6 +142,23 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}, nil
 	}
 
+	// The role works: use the code up, so it registers this role once.
+	if account.ExternalId != "" {
+		if err := useIssuedCode(ctx, roleCodes, account.ExternalId, userId, account.RoleName, time.Now()); err != nil {
+			if errs.Is(err, ErrRoleCodeNotIssued) {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusConflict,
+					Body:       errors.ComputeHandlerError(handlerName, err),
+				}, nil
+			}
+			log.Println(err.Error())
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusInternalServerError,
+				Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),
+			}, nil
+		}
+	}
+
 	id := uuid.New()
 	registeredAccountId := id.String()
 
@@ -137,6 +177,12 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	err = accountsStore.Insert(ctx, store_account)
 	if err != nil {
 		log.Println(err.Error())
+		// Not registered after all: the code can register the role again.
+		if account.ExternalId != "" {
+			if rerr := roleCodes.Release(ctx, account.ExternalId); rerr != nil {
+				log.Println(rerr.Error())
+			}
+		}
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.HandlerError(handlerName, errors.ErrDynamoDB),

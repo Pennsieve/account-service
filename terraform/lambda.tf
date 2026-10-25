@@ -37,6 +37,10 @@ resource "aws_lambda_function" "service_lambda" {
       // unaffected. workflow-service reads this table to gate run creation.
       NODE_QUOTA_TABLE = aws_dynamodb_table.node_quota_table.name
 
+      // External IDs issued with role configurations, and to whom: only that
+      // user can register the role with one (POST /accounts).
+      ROLE_CODES_TABLE = aws_dynamodb_table.compute_role_codes_table.name
+
       // Platform safety cap for per-user chat & workflow LLM spend. MUST
       // mirror the values set on the chat-service Lambda — both services
       // resolve effective quotas the same way (user row → __default__ →

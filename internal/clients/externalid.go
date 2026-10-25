@@ -7,7 +7,12 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"time"
 )
+
+// ExternalIdLifetime is how long an issued external ID can register its role:
+// enough to create the role and register it, not a standing credential.
+const ExternalIdLifetime = 24 * time.Hour
 
 // An account's sts:ExternalId: issued by Pennsieve when the agent asks for a
 // role configuration, written into the role's trust policy, and sent with every
