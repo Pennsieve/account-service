@@ -15,6 +15,11 @@ type Account struct {
     Name        string `dynamodbav:"name"`
     Description string `dynamodbav:"description"`
     Status      string `dynamodbav:"status"` // "Enabled" or "Paused"
+    // Connection is "cloudformation" for a role made from the published
+    // template (TemplateVersion); empty for older accounts, which read as
+    // "legacy" (models.ConnectionLegacy).
+    Connection      string `dynamodbav:"connection,omitempty"`
+    TemplateVersion string `dynamodbav:"templateVersion,omitempty"`
 }
 
 // AccountWorkspace represents the DynamoDB record for workspace enablement on an account

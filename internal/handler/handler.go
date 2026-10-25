@@ -31,6 +31,8 @@ func AccountServiceHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	router.GET("/accounts/{id}", accountHandler.GetAccountHandler)
 	router.PATCH("/accounts/{id}", accountHandler.PatchAccountHandler)
 	router.DELETE("/accounts/{id}", accountHandler.DeleteAccountHandler)
+	// Switch an account to a new role (an upgrade to the CloudFormation template)
+	router.POST("/accounts/{uuid}/role", accountHandler.PostAccountRoleHandler)
 
 	// Interactive-session public JWKS (must be UNAUTHENTICATED in the gateway).
 	router.GET("/interactive/jwks", interactiveHandler.GetJWKSHandler)

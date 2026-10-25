@@ -154,7 +154,10 @@ components:
           description: the name of the created role
         externalId:
           type: string
-          description: a unique identifier for the role
+          description: the external ID Pennsieve issued with the role setup (GET /role-policy?externalId=true), to the user registering, for this role
+        templateVersion:
+          type: string
+          description: the CloudFormation template version the role was made from; with an externalId, records the account as connected with CloudFormation
         name:
           type: string
           description: optional name for the account
@@ -185,6 +188,16 @@ components:
         externalId:
           type: string
           description: the generated externalId for compute resource account
+        connection:
+          type: string
+          enum: ["cloudformation", "legacy"]
+          description: how the account's role was made (owner only)
+        templateVersion:
+          type: string
+          description: the CloudFormation template version the role was made from (owner only)
+        latestTemplateVersion:
+          type: string
+          description: the published template's version, to compare templateVersion with (owner only)
         organizationId:
           type: string
           description: the organization of the role creator for the compute resource account
@@ -949,6 +962,65 @@ paths:
                     pricePerHour:
                       type: number
                       description: On-demand price per hour (USD, us-east-1)
+  /accounts/{uuid}/role:
+    post:
+      summary: Switch an account to a new role
+      description: |
+        Upgrades an account's connection: the account switches to a new role the owner created from the
+        CloudFormation template, with a role setup Pennsieve issued to them for it (GET /role-policy?externalId=true).
+        Owner only. The new role is checked as at registration: the external ID was issued to the owner for that
+        role and is unexpired and unused, Pennsieve can use the role with it and not without it, and the role is in
+        the account's AWS account. Returns the old role's name, for the owner to delete.
+      x-amazon-apigateway-integration:
+        $ref: '#/components/x-amazon-apigateway-integrations/account-service'
+      operationId: postAccountRole
+      security:
+        - token_auth: [ ]
+      tags:
+        - Accounts
+      parameters:
+        - in: path
+          name: uuid
+          required: true
+          schema:
+            type: string
+          description: The uuid of the compute resource account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleName, externalId]
+              properties:
+                roleName:
+                  type: string
+                externalId:
+                  type: string
+                templateVersion:
+                  type: string
+                  description: the template version the role was made from; the published one when left out
+      responses:
+        '200':
+          description: The account now uses the new role
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  oldRoleName:
+                    type: string
+                    description: the role the account no longer uses; the owner deletes it
+                  roleName:
+                    type: string
+                  connection:
+                    type: string
+                  templateVersion:
+                    type: string
+        '4XX':
+          $ref: '#/components/responses/Unauthorized'
+        '5XX':
+          $ref: '#/components/responses/Error'
   /accounts/{uuid}/workspaces:
     post:
       summary: Enable a workspace for an account
@@ -3135,14 +3207,50 @@ paths:
         - token_auth: [ ]
       tags:
         - Reference
+      parameters:
+        - in: query
+          name: externalId
+          schema:
+            type: string
+            enum: ["true"]
+          required: false
+          description: |
+            Issue an external ID for the role (recorded as issued to the caller, for this role, for 24 hours) and
+            return how to create the role from the CloudFormation template.
       responses:
         '200':
-          description: The IAM permission policy document
+          description: The role setup
           content:
             application/json:
               schema:
                 type: object
-                description: An IAM policy document with Version and Statement fields
+                properties:
+                  roleName:
+                    type: string
+                  policyDocument:
+                    type: object
+                    description: the role's IAM permission policy (policies/compute-role-policy.json)
+                  trustPolicyDocument:
+                    type: object
+                  externalId:
+                    type: string
+                  pennsieveAccountId:
+                    type: string
+                    description: the account the role trusts (with externalId)
+                  cloudFormation:
+                    type: object
+                    description: how to create the role from the published template (with externalId, when one is published)
+                    properties:
+                      templateUrl:
+                        type: string
+                      templateVersion:
+                        type: string
+                      quickCreateUrl:
+                        type: string
+                        description: the AWS console's quick-create page, with this role setup's parameters
+                      cloudShellCommand:
+                        type: string
+                        description: an aws cloudformation create-stack command with this role setup's parameters
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':

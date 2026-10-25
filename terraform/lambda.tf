@@ -41,6 +41,12 @@ resource "aws_lambda_function" "service_lambda" {
       // user can register the role with one (POST /accounts).
       ROLE_CODES_TABLE = aws_dynamodb_table.compute_role_codes_table.name
 
+      // The compute role's CloudFormation template (cloudformation.tf): what
+      // role setups point the app, the CLI and CloudShell at, and its version,
+      // which accounts connected with an older one are compared against.
+      CFN_TEMPLATE_URL     = local.cfn_template_url
+      CFN_TEMPLATE_VERSION = tostring(local.cfn_template_version)
+
       // Platform safety cap for per-user chat & workflow LLM spend. MUST
       // mirror the values set on the chat-service Lambda — both services
       // resolve effective quotas the same way (user row → __default__ →

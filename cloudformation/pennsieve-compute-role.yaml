@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+# The IAM role that lets Pennsieve set up and run compute nodes in this AWS
+# account. Pennsieve's account may assume it only with the external ID it
+# issued for this registration (sts:ExternalId), so nobody else can have
+# Pennsieve use it.
+#
+# This file is a source template: terraform renders it (the role's permission
+# policy from policies/compute-role-policy.json, and the template version) and
+# publishes the result as cfn/pennsieve-compute-role/v<N>.yaml and latest.yaml.
+# Don't deploy it unrendered.
+Description: "Pennsieve compute role (template v__TEMPLATE_VERSION__): lets Pennsieve set up and run compute nodes in this AWS account."
+
+Metadata:
+  Pennsieve:
+    Template: pennsieve-compute-role
+    TemplateVersion: "__TEMPLATE_VERSION__"
+
+Parameters:
+  RoleName:
+    Type: String
+    Description: The role's name, as Pennsieve issued it (Pennsieve-Compute-...).
+    AllowedPattern: "^[A-Za-z0-9+=,.@_-]{1,64}$"
+  ExternalId:
+    Type: String
+    Description: The external ID Pennsieve issued for this registration; Pennsieve sends it whenever it uses the role.
+    AllowedPattern: "^pn-[0-9a-f]{32}$"
+  PennsieveAccountId:
+    Type: String
+    Description: Pennsieve's AWS account, which may assume the role.
+    AllowedPattern: "^[0-9]{12}$"
+
+Resources:
+  PennsieveComputeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      MaxSessionDuration: 7200
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${PennsieveAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: !Sub "POLICY-${RoleName}"
+          PolicyDocument: __ROLE_POLICY__
+      Tags:
+        - Key: pennsieve:template-version
+          Value: "__TEMPLATE_VERSION__"
+
+Outputs:
+  RoleArn:
+    Description: The role Pennsieve uses in this account.
+    Value: !GetAtt PennsieveComputeRole.Arn
+  AccountId:
+    Description: This AWS account.
+    Value: !Ref AWS::AccountId

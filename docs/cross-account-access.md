@@ -8,9 +8,18 @@ To do this, Pennsieve needs temporary, scoped access to your AWS account through
 
 ## How it works
 
-1. **You create a role in your account.** During compute node setup, a role named `Pennsieve-Compute-{env}-{id}` (e.g., `Pennsieve-Compute-dev-a3f1b20c`) is created in your AWS account. This role trusts the Pennsieve provisioner account, allowing it to temporarily "assume" the role.
+1. **You create a role in your account, from Pennsieve's CloudFormation template.** Connecting an AWS account creates a role named `Pennsieve-Compute-{env}-{id}` (e.g., `Pennsieve-Compute-dev-a3f1b20c`) in your AWS account. This role trusts the Pennsieve provisioner account, allowing it to temporarily "assume" the role.
 
-   The role's trust policy also requires an **external ID** that Pennsieve issues for your registration (`pn-` followed by 32 hex characters). Pennsieve sends it every time it assumes the role, and AWS refuses any request without it. That stops anyone else who learns your account ID and role name from registering them on Pennsieve and having Pennsieve act in your account for them (the "confused deputy" problem). Before registering the account, Pennsieve checks that it can assume the role with the external ID, and that it can't without it. Accounts registered before external IDs existed keep working without one.
+   The role is made by a CloudFormation stack from Pennsieve's published template (`cfn/pennsieve-compute-role/v<N>.yaml`, public-read). There are three ways to create the stack, and all of them use the same template:
+   - **"Connect AWS account" in the app** opens the AWS console's quick-create page with the parameters filled in. You review it and click *Create stack*, signed in to your own account.
+   - **AWS CloudShell, or any aws CLI:** paste the `aws cloudformation create-stack …` command the app shows.
+   - **`pennsieve account register`** runs that command with your `--profile`.
+
+   Your AWS credentials never leave AWS or your computer. When the stack is done, Pennsieve checks that it can use the role, and only then registers the account. The template's permission policy is the same document `GET /role-policy` serves (`policies/compute-role-policy.json`).
+
+   **Accounts connected before the template** ("legacy") keep working. The owner can upgrade one: create a stack from the template, then switch the account to the new role (`POST /accounts/{uuid}/role`). Nodes keep running, because everything that uses the role reads it from the account record. Afterwards, delete the old role yourself; Pennsieve can't, because the role's own policy forbids it to touch `Pennsieve-Compute-*` roles.
+
+   The role's trust policy also requires an **external ID** that Pennsieve issues for your registration (`pn-` followed by 32 hex characters). Pennsieve sends it every time it assumes the role, and AWS refuses any request without it. That stops anyone else who learns your account ID and role name from registering them on Pennsieve and having Pennsieve act in your account for them (the "confused deputy" problem). Before registering the account, Pennsieve checks that it can assume the role with the external ID, and that it can't without it. An external ID only works for the user Pennsieve issued it to, for the role it was issued for, once, within 24 hours, so seeing one in someone's trust policy isn't enough to register their role. Accounts registered before external IDs existed keep working without one.
 
 2. **Pennsieve assumes the role.** When we need to create, update, or remove infrastructure, our provisioner assumes the cross-account role. This gives it temporary credentials (valid for up to 1 hour) that are scoped to the permissions defined on the role.
 

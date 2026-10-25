@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -18,11 +19,13 @@ import (
 	"github.com/pennsieve/account-service/internal/clients"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
+	"github.com/pennsieve/account-service/policies"
 )
 
-// rolePolicyDocument is the scoped IAM permission policy served to agents
-// during role creation. Update this document to change the policy for all
-// future roles.
+// rolePolicyDocument is the scoped IAM permission policy of a user's compute
+// role: served to agents (GET /role-policy) and rendered into the
+// CloudFormation template, both from policies/compute-role-policy.json, so the
+// two can't drift. Change that file to change the policy for all future roles.
 //
 // The policy uses permissions boundaries to prevent privilege escalation:
 // - Statement 1: Allow service actions (no IAM mutation, plus iam:CreateServiceLinkedRole)
@@ -40,139 +43,7 @@ import (
 // policy with the condition returns AccessDenied for AWS/S3, without it
 // returns the data. CloudWatch metric reads support no resource-level
 // scoping either, hence Resource "*".
-const rolePolicyDocument = `{
-	"Version": "2012-10-17",
-	"Statement": [
-		{
-			"Sid": "AllowServices",
-			"Effect": "Allow",
-			"Action": [
-				"ec2:*",
-				"ecr:*",
-				"ecs:*",
-				"elasticfilesystem:*",
-				"lambda:*",
-				"s3:*",
-				"states:*",
-				"kms:*",
-				"logs:*",
-				"dynamodb:*",
-				"ssm:GetParameter",
-				"ssm:PutParameter",
-				"ssm:DeleteParameter",
-				"ssm:GetParameters",
-				"ssm:DescribeParameters",
-				"ssm:AddTagsToResource",
-				"ssm:RemoveTagsFromResource",
-				"ssm:ListTagsForResource",
-				"autoscaling:*",
-				"elasticloadbalancing:*",
-				"route53:*",
-				"acm:*",
-				"events:PutRule",
-				"events:DeleteRule",
-				"events:DescribeRule",
-				"events:EnableRule",
-				"events:DisableRule",
-				"events:PutTargets",
-				"events:RemoveTargets",
-				"events:ListTargetsByRule",
-				"events:TagResource",
-				"events:UntagResource",
-				"events:ListTagsForResource",
-				"bedrock:CreateGuardrail",
-				"bedrock:DeleteGuardrail",
-				"bedrock:GetGuardrail",
-				"bedrock:UpdateGuardrail",
-				"bedrock:CreateGuardrailVersion",
-				"bedrock:DeleteGuardrailVersion",
-				"bedrock:ListGuardrails",
-				"bedrock:TagResource",
-				"bedrock:UntagResource",
-				"bedrock:ListTagsForResource",
-				"sts:GetCallerIdentity",
-				"iam:CreateServiceLinkedRole"
-			],
-			"Resource": "*"
-		},
-		{
-			"Sid": "AllowIAMRoleManagement",
-			"Effect": "Allow",
-			"Action": [
-				"iam:CreateRole",
-				"iam:DeleteRole",
-				"iam:GetRole",
-				"iam:PassRole",
-				"iam:TagRole",
-				"iam:UntagRole",
-				"iam:PutRolePolicy",
-				"iam:GetRolePolicy",
-				"iam:DeleteRolePolicy",
-				"iam:AttachRolePolicy",
-				"iam:DetachRolePolicy",
-				"iam:ListRolePolicies",
-				"iam:ListAttachedRolePolicies",
-				"iam:CreateInstanceProfile",
-				"iam:DeleteInstanceProfile",
-				"iam:AddRoleToInstanceProfile",
-				"iam:RemoveRoleFromInstanceProfile",
-				"iam:GetInstanceProfile",
-				"iam:ListInstanceProfilesForRole",
-				"iam:CreatePolicy",
-				"iam:DeletePolicy",
-				"iam:GetPolicy",
-				"iam:GetPolicyVersion",
-				"iam:ListPolicyVersions",
-				"iam:CreatePolicyVersion",
-				"iam:DeletePolicyVersion"
-			],
-			"Resource": "*"
-		},
-		{
-			"Sid": "AllowMetricReads",
-			"Effect": "Allow",
-			"Action": [
-				"cloudwatch:ListMetrics",
-				"cloudwatch:GetMetricData",
-				"cloudwatch:GetMetricStatistics"
-			],
-			"Resource": "*"
-		},
-		{
-			"Sid": "DenyCreateRoleWithoutBoundary",
-			"Effect": "Deny",
-			"Action": "iam:CreateRole",
-			"Resource": "*",
-			"Condition": {
-				"StringNotLike": {
-					"iam:PermissionsBoundary": "arn:aws:iam::*:policy/pennsieve-boundary-*"
-				}
-			}
-		},
-		{
-			"Sid": "DenyBoundaryStripping",
-			"Effect": "Deny",
-			"Action": "iam:DeleteRolePermissionsBoundary",
-			"Resource": "*"
-		},
-		{
-			"Sid": "DenySelfModification",
-			"Effect": "Deny",
-			"Action": [
-				"iam:PutRolePolicy",
-				"iam:DeleteRolePolicy",
-				"iam:AttachRolePolicy",
-				"iam:DetachRolePolicy",
-				"iam:UpdateRole",
-				"iam:UpdateAssumeRolePolicy"
-			],
-			"Resource": [
-				"arn:aws:iam::*:role/Pennsieve-Compute-*",
-				"arn:aws:iam::*:role/ROLE-*"
-			]
-		}
-	]
-}`
+var rolePolicyDocument = policies.ComputeRolePolicy
 
 // RolePolicyJSON returns the raw role policy document for testing.
 func RolePolicyJSON() string {
@@ -188,6 +59,67 @@ type roleConfigResponse struct {
 	// registers the account with it. Only for agents that ask (?externalId=true),
 	// so older agents get exactly the configuration they always did.
 	ExternalId string `json:"externalId,omitempty"`
+	// PennsieveAccountId is the account the role trusts, with an external ID:
+	// the template's PennsieveAccountId parameter.
+	PennsieveAccountId string `json:"pennsieveAccountId,omitempty"`
+	// CloudFormation is how to create the role from the published template,
+	// with an external ID and when a template is published.
+	CloudFormation *cloudFormationSetup `json:"cloudFormation,omitempty"`
+}
+
+// cloudFormationSetup is the compute role's template and two ways to create
+// a stack from it with this role setup's parameters: the AWS console's
+// quick-create page, or a command for AWS CloudShell (or any aws CLI).
+type cloudFormationSetup struct {
+	TemplateUrl       string `json:"templateUrl"`
+	TemplateVersion   string `json:"templateVersion"`
+	QuickCreateUrl    string `json:"quickCreateUrl"`
+	CloudShellCommand string `json:"cloudShellCommand"`
+}
+
+// newCloudFormationSetup is the template at templateURL (version) with
+// resp's parameters; nil without a template URL or an external ID. The stack
+// is named after the role, in region.
+func newCloudFormationSetup(templateURL, version, region string, resp roleConfigResponse) *cloudFormationSetup {
+	if templateURL == "" || resp.ExternalId == "" {
+		return nil
+	}
+	params := url.Values{}
+	params.Set("templateURL", templateURL)
+	params.Set("stackName", resp.RoleName)
+	params.Set("param_RoleName", resp.RoleName)
+	params.Set("param_ExternalId", resp.ExternalId)
+	params.Set("param_PennsieveAccountId", resp.PennsieveAccountId)
+	quickCreate := fmt.Sprintf("https://console.aws.amazon.com/cloudformation/home?region=%s#/stacks/quickcreate?%s",
+		url.QueryEscape(region), quickCreateQuery(params))
+	command := strings.Join([]string{
+		"aws cloudformation create-stack",
+		"--region " + region,
+		"--stack-name " + resp.RoleName,
+		"--template-url '" + templateURL + "'",
+		"--parameters",
+		"ParameterKey=RoleName,ParameterValue=" + resp.RoleName,
+		"ParameterKey=ExternalId,ParameterValue=" + resp.ExternalId,
+		"ParameterKey=PennsieveAccountId,ParameterValue=" + resp.PennsieveAccountId,
+		"--capabilities CAPABILITY_NAMED_IAM",
+	}, " ")
+	return &cloudFormationSetup{
+		TemplateUrl:       templateURL,
+		TemplateVersion:   version,
+		QuickCreateUrl:    quickCreate,
+		CloudShellCommand: command,
+	}
+}
+
+// quickCreateQuery is params in the console's order (templateURL, stackName,
+// then the parameters), query-encoded.
+func quickCreateQuery(params url.Values) string {
+	order := []string{"templateURL", "stackName", "param_RoleName", "param_ExternalId", "param_PennsieveAccountId"}
+	parts := make([]string, 0, len(order))
+	for _, k := range order {
+		parts = append(parts, k+"="+url.QueryEscape(params.Get(k)))
+	}
+	return strings.Join(parts, "&")
 }
 
 // buildRoleConfig is the role configuration for a new role trusting
@@ -205,12 +137,16 @@ func buildRoleConfig(roleName, pennsieveAccountId string, withExternalId bool, n
 	if err != nil {
 		return roleConfigResponse{}, err
 	}
-	return roleConfigResponse{
+	resp := roleConfigResponse{
 		RoleName:            roleName,
 		PolicyDocument:      json.RawMessage(rolePolicyDocument),
 		TrustPolicyDocument: json.RawMessage(trust),
 		ExternalId:          externalId,
-	}, nil
+	}
+	if externalId != "" {
+		resp.PennsieveAccountId = pennsieveAccountId
+	}
+	return resp, nil
 }
 
 // issueRoleCode records the external ID in resp as issued to userId, for
@@ -267,6 +203,12 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 			Body:       `{"error":"failed to build role config"}`,
 		}, nil
 	}
+
+	region := os.Getenv("REGION")
+	if region == "" {
+		region = "us-east-1"
+	}
+	resp.CloudFormation = newCloudFormationSetup(os.Getenv("CFN_TEMPLATE_URL"), os.Getenv("CFN_TEMPLATE_VERSION"), region, resp)
 
 	// Pennsieve remembers whom it gave the code to, for which role: only that
 	// user can register that role with it (POST /accounts).

@@ -115,3 +115,11 @@ output "storage_metadata_policy_arn" {
   value       = aws_iam_policy.storage_metadata.arn
   description = "ARN of the managed IAM policy for storage bucket configuration reads (no object access)"
 }
+
+output "cloudformation_template_url" {
+  value = local.cfn_template_url
+}
+
+output "cloudformation_templates_bucket" {
+  value = aws_s3_bucket.cloudformation_templates.id
+}
