@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -242,4 +243,20 @@ func TestPatchAccount_TemplateVersion(t *testing.T) {
 	resp = patchAccount(t, testId, legacy.Uuid, `{"templateVersion":"2"}`)
 	assert.Equal(t, 400, resp.StatusCode)
 	assert.Contains(t, resp.Body, "wasn't connected with CloudFormation")
+}
+
+// Past the legacy cutoff, a legacy account can still upgrade: only new
+// registrations without an external ID are refused.
+func TestPostAccountRole_UpgradesALegacyAccountAfterTheCutoff(t *testing.T) {
+	store, testId := setupPostAccountHandlerTest(t)
+	t.Setenv("LEGACY_REGISTRATION_CUTOFF", time.Now().Add(-time.Hour).UTC().Format(time.RFC3339))
+	old := legacyAccount(t, store, testId)
+	newRole := "Pennsieve-Compute-dev-" + testId
+	code := issued(t, externalIdFor(testId), testId, newRole)
+
+	resp := postRole(t, testId, old.Uuid, account.AccountRoleRequest{RoleName: newRole, ExternalId: code})
+	require.Equal(t, 200, resp.StatusCode, resp.Body)
+	stored, err := store.GetById(context.Background(), old.Uuid)
+	require.NoError(t, err)
+	assert.Equal(t, newRole, stored.RoleName)
 }

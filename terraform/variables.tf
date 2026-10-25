@@ -124,3 +124,9 @@ locals {
 variable "pennsieve_domain" {
   default = ""
 }
+
+variable "legacy_registration_cutoff" {
+  description = "When registering a compute account without an external ID (agents older than the CloudFormation one) stops being accepted, as an RFC 3339 time, e.g. 2026-12-01T00:00:00Z. Before it, such registrations are accepted with Deprecation/Sunset headers; empty keeps accepting them. Set it only once the agent that registers through the template is released."
+  type        = string
+  default     = ""
+}

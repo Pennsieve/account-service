@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -341,3 +342,53 @@ func TestPostAccountsHandler_FailedVerificationKeepsTheCode(t *testing.T) {
 	assert.Equal(t, 201, retry.StatusCode, retry.Body)
 }
 
+// Registering without an external ID, as the cutoff approaches and passes.
+
+func TestPostAccountsHandler_LegacyCutoffUnset(t *testing.T) {
+	_, testId := setupPostAccountHandlerTest(t)
+	t.Setenv("LEGACY_REGISTRATION_CUTOFF", "")
+	resp := postAccount(t, testId, models.Account{AccountId: "acct-" + testId, AccountType: "aws", RoleName: "r-" + testId})
+	require.Equal(t, 201, resp.StatusCode, resp.Body)
+	assert.Empty(t, resp.Headers["Deprecation"])
+	assert.Empty(t, resp.Headers["Sunset"])
+}
+
+func TestPostAccountsHandler_LegacyBeforeCutoff(t *testing.T) {
+	_, testId := setupPostAccountHandlerTest(t)
+	cutoff := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
+	t.Setenv("LEGACY_REGISTRATION_CUTOFF", cutoff.Format(time.RFC3339))
+	resp := postAccount(t, testId, models.Account{AccountId: "acct-" + testId, AccountType: "aws", RoleName: "r-" + testId})
+	require.Equal(t, 201, resp.StatusCode, resp.Body)
+	assert.Equal(t, "true", resp.Headers["Deprecation"])
+	assert.Equal(t, cutoff.Format(http.TimeFormat), resp.Headers["Sunset"])
+}
+
+func TestPostAccountsHandler_LegacyAfterCutoff(t *testing.T) {
+	store, testId := setupPostAccountHandlerTest(t)
+	t.Setenv("LEGACY_REGISTRATION_CUTOFF", time.Now().Add(-time.Hour).UTC().Format(time.RFC3339))
+	resp := postAccount(t, testId, models.Account{AccountId: "acct-" + testId, AccountType: "aws", RoleName: "r-" + testId})
+	assert.Equal(t, 400, resp.StatusCode)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+	assert.Equal(t, account.ErrLegacyRegistrationRetired.Error(), body["message"])
+	stored, err := store.GetByAccountId(context.Background(), "acct-"+testId)
+	require.NoError(t, err)
+	assert.Empty(t, stored)
+}
+
+func TestPostAccountsHandler_WithExternalIdAfterCutoff(t *testing.T) {
+	_, testId := setupPostAccountHandlerTest(t)
+	t.Setenv("LEGACY_REGISTRATION_CUTOFF", time.Now().Add(-time.Hour).UTC().Format(time.RFC3339))
+	code := issued(t, externalIdFor(testId), testId, "r-"+testId)
+	resp := postAccount(t, testId, models.Account{AccountId: "acct-" + testId, AccountType: "aws", RoleName: "r-" + testId, ExternalId: code})
+	require.Equal(t, 201, resp.StatusCode, resp.Body)
+	assert.Empty(t, resp.Headers["Deprecation"])
+}
+
+func TestPostAccountsHandler_LegacyInvalidCutoff(t *testing.T) {
+	_, testId := setupPostAccountHandlerTest(t)
+	t.Setenv("LEGACY_REGISTRATION_CUTOFF", "December 1st")
+	resp := postAccount(t, testId, models.Account{AccountId: "acct-" + testId, AccountType: "aws", RoleName: "r-" + testId})
+	require.Equal(t, 201, resp.StatusCode, resp.Body)
+	assert.Empty(t, resp.Headers["Deprecation"])
+}
