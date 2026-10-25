@@ -155,7 +155,7 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		return nil, &resp
 	}
 
-	crossAccountCfg, err := clients.AssumeComputeRoleConfig(ctx, cfg, account.AccountId, account.RoleName, account.ExternalId, region)
+	crossAccountCfg, err := clients.AssumeComputeRoleConfig(ctx, cfg, account.AccountId, account.RuntimeRole(), account.ExternalId, region)
 	if err != nil {
 		log.Printf("Error assuming cross-account role for account %s (node %s): %v", account.AccountId, nodeUuid, err)
 		resp := events.APIGatewayV2HTTPResponse{

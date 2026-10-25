@@ -1,0 +1,97 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "InvokeComputeGateway",
+			"Effect": "Allow",
+			"Action": [
+				"lambda:InvokeFunctionUrl",
+				"lambda:InvokeFunction"
+			],
+			"Resource": "arn:aws:lambda:*:*:function:compute-gateway-v2-*"
+		},
+		{
+			"Sid": "FindSessionTasks",
+			"Effect": "Allow",
+			"Action": [
+				"ecs:ListTasks",
+				"ecs:DescribeTasks"
+			],
+			"Resource": "*",
+			"Condition": {
+				"ArnLike": {
+					"ecs:cluster": "arn:aws:ecs:*:*:cluster/compute-cluster-*"
+				}
+			}
+		},
+		{
+			"Sid": "FindSessionTaskAddress",
+			"Effect": "Allow",
+			"Action": "ec2:DescribeNetworkInterfaces",
+			"Resource": "*"
+		},
+		{
+			"Sid": "ReadSessionRouting",
+			"Effect": "Allow",
+			"Action": [
+				"elasticloadbalancing:DescribeLoadBalancers",
+				"elasticloadbalancing:DescribeListeners",
+				"elasticloadbalancing:DescribeTargetGroups",
+				"elasticloadbalancing:DescribeRules"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "RegisterSessionTargets",
+			"Effect": "Allow",
+			"Action": [
+				"elasticloadbalancing:CreateTargetGroup",
+				"elasticloadbalancing:RegisterTargets",
+				"elasticloadbalancing:AddTags"
+			],
+			"Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/itg-*/*"
+		},
+		{
+			"Sid": "RouteSessions",
+			"Effect": "Allow",
+			"Action": [
+				"elasticloadbalancing:CreateRule",
+				"elasticloadbalancing:AddTags"
+			],
+			"Resource": [
+				"arn:aws:elasticloadbalancing:*:*:listener/app/shared-interactive-*/*/*",
+				"arn:aws:elasticloadbalancing:*:*:listener-rule/app/shared-interactive-*/*/*/*"
+			]
+		},
+		{
+			"Sid": "ReadRunResults",
+			"Effect": "Allow",
+			"Action": [
+				"s3:GetObject",
+				"s3:ListBucket"
+			],
+			"Resource": [
+				"arn:aws:s3:::workflow-logs-*",
+				"arn:aws:s3:::workflow-logs-*/*"
+			]
+		},
+		{
+			"Sid": "InspectStorageBuckets",
+			"Effect": "Allow",
+			"Action": [
+				"s3:GetBucketTagging",
+				"s3:GetBucketLocation"
+			],
+			"Resource": "arn:aws:s3:::*"
+		},
+		{
+			"Sid": "ReadStorageMetrics",
+			"Effect": "Allow",
+			"Action": [
+				"cloudwatch:GetMetricData",
+				"cloudwatch:ListMetrics"
+			],
+			"Resource": "*"
+		}
+	]
+}

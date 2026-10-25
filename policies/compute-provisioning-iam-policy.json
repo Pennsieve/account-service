@@ -1,0 +1,204 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "TerraformState",
+			"Effect": "Allow",
+			"Action": [
+				"s3:CreateBucket",
+				"s3:ListBucket",
+				"s3:GetObject",
+				"s3:PutObject",
+				"s3:DeleteObject",
+				"s3:GetBucketVersioning",
+				"s3:PutBucketVersioning",
+				"s3:ListBucketVersions",
+				"s3:GetBucketLocation",
+				"s3:GetBucketPolicy",
+				"s3:GetBucketAcl",
+				"s3:GetEncryptionConfiguration",
+				"s3:GetBucketPublicAccessBlock",
+				"s3:GetBucketTagging",
+				"s3:GetLifecycleConfiguration",
+				"s3:GetBucketLogging",
+				"s3:GetBucketRequestPayment",
+				"s3:GetBucketCORS",
+				"s3:GetBucketWebsite",
+				"s3:GetReplicationConfiguration",
+				"s3:GetBucketObjectLockConfiguration",
+				"s3:GetAccelerateConfiguration"
+			],
+			"Resource": [
+				"arn:aws:s3:::pennsieve-compute-tfstate-*",
+				"arn:aws:s3:::tfstate-*"
+			]
+		},
+		{
+			"Sid": "Identity",
+			"Effect": "Allow",
+			"Action": [
+				"sts:GetCallerIdentity",
+				"s3:ListAllMyBuckets",
+				"s3:GetBucketLocation"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "ManageNodeRoles",
+			"Effect": "Allow",
+			"Action": [
+				"iam:CreateRole",
+				"iam:DeleteRole",
+				"iam:GetRole",
+				"iam:UpdateRole",
+				"iam:UpdateRoleDescription",
+				"iam:UpdateAssumeRolePolicy",
+				"iam:TagRole",
+				"iam:UntagRole",
+				"iam:ListRoleTags",
+				"iam:PutRolePolicy",
+				"iam:GetRolePolicy",
+				"iam:DeleteRolePolicy",
+				"iam:ListRolePolicies",
+				"iam:AttachRolePolicy",
+				"iam:DetachRolePolicy",
+				"iam:ListAttachedRolePolicies",
+				"iam:PutRolePermissionsBoundary",
+				"iam:ListInstanceProfilesForRole"
+			],
+			"Resource": [
+				"arn:aws:iam::*:role/ecs-task-execution-role-*",
+				"arn:aws:iam::*:role/ecs-task-role-*",
+				"arn:aws:iam::*:role/step-functions-role-*",
+				"arn:aws:iam::*:role/lambda-workflow-role-*",
+				"arn:aws:iam::*:role/lambda-processor-role-*",
+				"arn:aws:iam::*:role/orphan-resource-gc-*",
+				"arn:aws:iam::*:role/gpu-ecs-instance-role-*",
+				"arn:aws:iam::*:role/llm-governor-role-*",
+				"arn:aws:iam::*:role/vpc-flow-logs-role-*",
+				"arn:aws:iam::*:role/shared-vpc-flow-logs-role-*",
+				"arn:aws:iam::*:role/task_role_for_*",
+				"arn:aws:iam::*:role/execution_role_for_*",
+				"arn:aws:iam::*:role/pennsieve-storage-*"
+			]
+		},
+		{
+			"Sid": "PassNodeRoles",
+			"Effect": "Allow",
+			"Action": "iam:PassRole",
+			"Resource": [
+				"arn:aws:iam::*:role/ecs-task-execution-role-*",
+				"arn:aws:iam::*:role/ecs-task-role-*",
+				"arn:aws:iam::*:role/step-functions-role-*",
+				"arn:aws:iam::*:role/lambda-workflow-role-*",
+				"arn:aws:iam::*:role/lambda-processor-role-*",
+				"arn:aws:iam::*:role/orphan-resource-gc-*",
+				"arn:aws:iam::*:role/gpu-ecs-instance-role-*",
+				"arn:aws:iam::*:role/llm-governor-role-*",
+				"arn:aws:iam::*:role/vpc-flow-logs-role-*",
+				"arn:aws:iam::*:role/shared-vpc-flow-logs-role-*",
+				"arn:aws:iam::*:role/task_role_for_*",
+				"arn:aws:iam::*:role/execution_role_for_*",
+				"arn:aws:iam::*:role/pennsieve-storage-*"
+			],
+			"Condition": {
+				"StringEquals": {
+					"iam:PassedToService": [
+						"ecs-tasks.amazonaws.com",
+						"ecs.amazonaws.com",
+						"ec2.amazonaws.com",
+						"lambda.amazonaws.com",
+						"states.amazonaws.com",
+						"vpc-flow-logs.amazonaws.com",
+						"events.amazonaws.com"
+					]
+				}
+			}
+		},
+		{
+			"Sid": "ManageNodePolicies",
+			"Effect": "Allow",
+			"Action": [
+				"iam:CreatePolicy",
+				"iam:DeletePolicy",
+				"iam:GetPolicy",
+				"iam:ListPolicyVersions",
+				"iam:GetPolicyVersion",
+				"iam:CreatePolicyVersion",
+				"iam:DeletePolicyVersion",
+				"iam:SetDefaultPolicyVersion",
+				"iam:TagPolicy",
+				"iam:UntagPolicy",
+				"iam:ListPolicyTags",
+				"iam:ListEntitiesForPolicy"
+			],
+			"Resource": [
+				"arn:aws:iam::*:policy/pennsieve-boundary-*",
+				"arn:aws:iam::*:policy/app_role_efs_policy-*",
+				"arn:aws:iam::*:policy/*_task_execution_role_policy-*"
+			]
+		},
+		{
+			"Sid": "ManageInstanceProfiles",
+			"Effect": "Allow",
+			"Action": [
+				"iam:CreateInstanceProfile",
+				"iam:DeleteInstanceProfile",
+				"iam:GetInstanceProfile",
+				"iam:AddRoleToInstanceProfile",
+				"iam:RemoveRoleFromInstanceProfile",
+				"iam:TagInstanceProfile",
+				"iam:UntagInstanceProfile"
+			],
+			"Resource": "arn:aws:iam::*:instance-profile/gpu-ecs-instance-profile-*"
+		},
+		{
+			"Sid": "ServiceLinkedRoles",
+			"Effect": "Allow",
+			"Action": "iam:CreateServiceLinkedRole",
+			"Resource": [
+				"arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*",
+				"arn:aws:iam::*:role/aws-service-role/autoscaling.amazonaws.com/*",
+				"arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*",
+				"arn:aws:iam::*:role/aws-service-role/elasticfilesystem.amazonaws.com/*",
+				"arn:aws:iam::*:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/*",
+				"arn:aws:iam::*:role/aws-service-role/spot.amazonaws.com/*"
+			]
+		},
+		{
+			"Sid": "DenyCreateRoleWithoutBoundary",
+			"Effect": "Deny",
+			"Action": "iam:CreateRole",
+			"Resource": "*",
+			"Condition": {
+				"ArnNotLike": {
+					"iam:PermissionsBoundary": "arn:aws:iam::*:policy/pennsieve-boundary-*"
+				}
+			}
+		},
+		{
+			"Sid": "DenyBoundaryStripping",
+			"Effect": "Deny",
+			"Action": "iam:DeleteRolePermissionsBoundary",
+			"Resource": "*"
+		},
+		{
+			"Sid": "DenySelfModification",
+			"Effect": "Deny",
+			"Action": [
+				"iam:PutRolePolicy",
+				"iam:DeleteRolePolicy",
+				"iam:AttachRolePolicy",
+				"iam:DetachRolePolicy",
+				"iam:UpdateRole",
+				"iam:UpdateAssumeRolePolicy",
+				"iam:DeleteRole",
+				"iam:PutRolePermissionsBoundary"
+			],
+			"Resource": [
+				"arn:aws:iam::*:role/Pennsieve-Compute-*",
+				"arn:aws:iam::*:role/ROLE-*"
+			]
+		}
+	]
+}

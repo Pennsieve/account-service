@@ -71,7 +71,9 @@ type BucketAccess struct {
 	// ExpectedBucketOwner on every S3 call so a drifted record fails the call
 	// rather than acting on the wrong bucket.
 	AccountID string
-	// RoleName is the cross-account role to assume, empty when there is none.
+	// RoleName is the cross-account role a provisioner task assumes (the
+	// provisioning role), empty when there is none. Config's credentials
+	// are the account's runtime role's, when it has one.
 	//
 	// CONTRACT for the storage node provisioner (not yet built): a task
 	// receives ACCOUNT_ID always, and ROLE_NAME only when there is a role to
@@ -131,7 +133,11 @@ func ResolveBucketAccessWithPlatform(ctx context.Context, cfg aws.Config, platfo
 	// If those ever diverge — a bucket owned by one account reached through a
 	// role in another — the call fails closed, which is the outcome we want
 	// until someone has decided what that arrangement should mean.
-	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", account.AccountId, account.RoleName)
+	//
+	// Config is for what this service does itself (reading the bucket's
+	// tags): the runtime role. RoleName below is for the provisioner task,
+	// which creates and destroys the bucket: the provisioning role.
+	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", account.AccountId, account.RuntimeRole())
 	crossAccount, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(BucketRegion(cfg, node)),
 		config.WithCredentialsProvider(

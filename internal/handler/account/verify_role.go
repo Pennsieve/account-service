@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/pennsieve/account-service/internal/clients"
+	"github.com/pennsieve/account-service/policies"
 )
 
 // RoleAssumer is the part of STS that registration checks a role with.
@@ -46,11 +48,53 @@ var (
 	ErrInvalidExternalId = errors.New("invalid external id: use the one returned with the role configuration")
 )
 
+// runtimeRoleRetryDelays are the waits for the runtime role, checked right
+// after the provisioning role from the same stack: by then IAM has had the
+// provisioning role's waits to catch up, and the request must stay inside
+// API Gateway's 30s.
+var runtimeRoleRetryDelays = []time.Duration{1 * time.Second, 2 * time.Second}
+
+// firstRuntimeRoleTemplateVersion is the template version from which a
+// stack makes the runtime role next to the provisioning role.
+const firstRuntimeRoleTemplateVersion = 2
+
+// runtimeRoleFor is the runtime role a stack of templateVersion made next to
+// the provisioning role roleName: none before template v2.
+func runtimeRoleFor(roleName, templateVersion string) string {
+	v, err := strconv.Atoi(templateVersion)
+	if err != nil || v < firstRuntimeRoleTemplateVersion {
+		return ""
+	}
+	return policies.RuntimeRoleName(roleName)
+}
+
+// verifyRoles checks an account's roles as verifyRole does: the provisioning
+// role roleName, and, when a stack of templateVersion also makes one, the
+// runtime role, whose name it returns.
+func verifyRoles(ctx context.Context, assumer RoleAssumer, accountId, roleName, externalId, templateVersion string, sleep func(time.Duration)) (string, error) {
+	if err := verifyRole(ctx, assumer, accountId, roleName, externalId, sleep); err != nil {
+		return "", err
+	}
+	runtimeRole := runtimeRoleFor(roleName, templateVersion)
+	if runtimeRole == "" {
+		return "", nil
+	}
+	if err := verifyRoleWith(ctx, assumer, accountId, runtimeRole, externalId, sleep, runtimeRoleRetryDelays); err != nil {
+		return "", err
+	}
+	return runtimeRole, nil
+}
+
 // verifyRole checks, before an account is registered, that Pennsieve can use
 // its role: assuming it (with the external ID, when there is one) must work,
 // and, when there is one, assuming it without must not, which proves the trust
 // policy requires it. sleep is time.Sleep outside tests.
 func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, externalId string, sleep func(time.Duration)) error {
+	return verifyRoleWith(ctx, assumer, accountId, roleName, externalId, sleep, verifyRetryDelays)
+}
+
+// verifyRoleWith is verifyRole with its own waits between attempts.
+func verifyRoleWith(ctx context.Context, assumer RoleAssumer, accountId, roleName, externalId string, sleep func(time.Duration), retryDelays []time.Duration) error {
 	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, roleName)
 	in := &sts.AssumeRoleInput{
 		RoleArn:         aws.String(roleArn),
@@ -67,11 +111,11 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 		if out, err = assumer.AssumeRole(ctx, in); err == nil {
 			break
 		}
-		if attempt >= len(verifyRetryDelays) || ctx.Err() != nil {
+		if attempt >= len(retryDelays) || ctx.Err() != nil {
 			log.Printf("registration: assuming %s failed: %v", roleArn, err)
 			return ErrRoleUnusable
 		}
-		sleep(verifyRetryDelays[attempt])
+		sleep(retryDelays[attempt])
 	}
 
 	// The session is the role's in accountId, the account the record is for.
