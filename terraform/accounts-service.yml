@@ -1250,6 +1250,9 @@ paths:
                   type: string
                   description: The new name for the account
                 description:
+                templateVersion:
+                  type: string
+                  description: the template version the account's CloudFormation stack was updated to (accounts connected with CloudFormation only)
                   type: string
                   description: The new description for the account
       responses:

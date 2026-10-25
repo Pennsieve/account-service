@@ -32,6 +32,8 @@ var (
 	ErrRoleUnusable = errors.New("Pennsieve couldn't use the role: check that it exists in this AWS account and trusts Pennsieve")
 	// ErrRoleNotRestricted: the role can be assumed without its external ID.
 	ErrRoleNotRestricted = errors.New("the role's trust policy doesn't require its external ID: recreate the role with the trust policy Pennsieve provides")
+	// ErrNotCloudFormation: a template version for an account whose role isn't a stack.
+	ErrNotCloudFormation = errors.New("this account wasn't connected with CloudFormation: upgrade it with POST /accounts/{uuid}/role")
 	// ErrSameRole: an upgrade names the role the account already uses.
 	ErrSameRole = errors.New("this account already uses that role: create a new one from the template to upgrade")
 	// ErrRoleInOtherAccount: the role isn't in the account it's registered for.

@@ -208,3 +208,38 @@ func TestPostAccounts_InvalidTemplateVersion(t *testing.T) {
 	assert.Equal(t, 400, resp.StatusCode)
 	assert.Contains(t, resp.Body, "invalid template version")
 }
+
+func patchAccount(t *testing.T, userId, uuid, body string) events.APIGatewayV2HTTPResponse {
+	t.Helper()
+	resp, err := account.PatchAccountHandler(context.Background(), events.APIGatewayV2HTTPRequest{
+		Body:           body,
+		PathParameters: map[string]string{"id": uuid},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: test.CreateTestAuthorizer(userId, "")},
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+// After update-stack, the owner records the stack's new template version; a
+// legacy account can't (it upgrades with POST /accounts/{uuid}/role).
+func TestPatchAccount_TemplateVersion(t *testing.T) {
+	store, testId := setupPostAccountHandlerTest(t)
+	cf := store_dynamodb.Account{
+		Uuid: "cf-" + testId, UserId: testId, AccountId: "123456789012", AccountType: "aws",
+		RoleName: "Pennsieve-Compute-dev-" + testId, ExternalId: externalIdFor(testId), Status: "Enabled",
+		Connection: models.ConnectionCloudFormation, TemplateVersion: "1",
+	}
+	require.NoError(t, store.Insert(context.Background(), cf))
+	resp := patchAccount(t, testId, cf.Uuid, `{"templateVersion":"2"}`)
+	require.Equal(t, 200, resp.StatusCode, resp.Body)
+	stored, _ := store.GetById(context.Background(), cf.Uuid)
+	assert.Equal(t, "2", stored.TemplateVersion)
+	assert.Equal(t, models.ConnectionCloudFormation, stored.Connection)
+
+	assert.Equal(t, 400, patchAccount(t, testId, cf.Uuid, `{"templateVersion":"two"}`).StatusCode)
+
+	legacy := legacyAccount(t, store, testId)
+	resp = patchAccount(t, testId, legacy.Uuid, `{"templateVersion":"2"}`)
+	assert.Equal(t, 400, resp.StatusCode)
+	assert.Contains(t, resp.Body, "wasn't connected with CloudFormation")
+}
