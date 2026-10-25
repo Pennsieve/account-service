@@ -36,10 +36,14 @@ Two sources, both from 2026-10-24:
    temporary access key. That covers node creation, update and destruction
    in basic, secure and compliant modes, workflow runs, notebook sessions,
    layers, app deploys and the dashboard's reads, as they happened on dev.
-   The measured action set is compared with the policies by
-   `check_policy.py` (see the ticket); every measured action is allowed by
-   the policy that role would use, except `sts:GetCallerIdentity`, which
-   needs no permission.
+   182 distinct actions over 25,401 events. The measured action set is
+   compared with the policies by `check_policy.py` (attached to the
+   ticket); every measured action is allowed by the policy that role would
+   use, except `ecr:CreatePullThroughCacheRule`, which no current
+   terraform makes (two failed attempts from a branch under test), and a
+   one-off `logs:DescribeLogGroups` from a dashboard design probe. S3
+   object reads are data events, which the lookup doesn't return, so
+   download-service's reads are covered from its code only.
 
 The dev account's role is the legacy `ROLE-941165240011`, assumed without an
 external ID; that doesn't change which actions are used.
@@ -76,8 +80,11 @@ terraform-made roles, and the interactive data path is network only.
   `Pennsieve-Compute-*` roles themselves (both of them) can't be changed or
   deleted.
 - `infrastructure`: networking, GPU capacity, ECS, EFS, KMS key management
-  (no `Decrypt`, `Encrypt` or `GenerateDataKey`), and the interactive
-  ingress (ELB, Route53, ACM). EC2, EFS, KMS, Route53 and ACM resources get
+  (no `Decrypt`, `Encrypt` or `GenerateDataKey`, except through Step
+  Functions: deleting or describing an encrypted state machine has that
+  service decrypt its definition with the caller's credentials, so
+  `kms:Decrypt`/`GenerateDataKey` are allowed with `kms:ViaService`
+  limited to `states.*`), and the interactive ingress (ELB, Route53, ACM). EC2, EFS, KMS, Route53 and ACM resources get
   random IDs and no tag-on-create conditions the provisioner sets, so these
   stay on `Resource: *` with explicit action lists instead of `service:*`.
 - `services`: Lambda functions, state machines, log groups, SSM parameters,

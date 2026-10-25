@@ -139,11 +139,19 @@ func TestProvisioningPolicy_Guardrails(t *testing.T) {
 }
 
 // The provisioning role manages infrastructure; it doesn't read the data
-// the infrastructure holds.
+// the infrastructure holds. The one key use is Step Functions decrypting an
+// encrypted state machine's definition on the role's behalf (deleting or
+// describing one in secure and compliant mode), allowed through that
+// service only.
 func TestProvisioningPolicy_NoDataAccess(t *testing.T) {
 	doc := parse(t, compute.RolePolicyJSON())
 	for _, s := range doc.Statement {
 		if s.Effect != "Allow" {
+			continue
+		}
+		if s.Sid == "WorkflowKeyThroughStepFunctions" {
+			assert.ElementsMatch(t, []string{"kms:Decrypt", "kms:GenerateDataKey"}, list(t, s.Action))
+			assert.JSONEq(t, `"states.*.amazonaws.com"`, string(s.Condition["StringLike"]["kms:ViaService"]))
 			continue
 		}
 		for _, a := range list(t, s.Action) {

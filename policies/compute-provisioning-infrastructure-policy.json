@@ -194,6 +194,20 @@
 				"kms:UpdateKeyDescription"
 			],
 			"Resource": "*"
+		},
+		{
+			"Sid": "WorkflowKeyThroughStepFunctions",
+			"Effect": "Allow",
+			"Action": [
+				"kms:Decrypt",
+				"kms:GenerateDataKey"
+			],
+			"Resource": "*",
+			"Condition": {
+				"StringLike": {
+					"kms:ViaService": "states.*.amazonaws.com"
+				}
+			}
 		}
 	]
 }
