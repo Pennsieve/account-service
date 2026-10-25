@@ -142,6 +142,13 @@ they cover `-runtime` without a terraform change.
    keeps the provisioning role's name and ARN, swaps its inline policy for
    the managed ones, and adds the runtime role; nodes keep running
    throughout. Legacy (CLI-made) accounts use Upgrade.
+   **App follow-up (pennsieve-app, after #891/#892):** the "Update
+   available" badge only opens the stack in the console. Until the account
+   records `templateVersion: "2"`, it has no `runtimeRoleName` and every
+   caller keeps using the broad role, so the badge needs a "Done updating"
+   action that sends the PATCH (account-service then checks the runtime
+   role and records it). The CLI's `update-role` should do the same after
+   its stack update.
 5. Once every account is on v2, the callers' fallback to `roleName` can go,
    and a date after which v1 accounts can't create nodes can be set.
 
