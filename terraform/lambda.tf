@@ -46,6 +46,9 @@ resource "aws_lambda_function" "service_lambda" {
       // which accounts connected with an older one are compared against.
       CFN_TEMPLATE_URL     = local.cfn_template_url
       CFN_TEMPLATE_VERSION = tostring(local.cfn_template_version)
+      // Registrations without an external ID are refused from this time (RFC
+      // 3339); empty keeps accepting them.
+      LEGACY_REGISTRATION_CUTOFF = var.legacy_registration_cutoff
 
       // Platform safety cap for per-user chat & workflow LLM spend. MUST
       // mirror the values set on the chat-service Lambda — both services

@@ -31,6 +31,8 @@ import (
 //   role must also require it, and the account's role can't already be
 //   registered by anyone. Those refusals carry {"message": ...}, which the
 //   agent shows the user.
+// - Without an external ID (older agents), only until LEGACY_REGISTRATION_CUTOFF:
+//   before it, accepted with Deprecation/Sunset headers; from it, refused.
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account
@@ -63,6 +65,25 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
+	}
+
+	// Registering without an external ID is being retired: refused from the
+	// cutoff, flagged as deprecated before it. Registered legacy accounts are
+	// untouched.
+	var deprecationHeaders map[string]string
+	if account.ExternalId == "" {
+		refused, headers := legacyRegistration(time.Now())
+		if refused {
+			log.Printf("%s: refused a registration without an external ID (user %s, account %s): past LEGACY_REGISTRATION_CUTOFF", handlerName, userId, account.AccountId)
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusBadRequest,
+				Body:       errors.ComputeHandlerError(handlerName, ErrLegacyRegistrationRetired),
+			}, nil
+		}
+		if headers != nil {
+			log.Printf("%s: WARNING: registration without an external ID (user %s, account %s); these stop being accepted at %s", handlerName, userId, account.AccountId, headers["Sunset"])
+		}
+		deprecationHeaders = headers
 	}
 
 	cfg, err := utils.LoadAWSConfig(ctx)
@@ -215,6 +236,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusCreated,
+		Headers:    deprecationHeaders,
 		Body:       string(m),
 	}, nil
 }
