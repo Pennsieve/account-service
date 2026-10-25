@@ -111,12 +111,9 @@ resource "aws_s3_object" "compute_role_template" {
   content_type  = "text/yaml"
   cache_control = each.key == "latest.yaml" ? "no-cache" : "public, max-age=31536000, immutable"
 
-  lifecycle {
-    precondition {
-      condition     = strcontains(local.cfn_template, local.compute_role_policy) && !strcontains(local.cfn_template, "__ROLE_POLICY__") && !strcontains(local.cfn_template, "__TEMPLATE_VERSION__")
-      error_message = "The compute role template didn't render: its permission policy must come from policies/compute-role-policy.json."
-    }
-  }
+  # The rendered template's policy is checked against the JSON file by the Go
+  # tests (internal/handler/compute); no precondition here, as the deploy runs
+  # terraform 1.1.5, which has none.
 
   depends_on = [aws_s3_bucket_ownership_controls.cloudformation_templates]
 }
