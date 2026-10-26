@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -60,6 +61,16 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable)
 	var dynamoNodes []models.DynamoDBNode
+
+	// The newest provisioner release (Docker Hub, cached per warm container)
+	// is looked up while the nodes are; annotateLatestVersions then reads it
+	// from the cache.
+	var versionLookup sync.WaitGroup
+	versionLookup.Add(1)
+	go func() {
+		defer versionLookup.Done()
+		getResolver(cfg).LatestVersion(ctx, defaultProvisionerImage)
+	}()
 
 	if accountOwnerMode {
 		// Account owner mode: return ALL nodes on accounts owned by the user
@@ -138,29 +149,32 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			}
 
 			// Filter for owned nodes (organization-independent nodes where user is owner)
+			var owned []string
 			for _, access := range userAccess {
 				if access.AccessType == models.AccessTypeOwner && access.IsOrganizationIndependent() {
-					node, err := nodeStore.GetById(ctx, access.NodeUuid)
-					if err != nil {
-						log.Printf("Error fetching node %s: %v", access.NodeUuid, err)
-						continue // Skip nodes that can't be fetched
-					}
-					if node.Uuid != "" { // Only add non-empty nodes
-						dynamoNodes = append(dynamoNodes, node)
-					}
+					owned = append(owned, access.NodeUuid)
 				}
 			}
+			dynamoNodes = fetchNodes(ctx, nodeStore, owned, func(models.DynamoDBNode) bool { return true })
 		} else {
 			// Organization_id provided: return nodes accessible to user within that workspace
 			log.Println("Organization_id provided:", organizationId, "returning accessible nodes in workspace")
 			
-			// Validate organization membership if organization ID is provided
-			if validationResponse := utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName); validationResponse != nil {
+			// The membership check and the access lookup are independent
+			// (neither writes), so they run together; a non-member is still
+			// refused before anything is returned.
+			var validationResponse *events.APIGatewayV2HTTPResponse
+			var membership sync.WaitGroup
+			membership.Add(1)
+			go func() {
+				defer membership.Done()
+				validationResponse = utils.ValidateOrganizationMembership(ctx, cfg, userId, organizationId, handlerName)
+			}()
+			accessibleNodeUuids, err := permissionService.GetAccessibleNodes(ctx, userId, organizationId)
+			membership.Wait()
+			if validationResponse != nil {
 				return *validationResponse, nil
 			}
-
-			// Use existing GetAccessibleNodes method with the specified organization
-			accessibleNodeUuids, err := permissionService.GetAccessibleNodes(ctx, userId, organizationId)
 			if err != nil {
 				log.Printf("Error getting accessible nodes: %v", err)
 				return events.APIGatewayV2HTTPResponse{
@@ -169,17 +183,10 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				}, nil
 			}
 
-			// Filter nodes to only include those that belong to the specified organization
-			for _, nodeUuid := range accessibleNodeUuids {
-				node, err := nodeStore.GetById(ctx, nodeUuid)
-				if err != nil {
-					log.Printf("Error fetching node %s: %v", nodeUuid, err)
-					continue // Skip nodes that can't be fetched
-				}
-				if node.Uuid != "" && node.OrganizationNodeId() == organizationId { // Only include nodes from the specified organization
-					dynamoNodes = append(dynamoNodes, node)
-				}
-			}
+			// Only nodes that belong to the specified organization
+			dynamoNodes = fetchNodes(ctx, nodeStore, accessibleNodeUuids, func(node models.DynamoDBNode) bool {
+				return node.OrganizationNodeId() == organizationId
+			})
 		}
 	}
 
@@ -196,17 +203,26 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			accountUuids[node.AccountUuid] = true
 		}
 
-		// Fetch account statuses and owners
+		// Fetch account statuses and owners, all at once
+		var mu sync.Mutex
+		var accounts sync.WaitGroup
 		for accountUuid := range accountUuids {
-			account, err := accountStore.GetById(ctx, accountUuid)
-			if err != nil {
-				log.Printf("Error: could not fetch account %s: %v", accountUuid, err)
-				// Skip this account if we can't fetch it - this will result in missing accountOwnerId
-				continue
-			}
-			accountStatusMap[accountUuid] = account.Status
-			accountOwnerMap[accountUuid] = account.UserId
+			accounts.Add(1)
+			go func(accountUuid string) {
+				defer accounts.Done()
+				account, err := accountStore.GetById(ctx, accountUuid)
+				if err != nil {
+					log.Printf("Error: could not fetch account %s: %v", accountUuid, err)
+					// Skip this account if we can't fetch it - this will result in missing accountOwnerId
+					return
+				}
+				mu.Lock()
+				accountStatusMap[accountUuid] = account.Status
+				accountOwnerMap[accountUuid] = account.UserId
+				mu.Unlock()
+			}(accountUuid)
 		}
+		accounts.Wait()
 		
 		// Log errors for accounts that couldn't be fetched
 		for _, node := range dynamoNodes {
@@ -228,6 +244,7 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// Docker Hub) so the frontend can hint when a node is outdated, and report
 	// the latest version at the root so new nodes can be pinned even when the
 	// list is empty.
+	versionLookup.Wait()
 	latestVersion := annotateLatestVersions(ctx, cfg, jsonNodes)
 	if jsonNodes == nil {
 		jsonNodes = []models.Node{}
@@ -246,4 +263,38 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		Body:       string(m),
 	}
 	return response, nil
+}
+
+// fetchNodeConcurrency bounds the node reads in flight for one list.
+const fetchNodeConcurrency = 10
+
+// fetchNodes reads the nodes by uuid, several at a time, in the uuids'
+// order, keeping those that exist and pass keep. A node that can't be read is
+// skipped.
+func fetchNodes(ctx context.Context, store store_dynamodb.NodeStore, uuids []string, keep func(models.DynamoDBNode) bool) []models.DynamoDBNode {
+	found := make([]models.DynamoDBNode, len(uuids))
+	slots := make(chan struct{}, fetchNodeConcurrency)
+	var wg sync.WaitGroup
+	for i, uuid := range uuids {
+		wg.Add(1)
+		go func(i int, uuid string) {
+			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			node, err := store.GetById(ctx, uuid)
+			if err != nil {
+				log.Printf("Error fetching node %s: %v", uuid, err)
+				return
+			}
+			found[i] = node
+		}(i, uuid)
+	}
+	wg.Wait()
+	var nodes []models.DynamoDBNode
+	for _, node := range found {
+		if node.Uuid != "" && keep(node) {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
 }

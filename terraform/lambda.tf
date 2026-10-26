@@ -6,9 +6,12 @@ resource "aws_lambda_function" "service_lambda" {
   architectures = ["arm64"]
   role          = aws_iam_role.service_lambda_role.arn
   timeout       = 300
-  memory_size   = 128
-  s3_bucket     = var.lambda_bucket
-  s3_key        = "${var.service_name}/${var.service_name}-${var.image_tag}.zip"
+  # Lambda's CPU scales with memory: at 128 MB (~1/14 vCPU) listing compute
+  # nodes took 0.9-1.8 s. 1024 MB is ~8x the CPU at about the same cost per
+  # request, since billing is memory x duration.
+  memory_size = 1024
+  s3_bucket   = var.lambda_bucket
+  s3_key      = "${var.service_name}/${var.service_name}-${var.image_tag}.zip"
 
   tags = merge(local.common_tags, { ImageTag = var.image_tag })
 
