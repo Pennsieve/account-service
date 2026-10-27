@@ -135,9 +135,13 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		}, nil
 	}
 
-	// Update provisioner image and tag in DynamoDB to match what the Fargate task will use
-	computeNode.ProvisionerImage = updateRequest.ProvisionerImage
-	computeNode.ProvisionerImageTag = updateRequest.ProvisionerImageTag
+	// The node keeps its running version until the provisioner reports the
+	// update done (handleUpdateComplete); until then it is Updating, with the
+	// version it is moving to as pending.
+	previousStatus := computeNode.Status
+	computeNode.PendingProvisionerImage = updateRequest.ProvisionerImage
+	computeNode.PendingProvisionerImageTag = updateRequest.ProvisionerImageTag
+	computeNode.Status = "Updating"
 	// Allow enabling/disabling interactive sessions on an existing node. Persist
 	// before launch so the provisioner env (read from computeNode below) and the
 	// stored record agree; >0 triggers the shared-infra ALB re-apply.
@@ -399,6 +403,13 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	taskRunner := runner.NewECSTaskRunner(client, runTaskIn)
 	if err := taskRunner.Run(ctx); err != nil {
 		log.Println(err)
+		// No update is running: the node is as it was.
+		computeNode.Status = previousStatus
+		computeNode.PendingProvisionerImage = ""
+		computeNode.PendingProvisionerImageTag = ""
+		if putErr := dynamo_store.Put(ctx, computeNode); putErr != nil {
+			log.Printf("Error restoring node %s after a failed update launch: %v", uuid, putErr)
+		}
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 500,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),

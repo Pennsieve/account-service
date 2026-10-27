@@ -38,6 +38,10 @@ type Node struct {
 	WorkflowManagerTag     string          `json:"workflowManagerTag"`
 	ProvisionerImage       string          `json:"provisionerImage,omitempty"`
 	ProvisionerImageTag    string          `json:"provisionerImageTag,omitempty"`
+	// PendingProvisionerImageTag is the version an update in progress is
+	// moving the node to; ProvisionerImageTag stays the running one until it
+	// finishes.
+	PendingProvisionerImageTag string `json:"pendingProvisionerImageTag,omitempty"`
 	DeploymentMode         string          `json:"deploymentMode,omitempty"`
 	EnableLLMAccess        bool            `json:"enableLLMAccess,omitempty"`
 	LlmBaaAcknowledged     bool            `json:"llmBaaAcknowledged,omitempty"`
@@ -116,6 +120,11 @@ type DynamoDBNode struct {
 	DeploymentMode         string `dynamodbav:"deploymentMode"`
 	ProvisionerImage       string `dynamodbav:"provisionerImage"`
 	ProvisionerImageTag    string `dynamodbav:"provisionerImageTag"`
+	// PendingProvisionerImage/Tag are what an update in progress runs; they
+	// become ProvisionerImage/Tag when the provisioner reports the update
+	// done, and are cleared when it fails.
+	PendingProvisionerImage    string `dynamodbav:"pendingProvisionerImage,omitempty"`
+	PendingProvisionerImageTag string `dynamodbav:"pendingProvisionerImageTag,omitempty"`
 	EnableLLMAccess        bool   `dynamodbav:"enableLLMAccess"`
 	LlmBaaAcknowledged     bool   `dynamodbav:"llmBaaAcknowledged"`
 	MaxGpuInstances        int    `dynamodbav:"maxGpuInstances"`

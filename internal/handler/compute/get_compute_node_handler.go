@@ -169,6 +169,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		WorkflowManagerTag:  computeNode.WorkflowManagerTag,
 		ProvisionerImage:    computeNode.ProvisionerImage,
 		ProvisionerImageTag: computeNode.ProvisionerImageTag,
+		PendingProvisionerImageTag: computeNode.PendingProvisionerImageTag,
 		DeploymentMode:      computeNode.DeploymentMode,
 		EnableLLMAccess:     computeNode.EnableLLMAccess,
 		LlmBaaAcknowledged:  computeNode.LlmBaaAcknowledged,
