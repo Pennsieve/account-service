@@ -432,6 +432,11 @@ components:
         enableLLMAccess:
           type: boolean
           description: Enable or disable LLM/Bedrock access for processors
+        llmBaaAcknowledged:
+          type: boolean
+          description: >
+            Confirms that an AWS Business Associate Agreement (BAA) is in place for the target account.
+            Required when enableLLMAccess turns LLM on and deploymentMode is "secure" or "compliant".
         maxInteractiveSessions:
           type: integer
           minimum: 0
