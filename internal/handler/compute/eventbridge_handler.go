@@ -185,6 +185,15 @@ func handleProvisioningError(ctx context.Context, nodeStore store_dynamodb.NodeS
 		return fmt.Errorf("failed to update node status: %w", err)
 	}
 
+	// A failed update leaves the node on the version it was running.
+	if node, err := nodeStore.GetById(ctx, event.ComputeNodeId); err == nil && node.PendingProvisionerImageTag != "" {
+		node.PendingProvisionerImage = ""
+		node.PendingProvisionerImageTag = ""
+		if err := nodeStore.Put(ctx, node); err != nil {
+			log.Printf("Error clearing the pending update of node %s: %v", event.ComputeNodeId, err)
+		}
+	}
+
 	// Optionally, store error details in a separate field or log
 	// You might want to extend the DynamoDB schema to include error information
 
@@ -228,6 +237,16 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	if event.WorkflowManagerTag != "" {
 		node.WorkflowManagerTag = event.WorkflowManagerTag
 	}
+
+	// The update's version, recorded when it started (PUT), is now running.
+	if node.PendingProvisionerImageTag != "" {
+		if node.PendingProvisionerImage != "" {
+			node.ProvisionerImage = node.PendingProvisionerImage
+		}
+		node.ProvisionerImageTag = node.PendingProvisionerImageTag
+	}
+	node.PendingProvisionerImage = ""
+	node.PendingProvisionerImageTag = ""
 
 	// Update provisioner image/tag if provided
 	if event.ProvisionerImage != "" {

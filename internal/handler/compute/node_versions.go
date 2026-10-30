@@ -101,7 +101,8 @@ func annotateLatestVersions(ctx context.Context, cfg aws.Config, nodes []models.
 			latestByImage[image] = latest
 		}
 		nodes[i].LatestVersion = latest
-		nodes[i].UpdateAvailable = dockerhub.IsOutdated(nodes[i].ProvisionerImageTag, latest)
+		// A node already being updated isn't offered another update.
+		nodes[i].UpdateAvailable = nodes[i].PendingProvisionerImageTag == "" && dockerhub.IsOutdated(nodes[i].ProvisionerImageTag, latest)
 	}
 	return latestByImage[defaultProvisionerImage]
 }
