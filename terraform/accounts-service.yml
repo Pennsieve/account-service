@@ -962,6 +962,16 @@ paths:
                     pricePerHour:
                       type: number
                       description: On-demand price per hour (USD, us-east-1)
+                    taskCpu:
+                      type: integer
+                      description: >-
+                        CPU units (1024 per vCPU) one GPU step's task gets on this tier: the whole instance.
+                        Every GPU step gets exactly this; a step asking for more than vcpus is refused.
+                    taskMemoryMiB:
+                      type: integer
+                      description: >-
+                        Memory (MiB) one GPU step's task gets on this tier: the instance less the ECS agent's
+                        share. Every GPU step gets exactly this; a step asking for more than memoryGB is refused.
   /accounts/{uuid}/role:
     post:
       summary: Switch an account to a new role
