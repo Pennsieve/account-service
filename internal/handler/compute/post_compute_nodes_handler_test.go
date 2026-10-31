@@ -141,6 +141,12 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 	assert.Equal(t, testAccount.UserId, createdNode.OwnerId)
 	assert.Equal(t, "Pending", createdNode.Status)
 	assert.NotEmpty(t, createdNode.Uuid)
+
+	// A new node keeps its runs' data in S3.
+	nodeStore := store_dynamodb.NewNodeDatabaseStore(test.GetClient(), TEST_NODES_TABLE)
+	stored, err := nodeStore.GetById(ctx, createdNode.Uuid)
+	require.NoError(t, err)
+	assert.Equal(t, "s3", stored.RunDataStore)
 }
 
 func TestPostComputeNodesHandler_IndependentNodeNotAccountOwner(t *testing.T) {
