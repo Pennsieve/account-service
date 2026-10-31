@@ -106,3 +106,84 @@ func TestValidExternalIdAllowsLegacy(t *testing.T) {
 		t.Fatal("empty and issued ids are valid, anything else isn't")
 	}
 }
+
+// Registered from template v2, an account has a runtime role next to its
+// provisioning role: both are checked, with the external ID and without.
+func TestVerifyRoles_TemplateV2ChecksBoth(t *testing.T) {
+	f := &fakeAssumer{requiredId: validId}
+	runtime, err := verifyRoles(context.Background(), f, "111122223333", "Pennsieve-Compute-dev-1", validId, "2", noSleep)
+	if err != nil {
+		t.Fatalf("want ok, got %v", err)
+	}
+	if runtime != "Pennsieve-Compute-dev-1-runtime" {
+		t.Fatalf("runtime role: %q", runtime)
+	}
+	if len(f.calls) != 4 {
+		t.Fatalf("want 2 checks per role, got %d calls", len(f.calls))
+	}
+	if got := *f.calls[2].RoleArn; got != "arn:aws:iam::111122223333:role/Pennsieve-Compute-dev-1-runtime" {
+		t.Fatalf("runtime role arn: %s", got)
+	}
+	if f.calls[2].ExternalId == nil || f.calls[3].ExternalId != nil {
+		t.Fatal("want the runtime role checked with the id, then without")
+	}
+}
+
+// Before template v2 (or without one, for a legacy role) there is one role.
+func TestVerifyRoles_OneRoleBeforeV2(t *testing.T) {
+	for _, version := range []string{"", "1"} {
+		f := &fakeAssumer{requiredId: validId}
+		runtime, err := verifyRoles(context.Background(), f, "1", "r", validId, version, noSleep)
+		if err != nil || runtime != "" {
+			t.Fatalf("version %q: want no runtime role, got %q, %v", version, runtime, err)
+		}
+		if len(f.calls) != 2 {
+			t.Fatalf("version %q: want 2 calls, got %d", version, len(f.calls))
+		}
+	}
+}
+
+// The runtime role gets fewer waits: it was made by the same stack, just
+// checked, and the request has to stay inside API Gateway's limit.
+func TestVerifyRoles_RuntimeRoleGivesUpSooner(t *testing.T) {
+	slow := &slowRuntimeRole{fakeAssumer: fakeAssumer{requiredId: validId}, failFirst: len(runtimeRoleRetryDelays) + 1}
+	var slept int
+	_, err := verifyRoles(context.Background(), slow, "1", "r", validId, "2", func(time.Duration) { slept++ })
+	if !errors.Is(err, ErrRoleUnusable) {
+		t.Fatalf("want ErrRoleUnusable, got %v", err)
+	}
+	if slept != len(runtimeRoleRetryDelays) {
+		t.Fatalf("want %d waits, got %d", len(runtimeRoleRetryDelays), slept)
+	}
+
+	slow = &slowRuntimeRole{fakeAssumer: fakeAssumer{requiredId: validId}, failFirst: len(runtimeRoleRetryDelays)}
+	if _, err := verifyRoles(context.Background(), slow, "1", "r", validId, "2", noSleep); err != nil {
+		t.Fatalf("want ok within the waits, got %v", err)
+	}
+}
+
+// slowRuntimeRole is a fakeAssumer whose runtime role fails its first
+// failFirst calls, as one still propagating does.
+type slowRuntimeRole struct {
+	fakeAssumer
+	failFirst int
+	runtime   int
+}
+
+func (s *slowRuntimeRole) AssumeRole(ctx context.Context, in *sts.AssumeRoleInput, opts ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
+	if in.RoleArn != nil && strings.HasSuffix(*in.RoleArn, "-runtime") {
+		s.runtime++
+		if s.runtime <= s.failFirst {
+			return nil, errors.New("AccessDenied (propagating)")
+		}
+	}
+	return s.fakeAssumer.AssumeRole(ctx, in, opts...)
+}
+
+func TestRuntimeRoleFor(t *testing.T) {
+	for version, want := range map[string]string{"": "", "1": "", "2": "r-runtime", "3": "r-runtime", "x": ""} {
+		if got := runtimeRoleFor("r", version); got != want {
+			t.Errorf("version %q: got %q, want %q", version, got, want)
+		}
+	}
+}

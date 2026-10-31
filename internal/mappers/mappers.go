@@ -125,6 +125,7 @@ func DynamoDBAccountToJsonAccount(dynamoAccounts []store_dynamodb.Account, calle
 			AccountId:   c.AccountId,
 			AccountType: c.AccountType,
 			RoleName:    c.RoleName,
+			RuntimeRoleName: c.RuntimeRoleName,
 			ExternalId:  c.ExternalId,
 			UserId:      c.UserId,
 			Name:        c.Name,

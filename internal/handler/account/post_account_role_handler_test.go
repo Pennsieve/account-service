@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,7 @@ func TestPostAccountRole_UpgradesALegacyAccount(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(resp.Body), &out))
 	assert.Equal(t, old.RoleName, out.OldRoleName)
 	assert.Equal(t, newRole, out.RoleName)
+	assert.Equal(t, newRole+"-runtime", out.RuntimeRoleName, "a v2 stack: the runtime role comes with it")
 	assert.Equal(t, "cloudformation", out.Connection)
 	assert.Equal(t, "2", out.TemplateVersion, "the published version when the request names none")
 
@@ -66,6 +68,7 @@ func TestPostAccountRole_UpgradesALegacyAccount(t *testing.T) {
 	assert.Equal(t, code, stored.ExternalId)
 	assert.Equal(t, models.ConnectionCloudFormation, stored.Connection)
 	assert.Equal(t, "2", stored.TemplateVersion)
+	assert.Equal(t, newRole+"-runtime", stored.RuntimeRoleName)
 	assert.Equal(t, old.AccountId, stored.AccountId)
 	assert.Equal(t, "Enabled", stored.Status, "everything else on the record stays")
 
@@ -188,6 +191,7 @@ func TestPostAccounts_RecordsTheConnection(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.ConnectionCloudFormation, stored.Connection)
 	assert.Equal(t, "3", stored.TemplateVersion)
+	assert.Equal(t, role+"-runtime", stored.RuntimeRoleName, "a stack from template v2 or later made the runtime role")
 	assert.Equal(t, "Lab account", stored.Name, "the name the app sends is stored")
 
 	got, err := account.GetAccountHandler(context.Background(), events.APIGatewayV2HTTPRequest{
@@ -201,6 +205,53 @@ func TestPostAccounts_RecordsTheConnection(t *testing.T) {
 	assert.Equal(t, "cloudformation", a.Connection)
 	assert.Equal(t, "3", a.TemplateVersion)
 	assert.Equal(t, "3", a.LatestTemplateVersion)
+	assert.Equal(t, role+"-runtime", a.RuntimeRoleName)
+}
+
+// A stack from template v1 made one role: the account has no runtime role,
+// and everything uses the one it has.
+func TestPostAccounts_TemplateV1HasNoRuntimeRole(t *testing.T) {
+	store, testId := setupPostAccountHandlerTest(t)
+	role := "Pennsieve-Compute-dev-" + testId
+	resp := postAccount(t, testId, models.Account{
+		AccountId: "acct-" + testId, AccountType: "aws", RoleName: role,
+		ExternalId: issued(t, externalIdFor(testId), testId, role), TemplateVersion: "1",
+	})
+	require.Equal(t, 201, resp.StatusCode, resp.Body)
+	var created models.AccountResponse
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &created))
+	stored, err := store.GetById(context.Background(), created.Uuid)
+	require.NoError(t, err)
+	assert.Empty(t, stored.RuntimeRoleName)
+	assert.Equal(t, role, stored.RuntimeRole())
+}
+
+// Both roles a v2 stack makes must work: a registration whose runtime role
+// can't be assumed is refused, and its code stays usable.
+func TestPostAccounts_RuntimeRoleMustWork(t *testing.T) {
+	_, testId := setupPostAccountHandlerTest(t)
+	account.ShortenVerifyRetries(t)
+	role := "Pennsieve-Compute-dev-" + testId
+	useRoleAssumer(t, &roleAssumer{unusable: role + "-runtime"})
+	resp := postAccount(t, testId, models.Account{
+		AccountId: "acct-" + testId, AccountType: "aws", RoleName: role,
+		ExternalId: issued(t, externalIdFor(testId), testId, role), TemplateVersion: "2",
+	})
+	assert.Equal(t, 400, resp.StatusCode, resp.Body)
+	assert.Contains(t, resp.Body, "couldn't use the role")
+}
+
+// roleAssumer answers like stsFake, except for one role it can't assume.
+type roleAssumer struct {
+	stsFake
+	unusable string
+}
+
+func (r *roleAssumer) AssumeRole(ctx context.Context, in *sts.AssumeRoleInput, opts ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
+	if in.RoleArn != nil && strings.HasSuffix(*in.RoleArn, "/"+r.unusable) {
+		return nil, errors.New("AccessDenied")
+	}
+	return r.stsFake.AssumeRole(ctx, in, opts...)
 }
 
 func TestPostAccounts_InvalidTemplateVersion(t *testing.T) {
@@ -236,6 +287,10 @@ func TestPatchAccount_TemplateVersion(t *testing.T) {
 	stored, _ := store.GetById(context.Background(), cf.Uuid)
 	assert.Equal(t, "2", stored.TemplateVersion)
 	assert.Equal(t, models.ConnectionCloudFormation, stored.Connection)
+	assert.Equal(t, cf.RoleName+"-runtime", stored.RuntimeRoleName, "the stack updated to v2 made the runtime role")
+	var patched models.Account
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &patched))
+	assert.Equal(t, cf.RoleName+"-runtime", patched.RuntimeRoleName)
 
 	assert.Equal(t, 400, patchAccount(t, testId, cf.Uuid, `{"templateVersion":"two"}`).StatusCode)
 
@@ -243,6 +298,26 @@ func TestPatchAccount_TemplateVersion(t *testing.T) {
 	resp = patchAccount(t, testId, legacy.Uuid, `{"templateVersion":"2"}`)
 	assert.Equal(t, 400, resp.StatusCode)
 	assert.Contains(t, resp.Body, "wasn't connected with CloudFormation")
+}
+
+// Recording an update to v2 checks the runtime role the stack now has; an
+// unusable one is refused and nothing is recorded.
+func TestPatchAccount_TemplateVersionChecksTheRuntimeRole(t *testing.T) {
+	store, testId := setupPostAccountHandlerTest(t)
+	account.ShortenVerifyRetries(t)
+	cf := store_dynamodb.Account{
+		Uuid: "cf-" + testId, UserId: testId, AccountId: "123456789012", AccountType: "aws",
+		RoleName: "Pennsieve-Compute-dev-" + testId, ExternalId: externalIdFor(testId), Status: "Enabled",
+		Connection: models.ConnectionCloudFormation, TemplateVersion: "1",
+	}
+	require.NoError(t, store.Insert(context.Background(), cf))
+	useRoleAssumer(t, &roleAssumer{unusable: cf.RoleName + "-runtime"})
+	resp := patchAccount(t, testId, cf.Uuid, `{"templateVersion":"2"}`)
+	assert.Equal(t, 400, resp.StatusCode, resp.Body)
+	assert.Contains(t, resp.Body, "couldn't use the role")
+	stored, _ := store.GetById(context.Background(), cf.Uuid)
+	assert.Equal(t, "1", stored.TemplateVersion)
+	assert.Empty(t, stored.RuntimeRoleName)
 }
 
 // Past the legacy cutoff, a legacy account can still upgrade: only new

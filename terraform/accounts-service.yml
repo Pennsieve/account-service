@@ -151,13 +151,13 @@ components:
           description: the type of account
         roleName:
           type: string
-          description: the name of the created role
+          description: the name of the created role (from template v2, the provisioning role; its runtime role, roleName-runtime, is checked and recorded with it)
         externalId:
           type: string
           description: the external ID Pennsieve issued with the role setup (GET /role-policy?externalId=true), to the user registering, for this role
         templateVersion:
           type: string
-          description: the CloudFormation template version the role was made from; with an externalId, records the account as connected with CloudFormation
+          description: the CloudFormation template version the role was made from; with an externalId, records the account as connected with CloudFormation. From v2 the stack also makes the runtime role, which must work too
         name:
           type: string
           description: optional name for the account
@@ -184,7 +184,10 @@ components:
           description: the account type of compute resource account
         roleName:
           type: string
-          description: the name of the role in the compute resource account
+          description: the name of the role in the compute resource account (the provisioning role, used to create, update and destroy nodes)
+        runtimeRoleName:
+          type: string
+          description: the account's runtime role (roleName-runtime), used for everything else Pennsieve does in the account; absent for an account on template v1, whose one role does both
         externalId:
           type: string
           description: the generated externalId for compute resource account
@@ -1023,6 +1026,9 @@ paths:
                     description: the role the account no longer uses; the owner deletes it
                   roleName:
                     type: string
+                  runtimeRoleName:
+                    type: string
+                    description: the runtime role the new stack made (template v2 or later)
                   connection:
                     type: string
                   templateVersion:
@@ -3242,9 +3248,15 @@ paths:
                     type: string
                   policyDocument:
                     type: object
-                    description: the role's IAM permission policy (policies/compute-role-policy.json)
+                    description: the provisioning role's IAM permission policy, the statements of its managed policies (policies/compute-provisioning-*.json) in one document for reading
                   trustPolicyDocument:
                     type: object
+                  runtimeRoleName:
+                    type: string
+                    description: the runtime role the template makes next to the provisioning role (roleName-runtime)
+                  runtimePolicyDocument:
+                    type: object
+                    description: the runtime role's IAM permission policy (policies/compute-runtime-role-policy.json)
                   externalId:
                     type: string
                   pennsieveAccountId:

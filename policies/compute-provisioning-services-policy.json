@@ -1,0 +1,242 @@
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ManageBuckets",
+			"Effect": "Allow",
+			"Action": [
+				"s3:CreateBucket",
+				"s3:DeleteBucket",
+				"s3:ListBucket",
+				"s3:ListBucketVersions",
+				"s3:GetBucket*",
+				"s3:PutBucket*",
+				"s3:GetEncryptionConfiguration",
+				"s3:PutEncryptionConfiguration",
+				"s3:GetLifecycleConfiguration",
+				"s3:PutLifecycleConfiguration",
+				"s3:GetAccelerateConfiguration",
+				"s3:PutAccelerateConfiguration",
+				"s3:GetReplicationConfiguration",
+				"s3:GetIntelligentTieringConfiguration",
+				"s3:PutIntelligentTieringConfiguration",
+				"s3:DeleteBucketPolicy",
+				"s3:ListTagsForResource"
+			],
+			"Resource": "arn:aws:s3:::*"
+		},
+		{
+			"Sid": "EmptyManagedBuckets",
+			"Effect": "Allow",
+			"Action": [
+				"s3:DeleteObject",
+				"s3:DeleteObjectVersion"
+			],
+			"Resource": [
+				"arn:aws:s3:::workflow-logs-*/*",
+				"arn:aws:s3:::pennsieve-compute-tfstate-*/*",
+				"arn:aws:s3:::tfstate-*/*"
+			]
+		},
+		{
+			"Sid": "Functions",
+			"Effect": "Allow",
+			"Action": "lambda:*",
+			"Resource": [
+				"arn:aws:lambda:*:*:function:workflow-asl-converter-*",
+				"arn:aws:lambda:*:*:function:workflow-init-*",
+				"arn:aws:lambda:*:*:function:workflow-status-updater-*",
+				"arn:aws:lambda:*:*:function:workflow-finalizer-*",
+				"arn:aws:lambda:*:*:function:data-transfer-*",
+				"arn:aws:lambda:*:*:function:compute-gateway-v2-*",
+				"arn:aws:lambda:*:*:function:orphan-resource-gc-*",
+				"arn:aws:lambda:*:*:function:llm-governor-*",
+				"arn:aws:lambda:*:*:function:run-data-broker-*",
+				"arn:aws:lambda:*:*:function:proc-lambda-*",
+				"arn:aws:lambda:*:*:function:tgt-lambda-*"
+			]
+		},
+		{
+			"Sid": "ListFunctions",
+			"Effect": "Allow",
+			"Action": [
+				"lambda:ListFunctions",
+				"lambda:GetAccountSettings",
+				"lambda:ListLayers",
+				"lambda:ListLayerVersions",
+				"lambda:GetLayerVersion"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "Workflows",
+			"Effect": "Allow",
+			"Action": "states:*",
+			"Resource": [
+				"arn:aws:states:*:*:stateMachine:workflow-executor-*",
+				"arn:aws:states:*:*:stateMachine:wf-*",
+				"arn:aws:states:*:*:execution:workflow-executor-*:*",
+				"arn:aws:states:*:*:execution:wf-*:*"
+			]
+		},
+		{
+			"Sid": "ListWorkflows",
+			"Effect": "Allow",
+			"Action": [
+				"states:ListStateMachines",
+				"states:ListActivities"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "Logs",
+			"Effect": "Allow",
+			"Action": [
+				"logs:CreateLogGroup",
+				"logs:DeleteLogGroup",
+				"logs:PutRetentionPolicy",
+				"logs:DeleteRetentionPolicy",
+				"logs:AssociateKmsKey",
+				"logs:DisassociateKmsKey",
+				"logs:TagResource",
+				"logs:UntagResource",
+				"logs:TagLogGroup",
+				"logs:UntagLogGroup",
+				"logs:ListTagsForResource",
+				"logs:ListTagsLogGroup",
+				"logs:PutResourcePolicy",
+				"logs:DeleteResourcePolicy"
+			],
+			"Resource": [
+				"arn:aws:logs:*:*:log-group:/ecs/*",
+				"arn:aws:logs:*:*:log-group:/aws/lambda/*",
+				"arn:aws:logs:*:*:log-group:/aws/vendedlogs/states/*",
+				"arn:aws:logs:*:*:log-group:/vpc/flow-logs/*",
+				"arn:aws:logs:*:*:log-group:ecs-cluster-log-*"
+			]
+		},
+		{
+			"Sid": "DescribeLogs",
+			"Effect": "Allow",
+			"Action": [
+				"logs:DescribeLogGroups",
+				"logs:DescribeResourcePolicies"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "Parameters",
+			"Effect": "Allow",
+			"Action": [
+				"ssm:GetParameter",
+				"ssm:GetParameters",
+				"ssm:PutParameter",
+				"ssm:DeleteParameter",
+				"ssm:AddTagsToResource",
+				"ssm:RemoveTagsFromResource",
+				"ssm:ListTagsForResource"
+			],
+			"Resource": [
+				"arn:aws:ssm:*:*:parameter/compute-node/*",
+				"arn:aws:ssm:*::parameter/aws/service/ecs/*"
+			]
+		},
+		{
+			"Sid": "DescribeParameters",
+			"Effect": "Allow",
+			"Action": "ssm:DescribeParameters",
+			"Resource": "*"
+		},
+		{
+			"Sid": "EventRules",
+			"Effect": "Allow",
+			"Action": [
+				"events:PutRule",
+				"events:DeleteRule",
+				"events:DescribeRule",
+				"events:EnableRule",
+				"events:DisableRule",
+				"events:PutTargets",
+				"events:RemoveTargets",
+				"events:ListTargetsByRule",
+				"events:TagResource",
+				"events:UntagResource",
+				"events:ListTagsForResource"
+			],
+			"Resource": [
+				"arn:aws:events:*:*:rule/wf-exec-failed-*",
+				"arn:aws:events:*:*:rule/orphan-resource-gc-*",
+				"arn:aws:events:*:*:rule/pennsieve-storage-*"
+			]
+		},
+		{
+			"Sid": "UsageTables",
+			"Effect": "Allow",
+			"Action": [
+				"dynamodb:CreateTable",
+				"dynamodb:DeleteTable",
+				"dynamodb:DescribeTable",
+				"dynamodb:UpdateTable",
+				"dynamodb:DescribeContinuousBackups",
+				"dynamodb:UpdateContinuousBackups",
+				"dynamodb:DescribeTimeToLive",
+				"dynamodb:UpdateTimeToLive",
+				"dynamodb:TagResource",
+				"dynamodb:UntagResource",
+				"dynamodb:ListTagsOfResource"
+			],
+			"Resource": [
+				"arn:aws:dynamodb:*:*:table/llm-usage-*",
+				"arn:aws:dynamodb:*:*:table/run-data-calls-*"
+			]
+		},
+		{
+			"Sid": "Guardrails",
+			"Effect": "Allow",
+			"Action": [
+				"bedrock:CreateGuardrail",
+				"bedrock:DeleteGuardrail",
+				"bedrock:GetGuardrail",
+				"bedrock:UpdateGuardrail",
+				"bedrock:CreateGuardrailVersion",
+				"bedrock:ListGuardrails",
+				"bedrock:TagResource",
+				"bedrock:UntagResource",
+				"bedrock:ListTagsForResource"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "AppImages",
+			"Effect": "Allow",
+			"Action": [
+				"ecr:GetAuthorizationToken",
+				"ecr:DescribeRepositories",
+				"ecr:CreateRepository",
+				"ecr:DeleteRepository",
+				"ecr:TagResource",
+				"ecr:UntagResource",
+				"ecr:ListTagsForResource",
+				"ecr:SetRepositoryPolicy",
+				"ecr:GetRepositoryPolicy",
+				"ecr:DeleteRepositoryPolicy",
+				"ecr:PutImageTagMutability",
+				"ecr:PutImageScanningConfiguration",
+				"ecr:PutLifecyclePolicy",
+				"ecr:GetLifecyclePolicy",
+				"ecr:DeleteLifecyclePolicy",
+				"ecr:DescribeImages",
+				"ecr:ListImages",
+				"ecr:BatchDeleteImage",
+				"ecr:BatchCheckLayerAvailability",
+				"ecr:InitiateLayerUpload",
+				"ecr:UploadLayerPart",
+				"ecr:CompleteLayerUpload",
+				"ecr:PutImage",
+				"ecr:BatchGetImage",
+				"ecr:GetDownloadUrlForLayer"
+			],
+			"Resource": "*"
+		}
+	]
+}
