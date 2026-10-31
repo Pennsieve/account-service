@@ -209,6 +209,10 @@ func findExistingTaskDefinition(ctx context.Context, client *ecs.Client, familyN
 // - For organization-independent nodes: Must be the account owner
 // - For organization nodes with isPublic=false: Must be the account owner
 // - For organization nodes with isPublic=true: Must be a workspace admin in the organization
+// newNodeRunDataStore is where a new node keeps its runs' data: always S3.
+// Nodes created before keep what they have until switched (update-config).
+const newNodeRunDataStore = "s3"
+
 func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostComputeNodesHandler"
 	var req models.CreateComputeNodeRequest
@@ -482,6 +486,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, 2),
 			GpuTier:                resolveStringPtr(req.GpuTier, "small"),
 			MaxInteractiveSessions: resolveIntPtr(req.MaxInteractiveSessions, 0),
+			RunDataStore:           newNodeRunDataStore,
 			Status:                 "Pending", // New Pending status
 		}
 
@@ -540,6 +545,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		provisionerImageTagValue := req.ProvisionerImageTag
 		deploymentModeKey := "DEPLOYMENT_MODE"
 		deploymentModeValue := req.DeploymentMode
+		runDataStoreKey := "RUN_DATA_STORE"
+		runDataStoreValue := newNodeRunDataStore
 		enableLLMAccessKey := "ENABLE_LLM_ACCESS"
 		enableLLMAccessValue := "false"
 		if req.EnableLLMAccess {
@@ -660,6 +667,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 							{
 								Name:  &gpuTierKey,
 								Value: &gpuTierValue,
+							},
+							{
+								Name:  &runDataStoreKey,
+								Value: &runDataStoreValue,
 							},
 							{
 								Name:  &maxInteractiveSessionsKey,
