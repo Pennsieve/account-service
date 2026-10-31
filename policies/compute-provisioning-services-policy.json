@@ -51,6 +51,7 @@
 				"arn:aws:lambda:*:*:function:compute-gateway-v2-*",
 				"arn:aws:lambda:*:*:function:orphan-resource-gc-*",
 				"arn:aws:lambda:*:*:function:llm-governor-*",
+				"arn:aws:lambda:*:*:function:run-data-broker-*",
 				"arn:aws:lambda:*:*:function:proc-lambda-*",
 				"arn:aws:lambda:*:*:function:tgt-lambda-*"
 			]
@@ -184,7 +185,10 @@
 				"dynamodb:UntagResource",
 				"dynamodb:ListTagsOfResource"
 			],
-			"Resource": "arn:aws:dynamodb:*:*:table/llm-usage-*"
+			"Resource": [
+				"arn:aws:dynamodb:*:*:table/llm-usage-*",
+				"arn:aws:dynamodb:*:*:table/run-data-calls-*"
+			]
 		},
 		{
 			"Sid": "Guardrails",
