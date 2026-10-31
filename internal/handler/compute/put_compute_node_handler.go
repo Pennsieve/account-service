@@ -176,7 +176,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 			Body:       string(m),
 		}, nil
 	}
-	
+
 	client := ecs.NewFromConfig(cfg)
 	log.Printf("Initiating new Provisioning Fargate Task for UPDATE with image: %s:%s", updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag)
 
@@ -241,6 +241,8 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	if deploymentModeValue == "" {
 		deploymentModeValue = "basic"
 	}
+	runDataStoreKey := "RUN_DATA_STORE"
+	runDataStoreValue := computeNode.RunDataStore
 	enableLLMAccessKey := "ENABLE_LLM_ACCESS"
 	enableLLMAccessValue := "false"
 	if computeNode.EnableLLMAccess {
@@ -368,6 +370,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 						{
 							Name:  &enableLLMAccessKey,
 							Value: &enableLLMAccessValue,
+						},
+						{
+							Name:  &runDataStoreKey,
+							Value: &runDataStoreValue,
 						},
 						{
 							Name:  &maxGpuInstancesKey,

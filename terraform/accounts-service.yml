@@ -436,6 +436,10 @@ components:
           type: integer
           minimum: 0
           description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables.
+        runDataStore:
+          type: string
+          enum: [efs, s3]
+          description: Where a run's data passes between steps (provisioner v1.28.0 and later). A rollout switch, to be removed once every node is on s3.
     computeNodePermissionsRequest:
       type: object
       required:
