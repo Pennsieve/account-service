@@ -130,6 +130,9 @@ type DynamoDBNode struct {
 	MaxGpuInstances        int    `dynamodbav:"maxGpuInstances"`
 	GpuTier                string `dynamodbav:"gpuTier"`
 	MaxInteractiveSessions int    `dynamodbav:"maxInteractiveSessions"`
+	// RunDataStore is where a run's data passes between steps: "s3", or
+	// "efs" when empty. A rollout switch: remove once every node is on S3.
+	RunDataStore           string `dynamodbav:"runDataStore,omitempty"`
 	Status                 string `dynamodbav:"status"`
 	HealthStatus           string `dynamodbav:"healthStatus"`
 	LastHealthCheck        string `dynamodbav:"lastHealthCheck"`

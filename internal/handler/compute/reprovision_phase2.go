@@ -105,6 +105,7 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 		"PROVISIONER_IMAGE_TAG":    provisionerImageTag,
 		"DEPLOYMENT_MODE":          deploymentMode,
 		"ENABLE_LLM_ACCESS":        enableLLM,
+		"RUN_DATA_STORE":           node.RunDataStore,
 		"MAX_GPU_INSTANCES":        strconv.Itoa(node.MaxGpuInstances),
 		"GPU_TIER":                 node.GpuTier,
 		"MAX_INTERACTIVE_SESSIONS": strconv.Itoa(node.MaxInteractiveSessions),

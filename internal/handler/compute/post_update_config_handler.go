@@ -28,6 +28,7 @@ type UpdateConfigRequest struct {
 	GpuTier                *string `json:"gpuTier,omitempty"`
 	EnableLLMAccess        *bool   `json:"enableLLMAccess,omitempty"`
 	MaxInteractiveSessions *int    `json:"maxInteractiveSessions,omitempty"`
+	RunDataStore           *string `json:"runDataStore,omitempty"` // "efs" or "s3"
 }
 
 // PostUpdateConfigHandler updates infrastructure configuration for a compute node
@@ -60,7 +61,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 
 	// Must provide at least one field
-	if req.MaxGpuInstances == nil && req.GpuTier == nil && req.EnableLLMAccess == nil && req.MaxInteractiveSessions == nil {
+	if req.MaxGpuInstances == nil && req.GpuTier == nil && req.EnableLLMAccess == nil && req.MaxInteractiveSessions == nil && req.RunDataStore == nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnmarshaling),
@@ -81,6 +82,12 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 	validGpuTiers := map[string]bool{"small": true, "medium": true, "large": true, "xlarge": true}
+	if req.RunDataStore != nil && *req.RunDataStore != "efs" && *req.RunDataStore != "s3" {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+		}, nil
+	}
 	if req.GpuTier != nil && !validGpuTiers[*req.GpuTier] {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
@@ -165,6 +172,9 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 	if req.MaxInteractiveSessions != nil {
 		computeNode.MaxInteractiveSessions = *req.MaxInteractiveSessions
+	}
+	if req.RunDataStore != nil {
+		computeNode.RunDataStore = *req.RunDataStore
 	}
 
 	// Save to DynamoDB
@@ -270,6 +280,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		"PROVISIONER_IMAGE_TAG":    provisionerImageTag,
 		"DEPLOYMENT_MODE":          deploymentMode,
 		"ENABLE_LLM_ACCESS":        enableLLMAccess,
+		"RUN_DATA_STORE":           computeNode.RunDataStore,
 		"MAX_GPU_INSTANCES":        strconv.Itoa(computeNode.MaxGpuInstances),
 		"GPU_TIER":                 computeNode.GpuTier,
 		"MAX_INTERACTIVE_SESSIONS": strconv.Itoa(computeNode.MaxInteractiveSessions),
