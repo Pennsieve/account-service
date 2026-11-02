@@ -60,6 +60,10 @@ type Node struct {
 	// LatestVersion (or is a floating tag like "latest"). Always false when
 	// LatestVersion is unknown.
 	UpdateAvailable bool `json:"updateAvailable"`
+	// Platform is true on the platform compute node, the one every
+	// authenticated user may use (platformnode). Secrets cannot be
+	// configured on it.
+	Platform bool `json:"platform,omitempty"`
 }
 
 // NodesListResponse is the body of GET /compute-nodes. LatestVersion is the

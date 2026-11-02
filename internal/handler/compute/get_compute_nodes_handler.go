@@ -15,6 +15,7 @@ import (
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/platformnode"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
@@ -156,10 +157,11 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				}
 			}
 			dynamoNodes = fetchNodes(ctx, nodeStore, owned, func(models.DynamoDBNode) bool { return true })
+			dynamoNodes = withPlatformNode(ctx, nodeStore, dynamoNodes)
 		} else {
 			// Organization_id provided: return nodes accessible to user within that workspace
 			log.Println("Organization_id provided:", organizationId, "returning accessible nodes in workspace")
-			
+
 			// The membership check and the access lookup are independent
 			// (neither writes), so they run together; a non-member is still
 			// refused before anything is returned.
@@ -183,9 +185,10 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 				}, nil
 			}
 
-			// Only nodes that belong to the specified organization
+			// Only nodes that belong to the specified organization, and the
+			// platform node, which belongs to another but is everyone's to use.
 			dynamoNodes = fetchNodes(ctx, nodeStore, accessibleNodeUuids, func(node models.DynamoDBNode) bool {
-				return node.OrganizationNodeId() == organizationId
+				return node.OrganizationNodeId() == organizationId || platformnode.Is(node.Uuid)
 			})
 		}
 	}
@@ -223,7 +226,7 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			}(accountUuid)
 		}
 		accounts.Wait()
-		
+
 		// Log errors for accounts that couldn't be fetched
 		for _, node := range dynamoNodes {
 			if _, found := accountOwnerMap[node.AccountUuid]; !found {
@@ -263,6 +266,27 @@ func GetComputesNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		Body:       string(m),
 	}
 	return response, nil
+}
+
+// withPlatformNode adds the platform node to a list that doesn't have it,
+// when one is configured and exists. It is shown in every workspace and in
+// My Workspace: no grant names it, so no access query finds it.
+func withPlatformNode(ctx context.Context, store store_dynamodb.NodeStore, nodes []models.DynamoDBNode) []models.DynamoDBNode {
+	u := platformnode.Uuid()
+	if u == "" {
+		return nodes
+	}
+	for _, n := range nodes {
+		if n.Uuid == u {
+			return nodes
+		}
+	}
+	node, err := store.GetById(ctx, u)
+	if err != nil || node.Uuid == "" {
+		log.Printf("platform compute node %s configured but not readable: %v", u, err)
+		return nodes
+	}
+	return append(nodes, node)
 }
 
 // fetchNodeConcurrency bounds the node reads in flight for one list.

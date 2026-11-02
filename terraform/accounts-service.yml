@@ -387,6 +387,9 @@ components:
         updateAvailable:
           type: boolean
           description: True when the node's provisioner tag is behind latestVersion (or is a floating tag such as 'latest'). Always false when latestVersion is unknown.
+        platform:
+          type: boolean
+          description: True on the platform compute node, the one every authenticated user may use. It appears in every workspace's list and in My Workspace. Secrets cannot be configured on it. Omitted otherwise.
     computeNodeUpdateRequest:
       type: object
       properties:

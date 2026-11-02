@@ -3,6 +3,7 @@ package mappers
 import (
 	"os"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/platformnode"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
 
@@ -71,6 +72,7 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			Status:                 nodeStatus,
 			HealthStatus:           c.HealthStatus,
 			LastHealthCheck:        c.LastHealthCheck,
+			Platform:               platformnode.Is(c.Uuid),
 		})
 	}
 
@@ -107,6 +109,7 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 			MaxGpuInstances:        c.MaxGpuInstances,
 			GpuTier:                c.GpuTier,
 			MaxInteractiveSessions: c.MaxInteractiveSessions,
+			Platform:               platformnode.Is(c.Uuid),
 			Status:                 c.Status,
 			HealthStatus:           c.HealthStatus,
 			LastHealthCheck:        c.LastHealthCheck,

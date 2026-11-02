@@ -1703,3 +1703,38 @@ func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 
 	mockNodeAccessStore.AssertExpectations(t)
 }
+// The platform node is usable by everyone, ahead of any grant.
+func TestPermissionService_CheckNodeAccess_PlatformNode(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+	ctx := context.Background()
+	const platform = "3ba9d241-e148-47dc-99fc-10f549b2951b"
+	t.Setenv("PLATFORM_COMPUTE_NODE_UUID", platform)
+
+	hasAccess, err := service.CheckNodeAccess(ctx, "N:user:99f02be5-009c-4ecd-9006-f016d48628bf", platform, "N:organization:88c078d6-1827-4e14-867b-801448fe0622")
+	assert.NoError(t, err)
+	assert.True(t, hasAccess)
+	mockNodeStore.AssertNotCalled(t, "HasAccess")
+
+	// Another node is decided as before: no grant, no access.
+	userEntityId := models.FormatEntityId(models.EntityTypeUser, "N:user:99f02be5-009c-4ecd-9006-f016d48628bf")
+	mockNodeStore.On("HasAccess", ctx, userEntityId, models.FormatNodeId("other-node")).Return(false, nil)
+	hasAccess, err = service.CheckNodeAccess(ctx, "N:user:99f02be5-009c-4ecd-9006-f016d48628bf", "other-node", "")
+	assert.NoError(t, err)
+	assert.False(t, hasAccess)
+}
+
+func TestPermissionService_GetAccessibleNodes_IncludesPlatformNode(t *testing.T) {
+	mockNodeStore := new(MockNodeAccessStore)
+	service := NewPermissionService(mockNodeStore, nil)
+	ctx := context.Background()
+	const platform = "3ba9d241-e148-47dc-99fc-10f549b2951b"
+	t.Setenv("PLATFORM_COMPUTE_NODE_UUID", platform)
+	userId := "N:user:99f02be5-009c-4ecd-9006-f016d48628bf"
+	mockNodeStore.On("GetEntityAccess", ctx, models.FormatEntityId(models.EntityTypeUser, userId)).Return([]models.NodeAccess{}, nil)
+	mockNodeStore.On("GetWorkspaceNodes", ctx, "").Return([]models.NodeAccess{}, nil)
+
+	uuids, err := service.GetAccessibleNodes(ctx, userId, "")
+	assert.NoError(t, err)
+	assert.Contains(t, uuids, platform)
+}

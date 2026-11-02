@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/platformnode"
 )
 
 func PutSharedSecretsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
@@ -18,6 +19,15 @@ func PutSharedSecretsHandler(ctx context.Context, request events.APIGatewayV2HTT
 	sctx, errResp := initSecretsContext(ctx, request, handlerName, true)
 	if errResp != nil {
 		return *errResp, nil
+	}
+	// No secrets of either kind on the platform node: a shared one would
+	// reach every user's run, and a free node Pennsieve operates is no place
+	// for anyone's real credentials.
+	if platformnode.Is(sctx.NodeUuid) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusForbidden,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrPlatformNodeSecrets),
+		}, nil
 	}
 
 	var body putSecretsRequest
