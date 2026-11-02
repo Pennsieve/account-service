@@ -3,10 +3,11 @@
 // bucket there fails here instead of failing a v2 account's provisioning
 // with AccessDenied.
 //
-// The terraform comes from a checkout of compute-node-aws-provisioner-v2:
-// PROVISIONER_DIR, else .provisioner in this repo (make test-ci clones it
-// there), else a sibling checkout. Without one the test is skipped, unless
-// REQUIRE_PROVISIONER is set, as on Jenkins.
+// The provisioner repo is private, so this repo's CI can't fetch it; the
+// provisioner's own CI runs this test against its checkout instead
+// (PROVISIONER_DIR), and fails the change that adds an uncovered resource.
+// Locally it uses PROVISIONER_DIR or a sibling checkout, and is skipped
+// without one, unless REQUIRE_PROVISIONER is set.
 package rolepolicy_test
 
 import (
@@ -77,7 +78,6 @@ func provisionerTerraform(t *testing.T) string {
 	require.NoError(t, err)
 	candidates := []string{
 		os.Getenv("PROVISIONER_DIR"),
-		filepath.Join(root, ".provisioner"),
 		filepath.Join(root, "..", "compute-node-aws-provisioner-v2"),
 	}
 	for _, c := range candidates {

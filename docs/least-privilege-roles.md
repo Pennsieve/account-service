@@ -102,12 +102,13 @@ infrastructure, no `*` actions.
 Both are checked by IAM Access Analyzer's policy validator (no errors, no
 security warnings) and by `internal/handler/compute/rolepolicy_test`, which
 also keeps each document inside IAM's size limits. That test also reads the
-node provisioner's terraform (`make test-ci` clones
-compute-node-aws-provisioner-v2 main into `.provisioner`) and fails when a
-Lambda, table, log group, role, policy, instance profile, state machine,
-rule, parameter or bucket it creates is named outside the provisioning
-policy. Locally it uses `PROVISIONER_DIR` or a sibling checkout, and skips
-without one. The provisioner added `workflow-step-runner-*`, `wf-gates-*`
+node provisioner's terraform and fails when a Lambda, table, log group,
+role, policy, instance profile, state machine, rule, parameter or bucket it
+creates is named outside the provisioning policy. The provisioner repo is
+private, so it runs in the provisioner's CI, which checks out this repo
+and points `PROVISIONER_DIR` at itself; a provisioner change that adds an
+uncovered resource fails there. Locally it uses `PROVISIONER_DIR` or a
+sibling checkout, and skips without one. The provisioner added `workflow-step-runner-*`, `wf-gates-*`
 and `/aws/ecs/containerinsights/*` after the policy was first measured;
 the check would have caught all three.
 
