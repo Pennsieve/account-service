@@ -36,3 +36,6 @@ TEST_STRATEGY.md
 compute.test
 store_dynamodb.test
 .DS_Store
+
+# The node provisioner, cloned by make test-ci for the policy check
+.provisioner

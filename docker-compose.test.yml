@@ -37,6 +37,7 @@ services:
       - dynamodb-ci
       - pennsievedb-ci
     environment:
+      - REQUIRE_PROVISIONER=1
       - POSTGRES_HOST=pennsievedb-ci
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres

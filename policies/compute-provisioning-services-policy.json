@@ -47,6 +47,7 @@
 				"arn:aws:lambda:*:*:function:workflow-init-*",
 				"arn:aws:lambda:*:*:function:workflow-status-updater-*",
 				"arn:aws:lambda:*:*:function:workflow-finalizer-*",
+				"arn:aws:lambda:*:*:function:workflow-step-runner-*",
 				"arn:aws:lambda:*:*:function:data-transfer-*",
 				"arn:aws:lambda:*:*:function:compute-gateway-v2-*",
 				"arn:aws:lambda:*:*:function:orphan-resource-gc-*",
@@ -112,7 +113,8 @@
 				"arn:aws:logs:*:*:log-group:/aws/lambda/*",
 				"arn:aws:logs:*:*:log-group:/aws/vendedlogs/states/*",
 				"arn:aws:logs:*:*:log-group:/vpc/flow-logs/*",
-				"arn:aws:logs:*:*:log-group:ecs-cluster-log-*"
+				"arn:aws:logs:*:*:log-group:ecs-cluster-log-*",
+				"arn:aws:logs:*:*:log-group:/aws/ecs/containerinsights/*"
 			]
 		},
 		{
@@ -187,7 +189,8 @@
 			],
 			"Resource": [
 				"arn:aws:dynamodb:*:*:table/llm-usage-*",
-				"arn:aws:dynamodb:*:*:table/run-data-calls-*"
+				"arn:aws:dynamodb:*:*:table/run-data-calls-*",
+				"arn:aws:dynamodb:*:*:table/wf-gates-*"
 			]
 		},
 		{

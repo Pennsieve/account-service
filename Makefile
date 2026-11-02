@@ -31,6 +31,8 @@ test:
 test-ci:
 	mkdir -p test-dynamodb-data
 	chmod -R 777 test-dynamodb-data
+	rm -rf .provisioner
+	git clone -q --depth 1 https://github.com/Pennsieve/compute-node-aws-provisioner-v2.git .provisioner
 	docker-compose -f docker-compose.test.yml down --remove-orphans
 	@IMAGE_TAG=$(IMAGE_TAG) docker-compose -f docker-compose.test.yml up --exit-code-from=ci-tests ci-tests
 
@@ -39,6 +41,7 @@ clean: docker-clean
 	rm -rf conf
 	rm -rf data
 	rm -rf plugins
+	rm -rf .provisioner
 
 # Spin down active docker containers.
 docker-clean:
