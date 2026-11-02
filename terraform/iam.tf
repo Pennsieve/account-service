@@ -350,20 +350,6 @@ data "aws_iam_policy_document" "health_checker_iam_policy_document" {
     resources = ["arn:aws:lambda:*:*:function:compute-gateway-*"]
   }
 
-  statement {
-    sid    = "HealthCheckerLayersTablePermissions"
-    effect = "Allow"
-    actions = [
-      "dynamodb:Query",
-      "dynamodb:GetItem",
-      "dynamodb:PutItem"
-    ]
-    resources = [
-      data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_arn,
-      "${data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_arn}/*"
-    ]
-  }
-
   // Reads the provisioner whitelist and writes the shared latest-tag cache that
   // GET /compute-nodes reads to flag outdated nodes.
   statement {

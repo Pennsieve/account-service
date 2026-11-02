@@ -1,5 +1,11 @@
 # Compute Node Layers — Typed Layers, Environments & Run Provenance
 
+> **Retired (2026-11-02).** Compute-node layers have been removed: the per-node EFS layer
+> storage (`/mnt/layers`, `LAYERS_DIR`) and its layer records are gone, and the health
+> checker no longer reconciles layers. Environments now come from environments-service,
+> and reference data comes from its catalog. This document is kept for history only;
+> do not build on it.
+
 ## Problem
 
 Compute nodes already support **persistent layers** — read-only EFS directories that
