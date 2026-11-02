@@ -125,6 +125,16 @@ variable "pennsieve_domain" {
   default = ""
 }
 
+# The platform compute node: the one node, in the Pennsieve Admin workspace,
+# that every authenticated user may use. Its uuid, not a flag on the record,
+# so that opening a node to the whole platform is a reviewed diff here and
+# can differ between dev and prod. Empty: there is no platform node. Set the
+# same value on workflow-service.
+variable "platform_compute_node_uuid" {
+  type    = string
+  default = ""
+}
+
 variable "legacy_registration_cutoff" {
   description = "When registering a compute account without an external ID (agents older than the CloudFormation one) stops being accepted, as an RFC 3339 time, e.g. 2026-12-01T00:00:00Z. Before it, such registrations are accepted with Deprecation/Sunset headers; empty keeps accepting them. Set it only once the agent that registers through the template is released."
   type        = string
