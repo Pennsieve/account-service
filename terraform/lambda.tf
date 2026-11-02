@@ -32,6 +32,8 @@ resource "aws_lambda_function" "service_lambda" {
       NODE_ACCESS_TABLE       = aws_dynamodb_table.compute_node_access_table.name
       CHAT_USER_QUOTA_TABLE   = aws_dynamodb_table.chat_user_quota_table.name
       CHAT_USER_USAGE_TABLE   = aws_dynamodb_table.chat_user_usage_table.name
+      // The platform compute node, usable by everyone (variables.tf).
+      PLATFORM_COMPUTE_NODE_UUID = var.platform_compute_node_uuid
 
       // Pipeline spend limits per compute node. Unlike the LLM caps below,
       // these have no platform-wide default: pipeline compute runs in the node
@@ -274,6 +276,7 @@ resource "aws_lambda_function" "check_user_node_access" {
       ENV                           = var.environment_name
       NODE_ACCESS_TABLE             = aws_dynamodb_table.compute_node_access_table.name
       DIRECT_AUTHORIZER_LAMBDA_NAME = data.terraform_remote_state.api_gateway.outputs.direct_authorizer_lambda_name
+      PLATFORM_COMPUTE_NODE_UUID    = var.platform_compute_node_uuid
       # PostgreSQL Configuration via RDS Proxy with IAM auth
       POSTGRES_HOST                  = data.terraform_remote_state.pennsieve_postgres.outputs.rds_proxy_endpoint
       POSTGRES_PORT                  = "5432"

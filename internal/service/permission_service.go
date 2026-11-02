@@ -8,6 +8,7 @@ import (
 	"github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/platformnode"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/store_postgres"
 )
@@ -109,6 +110,14 @@ func (s *PermissionService) IsAdminWithStorageAccess(ctx context.Context, userId
 // For organization-bound nodes, it uses the direct authorizer Lambda to verify
 // org membership and retrieve team memberships.
 func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUuid, organizationId string) (bool, error) {
+	// The platform node is usable by every authenticated user, ahead of
+	// any grant: it has none, and the workspace that owns it is not the
+	// caller's. Logged so a misconfigured uuid shows up rather than
+	// silently opening a customer's node.
+	if platformnode.Is(nodeUuid) {
+		slog.Info("platform compute node: access granted by designation", "userId", userId, "nodeUuid", nodeUuid)
+		return true, nil
+	}
 	nodeId := models.FormatNodeId(nodeUuid)
 
 	// 1. Check direct user access (owner or shared)
@@ -188,6 +197,12 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 // GetAccessibleNodes returns all nodes a user can access
 func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, organizationId string) ([]string, error) {
 	nodeUuids := make(map[string]bool)
+
+	// The platform node, in every workspace and outside any: it has no
+	// grant to find it by.
+	if u := platformnode.Uuid(); u != "" {
+		nodeUuids[u] = true
+	}
 
 	// 1. Get direct user access
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)

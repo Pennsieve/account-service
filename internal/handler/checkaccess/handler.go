@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	authclient "github.com/pennsieve/account-service/internal/authorizer"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/platformnode"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
@@ -99,7 +100,10 @@ func CheckUserNodeAccessHandler(ctx context.Context, request CheckUserNodeAccess
 	response.HasAccess = hasAccess
 
 	// If user has access, get more details about the type of access
-	if hasAccess {
+	if hasAccess && platformnode.Is(request.NodeUuid) {
+		response.AccessType = "platform"
+		response.AccessSource = "platform"
+	} else if hasAccess {
 		err = enrichAccessDetails(ctx, &response, nodeAccessStore, lambdaClient)
 		if err != nil {
 			// Log but don't fail - we already know they have access
