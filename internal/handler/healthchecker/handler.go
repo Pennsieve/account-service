@@ -10,18 +10,15 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/pennsieve/account-service/internal/clients"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
 
 const (
-	maxConcurrency    = 10
-	healthCheckPath   = "/health"
-	logTTLDays        = 30
+	maxConcurrency  = 10
+	healthCheckPath = "/health"
+	logTTLDays      = 30
 )
 
 type Config struct {
@@ -38,8 +35,6 @@ type TagRefresher interface {
 type Handler struct {
 	NodeStore      store_dynamodb.NodeStore
 	HealthLogStore store_dynamodb.HealthCheckLogStore
-	DDBClient      *dynamodb.Client
-	LayersTable    string
 	TagRefresher   TagRefresher
 	Config         Config
 }
@@ -177,12 +172,6 @@ func (h *Handler) checkNode(ctx context.Context, node models.DynamoDBNode) resul
 		r.Status = models.HealthStatusUnknown
 	}
 
-	// Reconcile EFS layers against DynamoDB metadata
-	if len(healthResp.Resources.EFSLayers) > 0 || h.LayersTable != "" {
-		layerIssues := h.reconcileLayers(ctx, node.Uuid, healthResp.Resources.EFSLayers)
-		healthResp.Issues = append(healthResp.Issues, layerIssues...)
-	}
-
 	if len(healthResp.Issues) > 0 {
 		issuesJSON, _ := json.Marshal(healthResp.Issues)
 		r.Issues = string(issuesJSON)
@@ -193,104 +182,4 @@ func (h *Handler) checkNode(ctx context.Context, node models.DynamoDBNode) resul
 
 	log.Printf("Node %s (%s): %s", node.Uuid, node.Name, r.Status)
 	return r
-}
-
-// reconcileLayers compares EFS layer data against DynamoDB metadata.
-// Auto-corrects size/fileCount mismatches and returns issues for structural problems.
-func (h *Handler) reconcileLayers(ctx context.Context, computeNodeId string, efsLayers []models.EFSLayerInfo) []models.HealthCheckIssue {
-	if h.LayersTable == "" || h.DDBClient == nil {
-		return nil
-	}
-
-	// Query DynamoDB for all layers belonging to this compute node
-	dbLayers, err := h.queryLayers(ctx, computeNodeId)
-	if err != nil {
-		log.Printf("Layer reconcile: failed to query layers for node %s: %v", computeNodeId, err)
-		return nil
-	}
-
-	// Build lookup maps
-	efsMap := make(map[string]models.EFSLayerInfo)
-	for _, l := range efsLayers {
-		efsMap[l.Name] = l
-	}
-	dbMap := make(map[string]models.LayerRecord)
-	for _, l := range dbLayers {
-		dbMap[l.LayerName] = l
-	}
-
-	var issues []models.HealthCheckIssue
-
-	// Check DynamoDB layers against EFS
-	for _, dbLayer := range dbLayers {
-		efsLayer, onDisk := efsMap[dbLayer.LayerName]
-		if !onDisk {
-			issues = append(issues, models.HealthCheckIssue{
-				Component: "layer:" + dbLayer.LayerName,
-				Status:    "WARNING",
-				Message:   "layer exists in metadata but not on disk (ORPHANED_METADATA)",
-			})
-			continue
-		}
-
-		// Auto-correct size/fileCount mismatches
-		if dbLayer.SizeBytes != efsLayer.SizeBytes || dbLayer.FileCount != efsLayer.FileCount {
-			log.Printf("Layer reconcile: correcting %s/%s: sizeBytes %d->%d, fileCount %d->%d",
-				computeNodeId, dbLayer.LayerName,
-				dbLayer.SizeBytes, efsLayer.SizeBytes,
-				dbLayer.FileCount, efsLayer.FileCount)
-
-			dbLayer.SizeBytes = efsLayer.SizeBytes
-			dbLayer.FileCount = efsLayer.FileCount
-			if err := h.updateLayer(ctx, dbLayer); err != nil {
-				log.Printf("Layer reconcile: failed to update %s/%s: %v", computeNodeId, dbLayer.LayerName, err)
-			}
-		}
-	}
-
-	// Check for EFS layers not in DynamoDB
-	for name := range efsMap {
-		if _, inDB := dbMap[name]; !inDB {
-			issues = append(issues, models.HealthCheckIssue{
-				Component: "layer:" + name,
-				Status:    "WARNING",
-				Message:   "layer exists on disk but not in metadata (ORPHANED_DATA)",
-			})
-		}
-	}
-
-	if len(issues) > 0 {
-		log.Printf("Layer reconcile: node %s has %d layer issues", computeNodeId, len(issues))
-	}
-	return issues
-}
-
-func (h *Handler) queryLayers(ctx context.Context, computeNodeId string) ([]models.LayerRecord, error) {
-	resp, err := h.DDBClient.Query(ctx, &dynamodb.QueryInput{
-		TableName:              aws.String(h.LayersTable),
-		KeyConditionExpression: aws.String("computeNodeId = :cni"),
-		ExpressionAttributeValues: map[string]dynamodbtypes.AttributeValue{
-			":cni": &dynamodbtypes.AttributeValueMemberS{Value: computeNodeId},
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var layers []models.LayerRecord
-	err = attributevalue.UnmarshalListOfMaps(resp.Items, &layers)
-	return layers, err
-}
-
-func (h *Handler) updateLayer(ctx context.Context, layer models.LayerRecord) error {
-	item, err := attributevalue.MarshalMap(layer)
-	if err != nil {
-		return err
-	}
-
-	_, err = h.DDBClient.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(h.LayersTable),
-		Item:      item,
-	})
-	return err
 }

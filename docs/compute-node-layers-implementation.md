@@ -1,5 +1,11 @@
 # Compute Node Layers & Environment Provenance — Implementation Steps
 
+> **Retired (2026-11-02).** Compute-node layers have been removed: the per-node EFS layer
+> storage (`/mnt/layers`, `LAYERS_DIR`) and its layer records are gone, and the health
+> checker no longer reconciles layers. Environments now come from environments-service,
+> and reference data comes from its catalog. This document is kept for history only;
+> do not build on it.
+
 Companion to [`compute-node-layers-plan.md`](./compute-node-layers-plan.md) (the *what/why*).
 This is the *how/in-what-order* — a reviewable work breakdown. Each milestone lists the
 repos/files touched, acceptance criteria, and the decisions it forces. Milestones are

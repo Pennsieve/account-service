@@ -16,18 +16,10 @@ type HealthCheckResponse struct {
 
 // HealthCheckResources contains resource inventories from the gateway.
 type HealthCheckResources struct {
-	EFSLayers []EFSLayerInfo `json:"efsLayers,omitempty"`
 	// SFNActiveExecutions is the count of RUNNING workflow executions on the node
 	// (workflows + interactive sessions). Used to gate node deletion. Omitted by
 	// older gateways → treated as "unknown" (gate fails open to the provisioner backstop).
 	SFNActiveExecutions int `json:"sfnActiveExecutions,omitempty"`
-}
-
-// EFSLayerInfo describes a layer on EFS as reported by the gateway health check.
-type EFSLayerInfo struct {
-	Name      string `json:"name"`
-	SizeBytes int64  `json:"sizeBytes"`
-	FileCount int    `json:"fileCount"`
 }
 
 // HealthCheckIssue represents a single issue reported by the health endpoint.
@@ -35,28 +27,6 @@ type HealthCheckIssue struct {
 	Component string `json:"component"`
 	Status    string `json:"status"`
 	Message   string `json:"message,omitempty"`
-}
-
-// LayerRecord mirrors the workflow-service compute-node-layers DynamoDB schema.
-// It must stay in sync with that schema: the healthchecker's layer reconcile does a
-// read-modify-write of the whole record (MarshalMap), so any field missing here would
-// be dropped when reconcile corrects size/fileCount. The identity fields below
-// (layerType/snapshotId/treeChecksum/pythonVersion) are set by commit-layer; mirror
-// them so reconcile preserves them.
-type LayerRecord struct {
-	ComputeNodeId string `dynamodbav:"computeNodeId"`
-	LayerName     string `dynamodbav:"layerName"`
-	Status        string `dynamodbav:"status"`
-	SizeBytes     int64  `dynamodbav:"sizeBytes"`
-	FileCount     int    `dynamodbav:"fileCount"`
-	Description   string `dynamodbav:"description,omitempty"`
-	CreatedAt     string `dynamodbav:"createdAt"`
-	CreatedBy     string `dynamodbav:"createdBy"`
-	LastAccessed  string `dynamodbav:"lastAccessed,omitempty"`
-	LayerType     string `dynamodbav:"layerType,omitempty"`
-	SnapshotId    string `dynamodbav:"snapshotId,omitempty"`
-	TreeChecksum  string `dynamodbav:"treeChecksum,omitempty"`
-	PythonVersion string `dynamodbav:"pythonVersion,omitempty"`
 }
 
 // DynamoDBHealthCheckLog is the DynamoDB record for a health check log entry.

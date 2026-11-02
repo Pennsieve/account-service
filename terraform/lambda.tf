@@ -327,12 +327,11 @@ resource "aws_lambda_function" "health_checker_lambda" {
 
   environment {
     variables = {
-      IMAGE_TAG                 = var.image_tag
-      ENV                       = var.environment_name
-      REGION                    = var.aws_region
-      COMPUTE_NODES_TABLE       = aws_dynamodb_table.compute_resource_nodes_table.name
-      HEALTH_CHECK_LOG_TABLE    = aws_dynamodb_table.health_check_log_table.name
-      COMPUTE_NODE_LAYERS_TABLE = data.terraform_remote_state.workflow_service.outputs.compute_node_layers_table_name
+      IMAGE_TAG              = var.image_tag
+      ENV                    = var.environment_name
+      REGION                 = var.aws_region
+      COMPUTE_NODES_TABLE    = aws_dynamodb_table.compute_resource_nodes_table.name
+      HEALTH_CHECK_LOG_TABLE = aws_dynamodb_table.health_check_log_table.name
       # Docker Hub credentials (shared with the ECS provisioner): the health
       # checker refreshes the shared latest-provisioner-tag SSM cache each run.
       DOCKER_HUB_CREDENTIALS_SECRET_ARN = data.terraform_remote_state.platform_infrastructure.outputs.docker_hub_credentials_arn
