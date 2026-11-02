@@ -29,6 +29,7 @@ type UpdateConfigRequest struct {
 	EnableLLMAccess        *bool   `json:"enableLLMAccess,omitempty"`
 	MaxInteractiveSessions *int    `json:"maxInteractiveSessions,omitempty"`
 	RunDataStore           *string `json:"runDataStore,omitempty"` // "efs" or "s3"
+	LlmBaaAcknowledged     *bool   `json:"llmBaaAcknowledged,omitempty"`
 }
 
 // PostUpdateConfigHandler updates infrastructure configuration for a compute node
@@ -160,6 +161,18 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
+	// BAA gate on the off→on transition only: the UI re-sends enableLLMAccess on
+	// every save, so checking every save would block GPU-only edits (868mpq6dy).
+	baaAcknowledged := computeNode.LlmBaaAcknowledged || (req.LlmBaaAcknowledged != nil && *req.LlmBaaAcknowledged)
+	if !computeNode.EnableLLMAccess && req.EnableLLMAccess != nil && *req.EnableLLMAccess &&
+		(computeNode.DeploymentMode == "secure" || computeNode.DeploymentMode == "compliant") && !baaAcknowledged {
+		log.Printf("LLM access requested on %s node %s without BAA acknowledgement", computeNode.DeploymentMode, nodeUuid)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrLLMBaaRequired),
+		}, nil
+	}
+
 	// Apply config changes
 	if req.MaxGpuInstances != nil {
 		computeNode.MaxGpuInstances = *req.MaxGpuInstances
@@ -175,6 +188,9 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 	if req.RunDataStore != nil {
 		computeNode.RunDataStore = *req.RunDataStore
+	}
+	if req.LlmBaaAcknowledged != nil && *req.LlmBaaAcknowledged {
+		computeNode.LlmBaaAcknowledged = true
 	}
 
 	// Save to DynamoDB
