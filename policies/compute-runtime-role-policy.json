@@ -49,7 +49,10 @@
 				"elasticloadbalancing:RegisterTargets",
 				"elasticloadbalancing:AddTags"
 			],
-			"Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/itg-*/*"
+			"Resource": [
+				"arn:aws:elasticloadbalancing:*:*:targetgroup/itg-*/*",
+				"arn:aws:elasticloadbalancing:*:*:targetgroup/nlbs-*/*"
+			]
 		},
 		{
 			"Sid": "RouteSessions",
@@ -62,6 +65,27 @@
 				"arn:aws:elasticloadbalancing:*:*:listener/app/shared-interactive-*/*/*",
 				"arn:aws:elasticloadbalancing:*:*:listener-rule/app/shared-interactive-*/*/*/*"
 			]
+		},
+		{
+			"Sid": "RouteCompliantSessions",
+			"Effect": "Allow",
+			"Action": [
+				"elasticloadbalancing:CreateListener",
+				"elasticloadbalancing:AddTags"
+			],
+			"Resource": [
+				"arn:aws:elasticloadbalancing:*:*:loadbalancer/net/sess-*/*",
+				"arn:aws:elasticloadbalancing:*:*:listener/net/sess-*/*/*"
+			]
+		},
+		{
+			"Sid": "FindSessionIngress",
+			"Effect": "Allow",
+			"Action": [
+				"ec2:DescribeVpcEndpointServiceConfigurations",
+				"ec2:DescribeAvailabilityZones"
+			],
+			"Resource": "*"
 		},
 		{
 			"Sid": "ReadRunResults",

@@ -73,6 +73,7 @@
 				"arn:aws:iam::*:role/lambda-workflow-role-*",
 				"arn:aws:iam::*:role/lambda-processor-role-*",
 				"arn:aws:iam::*:role/orphan-resource-gc-*",
+				"arn:aws:iam::*:role/ecs-infrastructure-*",
 				"arn:aws:iam::*:role/gpu-ecs-instance-role-*",
 				"arn:aws:iam::*:role/llm-governor-role-*",
 				"arn:aws:iam::*:role/run-data-*",

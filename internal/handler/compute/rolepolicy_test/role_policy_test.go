@@ -182,7 +182,7 @@ func TestRuntimePolicy_IsNarrow(t *testing.T) {
 			assert.False(t, strings.HasSuffix(a, ":*") || strings.HasSuffix(a, "*"), "statement %q: %s", s.Sid, a)
 			for _, forbidden := range []string{"Delete", "Terminate", "PutObject", "RunTask", "StartExecution", "Create"} {
 				if strings.Contains(a, forbidden) {
-					assert.Contains(t, []string{"elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateRule"}, a, "statement %q: %s", s.Sid, a)
+					assert.Contains(t, []string{"elasticloadbalancing:CreateTargetGroup", "elasticloadbalancing:CreateRule", "elasticloadbalancing:CreateListener"}, a, "statement %q: %s", s.Sid, a)
 				}
 			}
 		}
@@ -197,7 +197,14 @@ func TestRuntimePolicy_IsNarrow(t *testing.T) {
 	assert.JSONEq(t, `"arn:aws:ecs:*:*:cluster/compute-cluster-*"`, string(tasks.Condition["ArnLike"]["ecs:cluster"]))
 
 	targets := findStatement(t, doc, "RegisterSessionTargets")
-	assert.Equal(t, []string{"arn:aws:elasticloadbalancing:*:*:targetgroup/itg-*/*"}, list(t, targets.Resource))
+	assert.Equal(t, []string{"arn:aws:elasticloadbalancing:*:*:targetgroup/itg-*/*", "arn:aws:elasticloadbalancing:*:*:targetgroup/nlbs-*/*"}, list(t, targets.Resource))
+
+	// Compliant sessions: listeners only on the node's session NLB.
+	listeners := findStatement(t, doc, "RouteCompliantSessions")
+	assert.ElementsMatch(t, []string{"elasticloadbalancing:CreateListener", "elasticloadbalancing:AddTags"}, list(t, listeners.Action))
+	for _, r := range list(t, listeners.Resource) {
+		assert.Contains(t, r, "/net/sess-", r)
+	}
 
 	results := findStatement(t, doc, "ReadRunResults")
 	assert.ElementsMatch(t, []string{"s3:GetObject", "s3:ListBucket"}, list(t, results.Action))
