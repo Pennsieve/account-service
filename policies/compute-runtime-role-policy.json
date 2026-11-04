@@ -37,7 +37,8 @@
 				"elasticloadbalancing:DescribeLoadBalancers",
 				"elasticloadbalancing:DescribeListeners",
 				"elasticloadbalancing:DescribeTargetGroups",
-				"elasticloadbalancing:DescribeRules"
+				"elasticloadbalancing:DescribeRules",
+				"elasticloadbalancing:DescribeTargetHealth"
 			],
 			"Resource": "*"
 		},
