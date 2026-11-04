@@ -48,6 +48,9 @@ type Node struct {
 	MaxGpuInstances        int             `json:"maxGpuInstances"`
 	GpuTier                string          `json:"gpuTier"`
 	MaxInteractiveSessions int             `json:"maxInteractiveSessions"`
+	// MaxInteractiveSessionsPerUser caps one user's open notebooks on the
+	// node; 0 means no per-user cap (MaxInteractiveSessions still applies).
+	MaxInteractiveSessionsPerUser int `json:"maxInteractiveSessionsPerUser"`
 	AccessScope            NodeAccessScope `json:"accessScope,omitempty"`
 	Status                 string          `json:"status"`
 	HealthStatus           string          `json:"healthStatus,omitempty"`
@@ -134,6 +137,10 @@ type DynamoDBNode struct {
 	MaxGpuInstances        int    `dynamodbav:"maxGpuInstances"`
 	GpuTier                string `dynamodbav:"gpuTier"`
 	MaxInteractiveSessions int    `dynamodbav:"maxInteractiveSessions"`
+	// MaxInteractiveSessionsPerUser caps the notebooks one user may have
+	// open on the node; 0 means none. workflow-service enforces it when a
+	// notebook starts. No infrastructure depends on it.
+	MaxInteractiveSessionsPerUser int `dynamodbav:"maxInteractiveSessionsPerUser"`
 	// RunDataStore is where a run's data passes between steps: "s3", or
 	// "efs" when empty. New nodes are created with "s3"; older ones are
 	// switched with update-config. A rollout switch: remove once every node

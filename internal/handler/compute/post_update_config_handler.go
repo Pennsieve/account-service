@@ -29,6 +29,23 @@ type UpdateConfigRequest struct {
 	EnableLLMAccess        *bool   `json:"enableLLMAccess,omitempty"`
 	MaxInteractiveSessions *int    `json:"maxInteractiveSessions,omitempty"`
 	RunDataStore           *string `json:"runDataStore,omitempty"` // "efs" or "s3"
+	// MaxInteractiveSessionsPerUser caps one user's open notebooks on the
+	// node; 0 removes the cap. Not infrastructure: workflow-service reads it
+	// when a notebook starts, so changing only this does not re-provision.
+	MaxInteractiveSessionsPerUser *int `json:"maxInteractiveSessionsPerUser,omitempty"`
+}
+
+// empty reports whether the request sets nothing.
+func (r UpdateConfigRequest) empty() bool {
+	return r.MaxGpuInstances == nil && r.GpuTier == nil && r.EnableLLMAccess == nil &&
+		r.MaxInteractiveSessions == nil && r.RunDataStore == nil && r.MaxInteractiveSessionsPerUser == nil
+}
+
+// needsReprovision reports whether the request changes anything the
+// provisioner deploys. Only the per-user notebook cap does not.
+func (r UpdateConfigRequest) needsReprovision() bool {
+	return r.MaxGpuInstances != nil || r.GpuTier != nil || r.EnableLLMAccess != nil ||
+		r.MaxInteractiveSessions != nil || r.RunDataStore != nil
 }
 
 // PostUpdateConfigHandler updates infrastructure configuration for a compute node
@@ -61,7 +78,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	}
 
 	// Must provide at least one field
-	if req.MaxGpuInstances == nil && req.GpuTier == nil && req.EnableLLMAccess == nil && req.MaxInteractiveSessions == nil && req.RunDataStore == nil {
+	if req.empty() {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrUnmarshaling),
@@ -76,6 +93,12 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 	if req.MaxInteractiveSessions != nil && *req.MaxInteractiveSessions < 0 {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
+		}, nil
+	}
+	if req.MaxInteractiveSessionsPerUser != nil && *req.MaxInteractiveSessionsPerUser < 0 {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrBadRequest),
@@ -176,12 +199,16 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if req.RunDataStore != nil {
 		computeNode.RunDataStore = *req.RunDataStore
 	}
-	// The provisioner re-applies the node with the new config; it is
-	// Updating until it reports the update done (handleUpdateComplete) or
-	// failed, as for a version update (PUT). Test environments launch none.
+	if req.MaxInteractiveSessionsPerUser != nil {
+		computeNode.MaxInteractiveSessionsPerUser = *req.MaxInteractiveSessionsPerUser
+	}
+	// A re-provision re-applies the node with the new config; it is
+	// Updating until the provisioner reports the update done
+	// (handleUpdateComplete) or failed, as for a version update (PUT). Test
+	// environments launch none.
 	envValue := os.Getenv("ENV")
 	previousStatus := computeNode.Status
-	if envValue != "DOCKER" && envValue != "TEST" {
+	if req.needsReprovision() && envValue != "DOCKER" && envValue != "TEST" {
 		computeNode.Status = "Updating"
 	}
 
@@ -193,8 +220,17 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 		}, nil
 	}
-	log.Printf("Updated config for node %s: maxGpuInstances=%d, gpuTier=%s, enableLLMAccess=%v, maxInteractiveSessions=%d",
-		nodeUuid, computeNode.MaxGpuInstances, computeNode.GpuTier, computeNode.EnableLLMAccess, computeNode.MaxInteractiveSessions)
+	log.Printf("Updated config for node %s: maxGpuInstances=%d, gpuTier=%s, enableLLMAccess=%v, maxInteractiveSessions=%d, maxInteractiveSessionsPerUser=%d",
+		nodeUuid, computeNode.MaxGpuInstances, computeNode.GpuTier, computeNode.EnableLLMAccess, computeNode.MaxInteractiveSessions, computeNode.MaxInteractiveSessionsPerUser)
+
+	// Only the per-user notebook cap changed: nothing to deploy.
+	if !req.needsReprovision() {
+		m, _ := json.Marshal(map[string]string{"message": "Config updated"})
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       string(m),
+		}, nil
+	}
 
 	// Trigger re-provisioning
 	if envValue == "DOCKER" || envValue == "TEST" {
