@@ -22,27 +22,24 @@ import (
 	"github.com/pennsieve/account-service/policies"
 )
 
-// rolePolicyDocument is the scoped IAM permission policy of a user's compute
-// role: served to agents (GET /role-policy) and rendered into the
-// CloudFormation template, both from policies/compute-role-policy.json, so the
-// two can't drift. Change that file to change the policy for all future roles.
+// rolePolicyDocument is the IAM permission policy of a user's provisioning
+// role, all its statements in one document: served for reading (GET
+// /role-policy) from the same files (policies/*.json) the CloudFormation
+// template is rendered from, so the two can't drift. Change those files to
+// change the policies for all future roles; docs/least-privilege-roles.md
+// says what each statement is for.
 //
-// The policy uses permissions boundaries to prevent privilege escalation:
-// - Statement 1: Allow service actions (no IAM mutation, plus iam:CreateServiceLinkedRole)
-// - Statement 2: Allow IAM role/policy management for Terraform
-// - Statement 3: Allow read-only CloudWatch metric reads (no writes, no alarms, no logs)
-// - Statement 4: Deny CreateRole without permissions boundary attached
-// - Statement 5: Deny removing permissions boundaries from roles
-// - Statement 6: Deny modifying the cross-account role itself (Pennsieve-Compute-* and legacy ROLE-*)
+// Guardrails against privilege escalation, in the iam policy: CreateRole
+// only with a pennsieve-boundary-* permissions boundary, no removing
+// boundaries, and no modifying the Pennsieve-Compute-* roles themselves.
 //
-// AllowMetricReads deliberately carries no Condition. A
+// ReadStorageMetrics (runtime role) deliberately carries no Condition. A
 // `cloudwatch:namespace` condition reads like tighter scoping, but that key
-// is only evaluated for publish actions (PutMetricData) — on ListMetrics,
-// GetMetricData and GetMetricStatistics it is never satisfied, so adding it
-// denies every read instead of narrowing it. Verified empirically: the same
-// policy with the condition returns AccessDenied for AWS/S3, without it
-// returns the data. CloudWatch metric reads support no resource-level
-// scoping either, hence Resource "*".
+// is only evaluated for publish actions (PutMetricData) — on ListMetrics and
+// GetMetricData it is never satisfied, so adding it denies every read instead
+// of narrowing it. Verified empirically: the same policy with the condition
+// returns AccessDenied for AWS/S3, without it returns the data. CloudWatch
+// metric reads support no resource-level scoping either, hence Resource "*".
 var rolePolicyDocument = policies.ComputeRolePolicy
 
 // RolePolicyJSON returns the raw role policy document for testing.
@@ -52,9 +49,15 @@ func RolePolicyJSON() string {
 
 // roleConfigResponse is the JSON envelope returned by the role-policy endpoint.
 type roleConfigResponse struct {
-	RoleName            string          `json:"roleName"`
+	RoleName string `json:"roleName"`
+	// PolicyDocument is the provisioning role's permission policy, in one
+	// document for reading: the template attaches it as managed policies.
 	PolicyDocument      json.RawMessage `json:"policyDocument"`
 	TrustPolicyDocument json.RawMessage `json:"trustPolicyDocument"`
+	// RuntimeRoleName and RuntimePolicyDocument are the runtime role the
+	// template (v2) makes next to the provisioning role, and its policy.
+	RuntimeRoleName       string          `json:"runtimeRoleName"`
+	RuntimePolicyDocument json.RawMessage `json:"runtimePolicyDocument"`
 	// ExternalId is the sts:ExternalId the trust policy requires; the agent
 	// registers the account with it. Only for agents that ask (?externalId=true),
 	// so older agents get exactly the configuration they always did.
@@ -138,10 +141,12 @@ func buildRoleConfig(roleName, pennsieveAccountId string, withExternalId bool, n
 		return roleConfigResponse{}, err
 	}
 	resp := roleConfigResponse{
-		RoleName:            roleName,
-		PolicyDocument:      json.RawMessage(rolePolicyDocument),
-		TrustPolicyDocument: json.RawMessage(trust),
-		ExternalId:          externalId,
+		RoleName:              roleName,
+		PolicyDocument:        json.RawMessage(rolePolicyDocument),
+		TrustPolicyDocument:   json.RawMessage(trust),
+		RuntimeRoleName:       policies.RuntimeRoleName(roleName),
+		RuntimePolicyDocument: json.RawMessage(policies.RuntimeRolePolicy),
+		ExternalId:            externalId,
 	}
 	if externalId != "" {
 		resp.PennsieveAccountId = pennsieveAccountId

@@ -11,7 +11,11 @@ type Account struct {
     AccountId   string `dynamodbav:"accountId"`
     AccountType string `dynamodbav:"accountType"`
     RoleName    string `dynamodbav:"roleName"`
-    ExternalId  string `dynamodbav:"externalId"`
+    // RuntimeRoleName is the narrow runtime role made with RoleName by
+    // template v2 (RoleName + "-runtime"); empty for an account on template
+    // v1, whose one role is used for everything (see RuntimeRole).
+    RuntimeRoleName string `dynamodbav:"runtimeRoleName,omitempty"`
+    ExternalId      string `dynamodbav:"externalId"`
     Name        string `dynamodbav:"name"`
     Description string `dynamodbav:"description"`
     Status      string `dynamodbav:"status"` // "Enabled" or "Paused"
@@ -34,6 +38,16 @@ type AccountWorkspace struct {
     EnableStorage bool   `dynamodbav:"enableStorage"` // If true and IsPublic, admins can create storage nodes
     EnabledBy     string `dynamodbav:"enabledBy"`
     EnabledAt     int64  `dynamodbav:"enabledAt"`
+}
+
+// RuntimeRole is the role to assume for anything but provisioning: the
+// runtime role when the account has one, otherwise its only role. Provisioner
+// tasks keep using RoleName.
+func (i Account) RuntimeRole() string {
+    if i.RuntimeRoleName != "" {
+        return i.RuntimeRoleName
+    }
+    return i.RoleName
 }
 
 func (i Account) GetKey() map[string]types.AttributeValue {

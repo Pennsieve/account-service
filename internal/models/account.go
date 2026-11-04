@@ -5,7 +5,11 @@ type Account struct {
 	AccountId   string `json:"accountId"`
 	AccountType string `json:"accountType"`
 	RoleName    string `json:"roleName"`
-	ExternalId  string `json:"externalId"`
+	// RuntimeRoleName is the account's narrow runtime role (template v2:
+	// RoleName + "-runtime"), for everything but provisioning; empty for an
+	// account on template v1, whose one role does both.
+	RuntimeRoleName string `json:"runtimeRoleName,omitempty"`
+	ExternalId      string `json:"externalId"`
 	UserId      string `json:"userId"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`

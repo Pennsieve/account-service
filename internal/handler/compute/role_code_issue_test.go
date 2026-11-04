@@ -41,14 +41,21 @@ func TestIssueRoleCode(t *testing.T) {
 	}
 }
 
-// GET /role-policy serves the policy file byte for byte: the same document the
-// CloudFormation template is rendered from.
+// GET /role-policy serves the policy files: the provisioning policies merged
+// (the same documents the CloudFormation template is rendered from) and the
+// runtime policy byte for byte, with the runtime role's name.
 func TestRolePolicyIsThePolicyFile(t *testing.T) {
 	resp, err := buildRoleConfig("Pennsieve-Compute-dev-1a2b3c4d", "123456789012", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(resp.PolicyDocument) != policies.ComputeRolePolicy {
-		t.Fatal("the role-policy response's policyDocument differs from policies/compute-role-policy.json")
+		t.Fatal("the role-policy response's policyDocument differs from the provisioning policies merged")
+	}
+	if string(resp.RuntimePolicyDocument) != policies.RuntimeRolePolicy {
+		t.Fatal("the role-policy response's runtimePolicyDocument differs from policies/compute-runtime-role-policy.json")
+	}
+	if resp.RuntimeRoleName != "Pennsieve-Compute-dev-1a2b3c4d-runtime" {
+		t.Fatalf("runtimeRoleName: %s", resp.RuntimeRoleName)
 	}
 }

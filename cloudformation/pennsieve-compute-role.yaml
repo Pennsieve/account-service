@@ -1,14 +1,23 @@
 AWSTemplateFormatVersion: "2010-09-09"
-# The IAM role that lets Pennsieve set up and run compute nodes in this AWS
-# account. Pennsieve's account may assume it only with the external ID it
+# The IAM roles that let Pennsieve set up and run compute nodes in this AWS
+# account. Pennsieve's account may assume them only with the external ID it
 # issued for this registration (sts:ExternalId), so nobody else can have
-# Pennsieve use it.
+# Pennsieve use them.
 #
-# This file is a source template: terraform renders it (the role's permission
-# policy from policies/compute-role-policy.json, and the template version) and
-# publishes the result as cfn/pennsieve-compute-role/v<N>.yaml and latest.yaml.
-# Don't deploy it unrendered.
-Description: "Pennsieve compute role (template v__TEMPLATE_VERSION__): lets Pennsieve set up and run compute nodes in this AWS account."
+# Two roles, least privilege for each job:
+#   - the provisioning role (RoleName): used only while Pennsieve creates,
+#     updates or destroys a compute node, a storage node or an app in this
+#     account. Three managed policies, as one would exceed IAM's size limit.
+#   - the runtime role (RoleName-runtime): everything Pennsieve does day to
+#     day — calling a node's compute gateway, finding a notebook session and
+#     routing to it, reading a run's results, reading storage metrics.
+#
+# This file is a source template: terraform renders it (the policies from
+# policies/*.json, and the template version) and publishes the result as
+# cfn/pennsieve-compute-role/v<N>.yaml and latest.yaml. Don't deploy it
+# unrendered. Updating a v1 stack in place to this version keeps the
+# provisioning role (its name and ARN) and adds the runtime role.
+Description: "Pennsieve compute roles (template v__TEMPLATE_VERSION__): let Pennsieve set up and run compute nodes in this AWS account."
 
 Metadata:
   Pennsieve:
@@ -18,22 +27,44 @@ Metadata:
 Parameters:
   RoleName:
     Type: String
-    Description: The role's name, as Pennsieve issued it (Pennsieve-Compute-...).
-    AllowedPattern: "^[A-Za-z0-9+=,.@_-]{1,64}$"
+    Description: The provisioning role's name, as Pennsieve issued it (Pennsieve-Compute-...). The runtime role is named after it, with -runtime.
+    AllowedPattern: "^[A-Za-z0-9+=,.@_-]{1,56}$"
   ExternalId:
     Type: String
-    Description: The external ID Pennsieve issued for this registration; Pennsieve sends it whenever it uses the role.
+    Description: The external ID Pennsieve issued for this registration; Pennsieve sends it whenever it uses either role.
     AllowedPattern: "^pn-[0-9a-f]{32}$"
   PennsieveAccountId:
     Type: String
-    Description: Pennsieve's AWS account, which may assume the role.
+    Description: Pennsieve's AWS account, which may assume the roles.
     AllowedPattern: "^[0-9]{12}$"
 
 Resources:
+  ProvisioningIamPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${RoleName}-iam"
+      Description: "Pennsieve provisioning: the node roles and policies terraform makes (with a permissions boundary), and terraform's state."
+      PolicyDocument: __PROVISIONING_IAM_POLICY__
+
+  ProvisioningInfrastructurePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${RoleName}-infrastructure"
+      Description: "Pennsieve provisioning: a node's network, cluster, file system, keys and interactive ingress."
+      PolicyDocument: __PROVISIONING_INFRASTRUCTURE_POLICY__
+
+  ProvisioningServicesPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${RoleName}-services"
+      Description: "Pennsieve provisioning: a node's functions, workflows, logs, parameters, buckets and app images."
+      PolicyDocument: __PROVISIONING_SERVICES_POLICY__
+
   PennsieveComputeRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref RoleName
+      Description: "Pennsieve's provisioning role: creates, updates and destroys compute nodes, storage nodes and apps in this account."
       MaxSessionDuration: 7200
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
@@ -45,17 +76,51 @@ Resources:
             Condition:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
-      Policies:
-        - PolicyName: !Sub "POLICY-${RoleName}"
-          PolicyDocument: __ROLE_POLICY__
+      ManagedPolicyArns:
+        - !Ref ProvisioningIamPolicy
+        - !Ref ProvisioningInfrastructurePolicy
+        - !Ref ProvisioningServicesPolicy
       Tags:
         - Key: pennsieve:template-version
           Value: "__TEMPLATE_VERSION__"
+        - Key: pennsieve:role
+          Value: provisioning
+
+  PennsieveComputeRuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${RoleName}-runtime"
+      Description: "Pennsieve's runtime role: runs workflows and notebook sessions on this account's compute nodes, and reads run results and storage metrics."
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${PennsieveAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: !Sub "POLICY-${RoleName}-runtime"
+          PolicyDocument: __RUNTIME_POLICY__
+      Tags:
+        - Key: pennsieve:template-version
+          Value: "__TEMPLATE_VERSION__"
+        - Key: pennsieve:role
+          Value: runtime
 
 Outputs:
   RoleArn:
-    Description: The role Pennsieve uses in this account.
+    Description: The provisioning role Pennsieve uses in this account.
     Value: !GetAtt PennsieveComputeRole.Arn
+  RuntimeRoleArn:
+    Description: The runtime role Pennsieve uses in this account.
+    Value: !GetAtt PennsieveComputeRuntimeRole.Arn
+  RuntimeRoleName:
+    Description: The runtime role's name.
+    Value: !Ref PennsieveComputeRuntimeRole
   AccountId:
     Description: This AWS account.
     Value: !Ref AWS::AccountId

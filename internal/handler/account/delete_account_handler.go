@@ -190,6 +190,7 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		AccountId:   account.AccountId,
 		AccountType: account.AccountType,
 		RoleName:    account.RoleName,
+		RuntimeRoleName: account.RuntimeRoleName,
 		ExternalId:  account.ExternalId,
 		UserId:      account.UserId,
 	})

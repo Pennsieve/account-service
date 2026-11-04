@@ -163,7 +163,10 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}
 	}
 
-	if err := verifyRole(ctx, NewRoleAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId, time.Sleep); err != nil {
+	// Both roles a stack from template v2 makes must work; a v1 stack or a
+	// legacy role has one role for everything.
+	runtimeRoleName, err := verifyRoles(ctx, NewRoleAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId, account.TemplateVersion, time.Sleep)
+	if err != nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       errors.ComputeHandlerError(handlerName, err),
@@ -207,6 +210,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	if account.ExternalId != "" && account.TemplateVersion != "" {
 		store_account.Connection = models.ConnectionCloudFormation
 		store_account.TemplateVersion = account.TemplateVersion
+		store_account.RuntimeRoleName = runtimeRoleName
 	}
 	err = accountsStore.Insert(ctx, store_account)
 	if err != nil {

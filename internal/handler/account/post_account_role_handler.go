@@ -34,6 +34,7 @@ type AccountRoleRequest struct {
 type AccountRoleResponse struct {
 	OldRoleName     string `json:"oldRoleName"`
 	RoleName        string `json:"roleName"`
+	RuntimeRoleName string `json:"runtimeRoleName,omitempty"`
 	Connection      string `json:"connection"`
 	TemplateVersion string `json:"templateVersion,omitempty"`
 }
@@ -124,7 +125,8 @@ func PostAccountRoleHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		}
 	}
 
-	if err := verifyRole(ctx, NewRoleAssumer(cfg), account.AccountId, body.RoleName, body.ExternalId, time.Sleep); err != nil {
+	runtimeRoleName, err := verifyRoles(ctx, NewRoleAssumer(cfg), account.AccountId, body.RoleName, body.ExternalId, templateVersion, time.Sleep)
+	if err != nil {
 		return refuse(http.StatusBadRequest, err)
 	}
 
@@ -137,6 +139,7 @@ func PostAccountRoleHandler(ctx context.Context, request events.APIGatewayV2HTTP
 
 	oldRoleName := account.RoleName
 	account.RoleName = body.RoleName
+	account.RuntimeRoleName = runtimeRoleName
 	account.ExternalId = body.ExternalId
 	account.Connection = models.ConnectionCloudFormation
 	account.TemplateVersion = templateVersion
@@ -152,6 +155,7 @@ func PostAccountRoleHandler(ctx context.Context, request events.APIGatewayV2HTTP
 	m, err := json.Marshal(AccountRoleResponse{
 		OldRoleName:     oldRoleName,
 		RoleName:        account.RoleName,
+		RuntimeRoleName: account.RuntimeRoleName,
 		Connection:      account.Connection,
 		TemplateVersion: account.TemplateVersion,
 	})

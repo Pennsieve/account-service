@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/pennsieve/account-service/internal/utils"
@@ -22,7 +23,8 @@ type AccountUpdateRequest struct {
 	Description *string `json:"description,omitempty"`
 	// TemplateVersion records that the account's CloudFormation stack was
 	// updated to that template version (after aws cloudformation
-	// update-stack). Only for accounts connected with CloudFormation.
+	// update-stack). Only for accounts connected with CloudFormation. From
+	// v2 the stack also has the runtime role, which is checked and recorded.
 	TemplateVersion *string `json:"templateVersion,omitempty"`
 }
 
@@ -150,6 +152,17 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 				Body:       errors.ComputeHandlerError(handlerName, ErrNotCloudFormation),
 			}, nil
 		}
+		// A stack updated to template v2 made the runtime role: it must
+		// work before anything is sent its way.
+		if runtimeRole := runtimeRoleFor(account.RoleName, *updateReq.TemplateVersion); runtimeRole != "" && runtimeRole != account.RuntimeRoleName {
+			if err := verifyRoleWith(ctx, NewRoleAssumer(cfg), account.AccountId, runtimeRole, account.ExternalId, time.Sleep, verifyRetryDelays); err != nil {
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusBadRequest,
+					Body:       errors.ComputeHandlerError(handlerName, err),
+				}, nil
+			}
+			account.RuntimeRoleName = runtimeRole
+		}
 		account.TemplateVersion = *updateReq.TemplateVersion
 	}
 	
@@ -191,6 +204,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		AccountId:   account.AccountId,
 		AccountType: account.AccountType,
 		RoleName:    account.RoleName,
+		RuntimeRoleName: account.RuntimeRoleName,
 		ExternalId:  account.ExternalId,
 		UserId:      account.UserId,
 		Name:        account.Name,

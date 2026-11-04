@@ -180,6 +180,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 					AccountId:   account.AccountId,
 					AccountType: account.AccountType,
 					RoleName:    account.RoleName,
+					RuntimeRoleName: account.RuntimeRoleName,
 					ExternalId:  account.ExternalId,
 					UserId:      account.UserId,
 					Name:        account.Name,
