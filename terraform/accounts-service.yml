@@ -377,6 +377,9 @@ components:
         maxInteractiveSessions:
           type: integer
           description: Maximum concurrent interactive (Jupyter) sessions (0 = interactive disabled)
+        maxInteractiveSessionsPerUser:
+          type: integer
+          description: Maximum interactive (Jupyter) sessions one user may have open on the node at once (0 = no per-user cap; maxInteractiveSessions still caps everyone together)
         status:
           type: string
           enum: ["Enabled", "Paused", "Pending", "Destroying"]
@@ -422,7 +425,7 @@ components:
           description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables. Omit to leave unchanged.
     updateConfigRequest:
       type: object
-      description: Infrastructure configuration update. At least one field must be provided. Triggers re-provisioning.
+      description: Infrastructure configuration update. At least one field must be provided. Triggers re-provisioning, unless only maxInteractiveSessionsPerUser is set.
       properties:
         maxGpuInstances:
           type: integer
@@ -439,6 +442,10 @@ components:
           type: integer
           minimum: 0
           description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables.
+        maxInteractiveSessionsPerUser:
+          type: integer
+          minimum: 0
+          description: Maximum interactive (Jupyter) sessions one user may have open on the node at once; 0 removes the cap. workflow-service enforces it when a notebook starts. Not infrastructure, so a request that sets only this updates the node without re-provisioning (200 instead of 202).
         runDataStore:
           type: string
           enum: [efs, s3]
@@ -1610,6 +1617,8 @@ paths:
             schema:
               $ref: '#/components/schemas/updateConfigRequest'
       responses:
+        '200':
+          description: Config updated without re-provisioning (only maxInteractiveSessionsPerUser was set)
         '202':
           description: Config updated, re-provisioning initiated
           content:
