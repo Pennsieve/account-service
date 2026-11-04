@@ -176,6 +176,18 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if req.RunDataStore != nil {
 		computeNode.RunDataStore = *req.RunDataStore
 	}
+	// A re-provision re-applies the node with the new config; it is
+	// Updating until the provisioner reports the update done
+	// (handleUpdateComplete) or failed, as for a version update (PUT). Test
+	// environments launch none. Every field this endpoint accepts is
+	// infrastructure, and an empty request was refused above, so every
+	// update here re-provisions. (Notebook limits are not set here: they are
+	// quota rows, PUT .../pipeline-quotas/{scope}, which never touch the node.)
+	envValue := os.Getenv("ENV")
+	previousStatus := computeNode.Status
+	if envValue != "DOCKER" && envValue != "TEST" {
+		computeNode.Status = "Updating"
+	}
 
 	// Save to DynamoDB
 	if err := nodesStore.Put(ctx, computeNode); err != nil {
@@ -189,7 +201,6 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		nodeUuid, computeNode.MaxGpuInstances, computeNode.GpuTier, computeNode.EnableLLMAccess, computeNode.MaxInteractiveSessions)
 
 	// Trigger re-provisioning
-	envValue := os.Getenv("ENV")
 	if envValue == "DOCKER" || envValue == "TEST" {
 		log.Println("Test environment detected, skipping re-provisioning")
 		m, _ := json.Marshal(map[string]string{"message": "Config updated (re-provisioning skipped in test)"})
@@ -214,6 +225,11 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, provisionerImage, provisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("Error creating dynamic task definition: %v", err)
+		// No update is running: the node keeps its status.
+		computeNode.Status = previousStatus
+		if putErr := nodesStore.Put(ctx, computeNode); putErr != nil {
+			log.Printf("Error restoring node %s after a failed update launch: %v", nodeUuid, putErr)
+		}
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
@@ -314,6 +330,11 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	taskRunner := runner.NewECSTaskRunner(client, runTaskIn)
 	if err := taskRunner.Run(ctx); err != nil {
 		log.Println(err)
+		// No update is running: the node keeps its status.
+		computeNode.Status = previousStatus
+		if putErr := nodesStore.Put(ctx, computeNode); putErr != nil {
+			log.Printf("Error restoring node %s after a failed update launch: %v", nodeUuid, putErr)
+		}
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
