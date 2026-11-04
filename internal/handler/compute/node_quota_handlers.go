@@ -126,7 +126,21 @@ type putNodeQuotaRequest struct {
 	MonthlyCostUsd    *float64 `json:"monthlyCostUsd"`
 	PerRunCostUsd     *float64 `json:"perRunCostUsd"`
 	MaxConcurrentRuns *int     `json:"maxConcurrentRuns"`
-	Notes             string   `json:"notes,omitempty"`
+	// MaxInteractiveSessions caps open notebooks: everyone's on the 'node'
+	// scope, one user's on 'default' and user scopes.
+	MaxInteractiveSessions *int   `json:"maxInteractiveSessions"`
+	Notes                  string `json:"notes,omitempty"`
+}
+
+// validate rejects counts below zero. 0 is allowed: it blocks everything.
+func (b putNodeQuotaRequest) validate() error {
+	if b.MaxConcurrentRuns != nil && *b.MaxConcurrentRuns < 0 {
+		return fmt.Errorf("maxConcurrentRuns must be 0 or more")
+	}
+	if b.MaxInteractiveSessions != nil && *b.MaxInteractiveSessions < 0 {
+		return fmt.Errorf("maxInteractiveSessions must be 0 or more")
+	}
+	return nil
 }
 
 // PutNodeQuotaHandler creates or replaces one pipeline policy row.
@@ -153,18 +167,26 @@ func PutNodeQuotaHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}, nil
 	}
 
+	if err := body.validate(); err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, err),
+		}, nil
+	}
+
 	row := models.NodeQuota{
-		PK:                models.NodeQuotaPK(qctx.NodeUuid),
-		SK:                qctx.SK,
-		NodeUuid:          qctx.NodeUuid,
-		UserId:            qctx.TargetUser,
-		DailyCostUsd:      body.DailyCostUsd,
-		MonthlyCostUsd:    body.MonthlyCostUsd,
-		PerRunCostUsd:     body.PerRunCostUsd,
-		MaxConcurrentRuns: body.MaxConcurrentRuns,
-		Notes:             body.Notes,
-		UpdatedBy:         qctx.CallerID,
-		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
+		PK:                     models.NodeQuotaPK(qctx.NodeUuid),
+		SK:                     qctx.SK,
+		NodeUuid:               qctx.NodeUuid,
+		UserId:                 qctx.TargetUser,
+		DailyCostUsd:           body.DailyCostUsd,
+		MonthlyCostUsd:         body.MonthlyCostUsd,
+		PerRunCostUsd:          body.PerRunCostUsd,
+		MaxConcurrentRuns:      body.MaxConcurrentRuns,
+		MaxInteractiveSessions: body.MaxInteractiveSessions,
+		Notes:                  body.Notes,
+		UpdatedBy:              qctx.CallerID,
+		UpdatedAt:              time.Now().UTC().Format(time.RFC3339),
 	}
 
 	switch qctx.SK {
@@ -200,12 +222,13 @@ func PutNodeQuotaHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	// chat quota handlers. Axes are logged as value-or-null so the entry
 	// distinguishes an explicit $0 (block everything) from a cleared axis
 	// (falls through to the next tier).
-	log.Printf("AUDIT action=put_node_quota result=success caller=%q node=%q scope=%q daily=%s monthly=%s perRun=%s maxConcurrent=%s",
+	log.Printf("AUDIT action=put_node_quota result=success caller=%q node=%q scope=%q daily=%s monthly=%s perRun=%s maxConcurrent=%s maxSessions=%s",
 		qctx.CallerID, qctx.NodeUuid, qctx.Scope,
 		formatNullableUsd(row.DailyCostUsd),
 		formatNullableUsd(row.MonthlyCostUsd),
 		formatNullableUsd(row.PerRunCostUsd),
-		formatNullableInt(row.MaxConcurrentRuns))
+		formatNullableInt(row.MaxConcurrentRuns),
+		formatNullableInt(row.MaxInteractiveSessions))
 
 	out, _ := json.Marshal(row)
 	return events.APIGatewayV2HTTPResponse{StatusCode: http.StatusOK, Body: string(out)}, nil
