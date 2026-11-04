@@ -176,6 +176,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		MaxGpuInstances:        computeNode.MaxGpuInstances,
 		GpuTier:                computeNode.GpuTier,
 		MaxInteractiveSessions: computeNode.MaxInteractiveSessions,
+		MaxInteractiveSessionsPerUser: computeNode.MaxInteractiveSessionsPerUser,
 		AccessScope:            accessScope,
 		Status:                 nodeStatus,
 	}}
