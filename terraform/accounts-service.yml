@@ -377,9 +377,6 @@ components:
         maxInteractiveSessions:
           type: integer
           description: Maximum concurrent interactive (Jupyter) sessions (0 = interactive disabled)
-        maxInteractiveSessionsPerUser:
-          type: integer
-          description: Maximum interactive (Jupyter) sessions one user may have open on the node at once (0 = no per-user cap; maxInteractiveSessions still caps everyone together)
         status:
           type: string
           enum: ["Enabled", "Paused", "Pending", "Destroying"]
@@ -425,7 +422,7 @@ components:
           description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables. Omit to leave unchanged.
     updateConfigRequest:
       type: object
-      description: Infrastructure configuration update. At least one field must be provided. Triggers re-provisioning, unless only maxInteractiveSessionsPerUser is set.
+      description: Infrastructure configuration update. At least one field must be provided. Triggers re-provisioning.
       properties:
         maxGpuInstances:
           type: integer
@@ -442,10 +439,6 @@ components:
           type: integer
           minimum: 0
           description: Enable/disable interactive (Jupyter) sessions on an existing node. >0 enables (re-applies shared ALB + DNS); 0 disables.
-        maxInteractiveSessionsPerUser:
-          type: integer
-          minimum: 0
-          description: Maximum interactive (Jupyter) sessions one user may have open on the node at once; 0 removes the cap. workflow-service enforces it when a notebook starts. Not infrastructure, so a request that sets only this updates the node without re-provisioning (200 instead of 202).
         runDataStore:
           type: string
           enum: [efs, s3]
@@ -689,6 +682,15 @@ components:
             Bound on simultaneous non-terminal runs. Run cost is only known at
             finalize, so concurrent runs are invisible to a pre-flight spend
             check; this bounds the resulting overrun.
+        maxInteractiveSessions:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: |
+            Bound on open notebooks (non-terminal interactive runs). On the
+            `node` row it counts everyone's together; on default/user rows,
+            one user's. Unset means no limit at that tier. The compute node's
+            own maxInteractiveSessions stays the infrastructure ceiling.
         notes:
           type: string
         updatedBy:
@@ -1617,8 +1619,6 @@ paths:
             schema:
               $ref: '#/components/schemas/updateConfigRequest'
       responses:
-        '200':
-          description: Config updated without re-provisioning (only maxInteractiveSessionsPerUser was set)
         '202':
           description: Config updated, re-provisioning initiated
           content:
@@ -2994,6 +2994,14 @@ paths:
                     known at finalize, so concurrent runs are invisible to a
                     pre-flight spend check; this is what bounds the resulting
                     overrun.
+                maxInteractiveSessions:
+                  type: integer
+                  minimum: 0
+                  nullable: true
+                  description: |
+                    Bound on open notebooks. On the `node` scope, everyone's
+                    together; on `default` and user scopes, one user's. Null
+                    clears the axis; below 0 is rejected with 400.
                 notes:
                   type: string
       responses:
@@ -3173,6 +3181,10 @@ paths:
                       userMaxConcurrent:
                         $ref: '#/components/schemas/resolvedLimit'
                       perRun:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      nodeMaxSessions:
+                        $ref: '#/components/schemas/resolvedLimit'
+                      userMaxSessions:
                         $ref: '#/components/schemas/resolvedLimit'
         '403':
           $ref: '#/components/responses/Forbidden'

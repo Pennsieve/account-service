@@ -269,3 +269,32 @@ func TestIsEmpty(t *testing.T) {
 	dr.DailyCostUsd = usd(0)
 	assert.False(t, dr.IsEmpty(), "an explicit $0 cap is not an empty row")
 }
+
+// Notebook limits resolve like the concurrency cap: LIMITS#ALL for the node,
+// user override then default for one user.
+func TestResolveInteractiveSessions(t *testing.T) {
+	nr := nodeRow("node-1")
+	nr.MaxInteractiveSessions = runs(10)
+	dr := defaultRow("node-1")
+	dr.MaxInteractiveSessions = runs(2)
+	ur := userRow("node-1", "user-1")
+	ur.MaxInteractiveSessions = runs(0)
+
+	limits := ResolvePipeline(nr, dr, ur)
+	require.NotNil(t, limits.NodeMaxSessions.Runs)
+	assert.Equal(t, 10, *limits.NodeMaxSessions.Runs)
+	assert.Equal(t, TierNode, limits.NodeMaxSessions.Source)
+	require.NotNil(t, limits.UserMaxSessions.Runs)
+	assert.Equal(t, 0, *limits.UserMaxSessions.Runs, "an explicit 0 override is a real limit")
+	assert.Equal(t, TierUser, limits.UserMaxSessions.Source)
+
+	limits = ResolvePipeline(nil, dr, nil)
+	assert.True(t, limits.NodeMaxSessions.Unlimited())
+	assert.Equal(t, 2, *limits.UserMaxSessions.Runs)
+	assert.Equal(t, TierDefault, limits.UserMaxSessions.Source)
+	assert.True(t, limits.AnyConfigured(), "a notebook-only policy counts as configured")
+
+	limits = ResolvePipeline(nil, nil, nil)
+	assert.True(t, limits.UserMaxSessions.Unlimited())
+	assert.Equal(t, TierUnlimited, limits.UserMaxSessions.Source)
+}

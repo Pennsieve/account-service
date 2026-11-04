@@ -231,3 +231,21 @@ func TestNodeQuotaStore_ConcurrencyAxisRoundTrips(t *testing.T) {
 	require.NotNil(t, got.MaxConcurrentRuns)
 	assert.Equal(t, 10, *got.MaxConcurrentRuns)
 }
+
+func TestNodeQuotaStore_InteractiveSessionsRoundTrips(t *testing.T) {
+	store := setupNodeQuotaStoreTest(t)
+	ctx := context.Background()
+	nodeUuid := uuid.NewString()
+
+	require.NoError(t, store.Put(ctx, models.NodeQuota{
+		PK: models.NodeQuotaPK(nodeUuid), SK: models.QuotaScopeSKDefault,
+		NodeUuid: nodeUuid, MaxInteractiveSessions: i(0),
+	}))
+
+	got, err := store.Get(ctx, nodeUuid, models.QuotaScopeSKDefault)
+	require.NoError(t, err)
+	require.NotNil(t, got.MaxInteractiveSessions, "an explicit 0 must survive the round trip")
+	assert.Equal(t, 0, *got.MaxInteractiveSessions)
+	assert.Nil(t, got.MaxConcurrentRuns)
+	assert.False(t, got.IsEmpty())
+}

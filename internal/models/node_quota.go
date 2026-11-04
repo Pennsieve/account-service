@@ -113,6 +113,14 @@ type NodeQuota struct {
 	// concurrency x per-run ceiling.
 	MaxConcurrentRuns *int `dynamodbav:"maxConcurrentRuns,omitempty" json:"maxConcurrentRuns,omitempty"`
 
+	// MaxInteractiveSessions bounds open notebooks (non-terminal interactive
+	// runs). On the node-wide row it counts everyone's together; on
+	// default/user rows it counts one user's. workflow-service enforces it
+	// when a notebook starts. The node record's own maxInteractiveSessions
+	// stays the infrastructure ceiling (and 0 there turns notebooks off);
+	// this is policy on top of it.
+	MaxInteractiveSessions *int `dynamodbav:"maxInteractiveSessions,omitempty" json:"maxInteractiveSessions,omitempty"`
+
 	Notes     string `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	UpdatedBy string `dynamodbav:"updatedBy,omitempty" json:"updatedBy,omitempty"`
 	UpdatedAt string `dynamodbav:"updatedAt,omitempty" json:"updatedAt,omitempty"`
@@ -131,5 +139,6 @@ func (q NodeQuota) IsEmpty() bool {
 	return q.DailyCostUsd == nil &&
 		q.MonthlyCostUsd == nil &&
 		q.PerRunCostUsd == nil &&
-		q.MaxConcurrentRuns == nil
+		q.MaxConcurrentRuns == nil &&
+		q.MaxInteractiveSessions == nil
 }

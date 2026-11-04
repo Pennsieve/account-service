@@ -57,6 +57,11 @@ type EffectiveLimits struct {
 	UserMonthly       Limit `json:"userMonthly"`
 	UserMaxConcurrent Limit `json:"userMaxConcurrent"`
 	PerRun            Limit `json:"perRun"`
+
+	// NodeMaxSessions / UserMaxSessions bound open notebooks: everyone's on
+	// the node, and one user's. They apply only to interactive runs.
+	NodeMaxSessions Limit `json:"nodeMaxSessions"`
+	UserMaxSessions Limit `json:"userMaxSessions"`
 }
 
 // AnyConfigured reports whether any axis imposes a ceiling. When false the gate
@@ -66,6 +71,7 @@ func (e EffectiveLimits) AnyConfigured() bool {
 	for _, l := range []Limit{
 		e.NodeDaily, e.NodeMonthly, e.NodeMaxConcurrent,
 		e.UserDaily, e.UserMonthly, e.UserMaxConcurrent, e.PerRun,
+		e.NodeMaxSessions, e.UserMaxSessions,
 	} {
 		if !l.Unlimited() {
 			return true
@@ -89,6 +95,8 @@ func ResolvePipeline(nodeRow, defaultRow, userRow *models.NodeQuota) EffectiveLi
 		UserMonthly:       Limit{Source: TierUnlimited},
 		UserMaxConcurrent: Limit{Source: TierUnlimited},
 		PerRun:            Limit{Source: TierUnlimited},
+		NodeMaxSessions:   Limit{Source: TierUnlimited},
+		UserMaxSessions:   Limit{Source: TierUnlimited},
 	}
 
 	// Node-wide aggregate caps come only from the node row — there is no
@@ -102,6 +110,9 @@ func ResolvePipeline(nodeRow, defaultRow, userRow *models.NodeQuota) EffectiveLi
 		}
 		if v := nodeRow.MaxConcurrentRuns; v != nil {
 			out.NodeMaxConcurrent = Limit{Runs: v, Source: TierNode}
+		}
+		if v := nodeRow.MaxInteractiveSessions; v != nil {
+			out.NodeMaxSessions = Limit{Runs: v, Source: TierNode}
 		}
 	}
 
@@ -121,6 +132,9 @@ func ResolvePipeline(nodeRow, defaultRow, userRow *models.NodeQuota) EffectiveLi
 		}
 		if v := row.MaxConcurrentRuns; v != nil {
 			out.UserMaxConcurrent = Limit{Runs: v, Source: tier}
+		}
+		if v := row.MaxInteractiveSessions; v != nil {
+			out.UserMaxSessions = Limit{Runs: v, Source: tier}
 		}
 	}
 	apply(defaultRow, TierDefault)
