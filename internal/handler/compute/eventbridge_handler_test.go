@@ -140,7 +140,7 @@ func TestHandleProvisioningError(t *testing.T) {
 		mockStore := new(MockNodeStore)
 		mockStore.On("UpdateStatus", ctx, "test-node-123", "Failed").
 			Return(assert.AnError)
-		
+
 		err := handleProvisioningErrorTest(ctx, mockStore, eventJSON)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to update node status")
@@ -191,7 +191,7 @@ func TestHandleUpdateComplete(t *testing.T) {
 		mockStore := new(MockNodeStore)
 		mockStore.On("GetById", ctx, "test-node-123").
 			Return(models.DynamoDBNode{}, nil)
-		
+
 		err := handleUpdateCompleteTest(ctx, mockStore, eventJSON)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node test-node-123 not found")
@@ -227,7 +227,7 @@ func TestHandleDeleteComplete(t *testing.T) {
 		mockStore := new(MockNodeStore)
 		mockStore.On("Delete", ctx, "test-node-123").
 			Return(assert.AnError)
-		
+
 		err := handleDeleteCompleteTest(ctx, mockStore, eventJSON)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to delete node")

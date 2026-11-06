@@ -174,6 +174,7 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		Uuid:        node.Uuid,
 		Name:        node.Name,
 		Description: node.Description,
+		Region:      node.Region(),
 		QueueUrl:    node.QueueUrl,
 		Account: models.NodeAccount{
 			Uuid:        node.AccountUuid,

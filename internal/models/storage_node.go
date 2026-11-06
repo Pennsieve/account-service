@@ -8,7 +8,7 @@ import (
 // CreateStorageNodeRequest is the request body for POST /storage-nodes
 type CreateStorageNodeRequest struct {
 	AccountUuid      string `json:"accountUuid"`
-	OrganizationId   string `json:"organizationId,omitempty"`   // Optional: if set, checks workspace enablement and auto-attaches the node to that workspace
+	OrganizationId   string `json:"organizationId,omitempty"` // Optional: if set, checks workspace enablement and auto-attaches the node to that workspace
 	Name             string `json:"name"`
 	Description      string `json:"description"`
 	StorageLocation  string `json:"storageLocation"`
@@ -20,18 +20,18 @@ type CreateStorageNodeRequest struct {
 
 // StorageNode is the API response representation of a storage node
 type StorageNode struct {
-	Uuid            string                          `json:"uuid"`
-	Name            string                          `json:"name"`
-	Description     string                          `json:"description"`
-	AccountUuid     string                          `json:"accountUuid"`
-	AccountName     string                          `json:"accountName,omitempty"`
-	AccountOwnerId  string                          `json:"accountOwnerId,omitempty"`
-	StorageLocation string                          `json:"storageLocation"`
-	Region          string                          `json:"region,omitempty"`
-	ProviderType    string                          `json:"providerType"`
-	Status          string                          `json:"status"`
-	CreatedAt       string                          `json:"createdAt"`
-	CreatedBy       string                          `json:"createdBy"`
+	Uuid            string                           `json:"uuid"`
+	Name            string                           `json:"name"`
+	Description     string                           `json:"description"`
+	AccountUuid     string                           `json:"accountUuid"`
+	AccountName     string                           `json:"accountName,omitempty"`
+	AccountOwnerId  string                           `json:"accountOwnerId,omitempty"`
+	StorageLocation string                           `json:"storageLocation"`
+	Region          string                           `json:"region,omitempty"`
+	ProviderType    string                           `json:"providerType"`
+	Status          string                           `json:"status"`
+	CreatedAt       string                           `json:"createdAt"`
+	CreatedBy       string                           `json:"createdBy"`
 	Workspaces      []StorageNodeWorkspaceEnablement `json:"workspaces,omitempty"`
 }
 

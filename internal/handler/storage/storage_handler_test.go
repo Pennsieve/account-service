@@ -607,11 +607,11 @@ func TestPatchStorageNodeHandler_InvalidStatus(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, userId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   userId,
+		Status:       "Enabled",
+		CreatedBy:    userId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -641,11 +641,11 @@ func TestPatchStorageNodeHandler_NonOwnerForbidden(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, ownerId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   ownerId,
+		Status:       "Enabled",
+		CreatedBy:    ownerId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -710,11 +710,11 @@ func TestDeleteStorageNodeHandler_NonOwnerForbidden(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, ownerId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   ownerId,
+		Status:       "Enabled",
+		CreatedBy:    ownerId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -757,11 +757,11 @@ func TestAttachToWorkspaceHandler_Success(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, userId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   userId,
+		Status:       "Enabled",
+		CreatedBy:    userId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -799,11 +799,11 @@ func TestAttachToWorkspaceHandler_AlreadyAttached(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, userId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   userId,
+		Status:       "Enabled",
+		CreatedBy:    userId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -843,11 +843,11 @@ func TestDetachFromWorkspaceHandler_Success(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, userId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   userId,
+		Status:       "Enabled",
+		CreatedBy:    userId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -890,11 +890,11 @@ func TestGetDetachImpactHandler_Success(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, userId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   userId,
+		Status:       "Enabled",
+		CreatedBy:    userId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)
@@ -925,11 +925,11 @@ func TestGetDetachImpactHandler_NonOwnerForbidden(t *testing.T) {
 	testAccount := createTestAccount(t, accountStore, ownerId)
 
 	testNode := models.DynamoDBStorageNode{
-		Uuid:        uuid.New().String(),
-		AccountUuid: testAccount.Uuid,
+		Uuid:         uuid.New().String(),
+		AccountUuid:  testAccount.Uuid,
 		ProviderType: "s3",
-		Status:      "Enabled",
-		CreatedBy:   ownerId,
+		Status:       "Enabled",
+		CreatedBy:    ownerId,
 	}
 	err := storageNodeStore.Put(ctx, testNode)
 	require.NoError(t, err)

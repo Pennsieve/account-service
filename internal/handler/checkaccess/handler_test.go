@@ -64,21 +64,21 @@ func TestCheckUserNodeAccessHandler_Success(t *testing.T) {
 	// Skip this test in unit test mode since it requires full AWS environment
 	// This test requires DynamoDB tables to be configured
 	t.Skip("Skipping integration test that requires full AWS environment")
-	
+
 	ctx := context.Background()
-	
+
 	request := CheckUserNodeAccessRequest{
 		UserNodeId:     "N:user:test-user-123",
 		NodeUuid:       "node-uuid-456",
 		OrganizationId: "N:organization:org-789",
 	}
-	
+
 	// Note: In real tests, you would need to set up the environment
 	// and mock the permission service dependencies
 	// For now, this is a basic structure test
-	
+
 	response, err := CheckUserNodeAccessHandler(ctx, request)
-	
+
 	// The handler should not return an error even if access is false
 	assert.NoError(t, err)
 	assert.Equal(t, request.NodeUuid, response.NodeUuid)
@@ -88,15 +88,15 @@ func TestCheckUserNodeAccessHandler_Success(t *testing.T) {
 
 func TestCheckUserNodeAccessHandler_MissingUserNodeId(t *testing.T) {
 	ctx := context.Background()
-	
+
 	request := CheckUserNodeAccessRequest{
 		UserNodeId:     "", // Missing
 		NodeUuid:       "node-uuid-456",
 		OrganizationId: "N:organization:org-789",
 	}
-	
+
 	response, err := CheckUserNodeAccessHandler(ctx, request)
-	
+
 	// Should not error, but should return false access
 	assert.NoError(t, err)
 	assert.False(t, response.HasAccess)
@@ -105,15 +105,15 @@ func TestCheckUserNodeAccessHandler_MissingUserNodeId(t *testing.T) {
 
 func TestCheckUserNodeAccessHandler_MissingNodeUuid(t *testing.T) {
 	ctx := context.Background()
-	
+
 	request := CheckUserNodeAccessRequest{
 		UserNodeId:     "N:user:test-user-123",
 		NodeUuid:       "", // Missing
 		OrganizationId: "N:organization:org-789",
 	}
-	
+
 	response, err := CheckUserNodeAccessHandler(ctx, request)
-	
+
 	// Should not error, but should return false access
 	assert.NoError(t, err)
 	assert.False(t, response.HasAccess)
@@ -124,22 +124,22 @@ func TestLambdaHandler(t *testing.T) {
 	// Skip this test in unit test mode since it requires full AWS environment
 	// This test requires DynamoDB tables to be configured
 	t.Skip("Skipping integration test that requires full AWS environment")
-	
+
 	ctx := context.Background()
-	
+
 	request := CheckUserNodeAccessRequest{
 		UserNodeId:     "N:user:test-user-123",
 		NodeUuid:       "node-uuid-456",
 		OrganizationId: "N:organization:org-789",
 	}
-	
+
 	// Marshal request to JSON
 	requestJSON, err := json.Marshal(request)
 	assert.NoError(t, err)
-	
+
 	// Test Lambda handler wrapper
 	response, err := LambdaHandler(ctx, requestJSON)
-	
+
 	// Should handle the request (even if it returns false due to missing setup)
 	assert.NoError(t, err)
 	assert.Equal(t, request.NodeUuid, response.NodeUuid)
@@ -148,12 +148,12 @@ func TestLambdaHandler(t *testing.T) {
 
 func TestLambdaHandler_InvalidJSON(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Invalid JSON
 	invalidJSON := json.RawMessage(`{"invalid json}`)
-	
+
 	_, err := LambdaHandler(ctx, invalidJSON)
-	
+
 	// Should return an error for invalid JSON
 	assert.Error(t, err)
 }
@@ -161,20 +161,20 @@ func TestLambdaHandler_InvalidJSON(t *testing.T) {
 func TestEnrichAccessDetails(t *testing.T) {
 	ctx := context.Background()
 	mockStore := new(MockNodeAccessStore)
-	
+
 	response := &CheckUserNodeAccessResponse{
 		HasAccess:      true,
 		NodeUuid:       "node-123",
 		UserNodeId:     "N:user:user-456",
 		OrganizationId: "N:organization:org-789",
 	}
-	
+
 	nodeId := models.FormatNodeId(response.NodeUuid)
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, response.UserNodeId)
-	
+
 	// Mock direct user access
 	mockStore.On("HasAccess", ctx, userEntityId, nodeId).Return(true, nil)
-	
+
 	// Mock getting node access details
 	accessList := []models.NodeAccess{
 		{
@@ -184,12 +184,12 @@ func TestEnrichAccessDetails(t *testing.T) {
 		},
 	}
 	mockStore.On("GetNodeAccess", ctx, response.NodeUuid).Return(accessList, nil)
-	
+
 	err := enrichAccessDetails(ctx, response, mockStore, nil)
-	
+
 	assert.NoError(t, err)
 	assert.Equal(t, string(models.AccessTypeOwner), response.AccessType)
 	assert.Equal(t, "direct", response.AccessSource)
-	
+
 	mockStore.AssertExpectations(t)
 }

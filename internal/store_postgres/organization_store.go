@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	
+
 	_ "github.com/lib/pq"
 )
 
@@ -36,7 +36,7 @@ func (s *PostgresOrganizationStore) getUserPermissionBit(ctx context.Context, us
 		SELECT permission_bit 
 		FROM pennsieve.organization_user 
 		WHERE user_id = $1 AND organization_id = $2`
-	
+
 	var permissionBit int
 	err := s.DB.QueryRowContext(ctx, query, userId, organizationId).Scan(&permissionBit)
 	if err != nil {
@@ -45,7 +45,7 @@ func (s *PostgresOrganizationStore) getUserPermissionBit(ctx context.Context, us
 		}
 		return 0, fmt.Errorf("error getting user permission bit: %w", err)
 	}
-	
+
 	return permissionBit, nil
 }
 
@@ -59,7 +59,7 @@ func (s *PostgresOrganizationStore) CheckUserIsOrganizationAdmin(ctx context.Con
 		}
 		return false, err
 	}
-	
+
 	// Check if user has Admin or Owner permissions (permission_bit >= 16)
 	return permissionBit >= MinimumAdminPermission, nil
 }
@@ -70,7 +70,7 @@ func (s *PostgresOrganizationStore) CheckUserExistsByNodeId(ctx context.Context,
 		SELECT 1 
 		FROM pennsieve.users 
 		WHERE node_id = $1`
-	
+
 	var exists int
 	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(&exists)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *PostgresOrganizationStore) CheckUserExistsByNodeId(ctx context.Context,
 		}
 		return false, fmt.Errorf("error checking if user exists by node_id: %w", err)
 	}
-	
+
 	return true, nil
 }
 
@@ -89,7 +89,7 @@ func (s *PostgresOrganizationStore) GetOrganizationIdByNodeId(ctx context.Contex
 		SELECT id 
 		FROM pennsieve.organizations 
 		WHERE node_id = $1`
-	
+
 	var orgId int64
 	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(&orgId)
 	if err != nil {
@@ -98,6 +98,6 @@ func (s *PostgresOrganizationStore) GetOrganizationIdByNodeId(ctx context.Contex
 		}
 		return 0, fmt.Errorf("error getting organization ID by node_id: %w", err)
 	}
-	
+
 	return orgId, nil
 }

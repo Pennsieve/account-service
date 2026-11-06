@@ -3,7 +3,7 @@ package models
 import (
 	"errors"
 	"time"
-	
+
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
@@ -21,8 +21,8 @@ const (
 type AccessType string
 
 const (
-	AccessTypeOwner  AccessType = "owner"
-	AccessTypeShared AccessType = "shared"
+	AccessTypeOwner     AccessType = "owner"
+	AccessTypeShared    AccessType = "shared"
 	AccessTypeWorkspace AccessType = "workspace"
 )
 
@@ -56,7 +56,7 @@ type NodeAccess struct {
 func (n NodeAccess) GetKey() map[string]types.AttributeValue {
 	entityId, _ := attributevalue.Marshal(n.EntityId)
 	nodeId, _ := attributevalue.Marshal(n.NodeId)
-	
+
 	return map[string]types.AttributeValue{
 		"entityId": entityId,
 		"nodeId":   nodeId,
@@ -83,13 +83,13 @@ type NodeAccessRequest struct {
 
 // NodeAccessResponse represents the access settings for a node
 type NodeAccessResponse struct {
-	NodeUuid                 string          `json:"nodeUuid"`
-	AccessScope              NodeAccessScope `json:"accessScope"`
-	Owner                    string          `json:"owner"`
-	SharedWithUsers          []string        `json:"sharedWithUsers,omitempty"`
-	SharedWithTeams          []string        `json:"sharedWithTeams,omitempty"`
-	OrganizationId           string          `json:"organizationId,omitempty"`
-	OrganizationIndependent  bool            `json:"organizationIndependent"`
+	NodeUuid                string          `json:"nodeUuid"`
+	AccessScope             NodeAccessScope `json:"accessScope"`
+	Owner                   string          `json:"owner"`
+	SharedWithUsers         []string        `json:"sharedWithUsers,omitempty"`
+	SharedWithTeams         []string        `json:"sharedWithTeams,omitempty"`
+	OrganizationId          string          `json:"organizationId,omitempty"`
+	OrganizationIndependent bool            `json:"organizationIndependent"`
 }
 
 // IsOrganizationIndependent returns true if the node is not associated with any organization
@@ -108,12 +108,12 @@ func (r NodeAccessRequest) ValidateForOrganizationIndependent() error {
 	if r.AccessScope != AccessScopePrivate {
 		return ErrOrganizationIndependentNodeCannotBeShared
 	}
-	
+
 	// Cannot share with users or teams for organization-independent nodes
 	if len(r.SharedWithUsers) > 0 || len(r.SharedWithTeams) > 0 {
 		return ErrOrganizationIndependentNodeCannotBeShared
 	}
-	
+
 	return nil
 }
 

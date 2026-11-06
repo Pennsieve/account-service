@@ -8,12 +8,12 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/utils"
 )
 
 type AccountUpdateRequest struct {
@@ -33,7 +33,7 @@ type AccountUpdateRequest struct {
 // - Must be the owner of the account (account.UserId == requestingUserId)
 func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PatchAccountHandler"
-	
+
 	// Get account UUID from path
 	accountUuid := request.PathParameters["id"]
 	if accountUuid == "" {
@@ -60,7 +60,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 			Body:       errors.HandlerError(handlerName, errors.ErrInvalidStatus),
 		}, nil
 	}
-	
+
 	// Check that at least one field is being updated
 	if updateReq.TemplateVersion != nil && (*updateReq.TemplateVersion == "" || !validTemplateVersion(*updateReq.TemplateVersion)) {
 		return events.APIGatewayV2HTTPResponse{
@@ -100,7 +100,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		DB:        dynamoDBClient,
 		TableName: accountsTable,
 	}
-	
+
 	// Initialize node store for updating compute nodes
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
@@ -152,7 +152,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 		}
 		account.TemplateVersion = *updateReq.TemplateVersion
 	}
-	
+
 	// If account status is being set to "Paused", pause all compute nodes
 	if updateReq.Status != nil && *updateReq.Status == "Paused" {
 		// Get all compute nodes for this account
@@ -175,7 +175,7 @@ func PatchAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 	}
 	// Note: When account is set to "Enabled", we don't automatically enable compute nodes
 	// as per the requirement
-	
+
 	err = accountsStore.Update(ctx, account)
 	if err != nil {
 		log.Printf("error updating account: %v", err)

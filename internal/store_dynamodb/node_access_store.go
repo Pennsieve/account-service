@@ -45,7 +45,7 @@ func NewNodeAccessDatabaseStore(db *dynamodb.Client, tableName string) NodeAcces
 
 func (s *NodeAccessDatabaseStore) GrantAccess(ctx context.Context, access models.NodeAccess) error {
 	access.GrantedAt = time.Now()
-	
+
 	item, err := attributevalue.MarshalMap(access)
 	if err != nil {
 		return fmt.Errorf("error marshaling access: %w", err)
@@ -215,11 +215,11 @@ func (s *NodeAccessDatabaseStore) RemoveAllNodeAccess(ctx context.Context, nodeU
 
 func (s *NodeAccessDatabaseStore) UpdateNodeAccessScope(ctx context.Context, nodeUuid string, accessScope models.NodeAccessScope, organizationId, grantedBy string) error {
 	nodeId := models.FormatNodeId(nodeUuid)
-	
+
 	// First, remove workspace access if it exists
 	workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
 	_ = s.RevokeAccess(ctx, workspaceEntityId, nodeId) // Ignore error if doesn't exist
-	
+
 	// If setting to workspace access scope, grant workspace access
 	if accessScope == models.AccessScopeWorkspace {
 		workspaceAccess := models.NodeAccess{
@@ -234,7 +234,7 @@ func (s *NodeAccessDatabaseStore) UpdateNodeAccessScope(ctx context.Context, nod
 		}
 		return s.GrantAccess(ctx, workspaceAccess)
 	}
-	
+
 	return nil
 }
 
@@ -246,24 +246,24 @@ func (s *NodeAccessDatabaseStore) BatchGrantAccess(ctx context.Context, accesses
 		if end > len(accesses) {
 			end = len(accesses)
 		}
-		
+
 		batch := accesses[i:end]
 		requests := make([]types.WriteRequest, 0, len(batch))
-		
+
 		for _, access := range batch {
 			access.GrantedAt = time.Now()
 			item, err := attributevalue.MarshalMap(access)
 			if err != nil {
 				return fmt.Errorf("error marshaling access: %w", err)
 			}
-			
+
 			requests = append(requests, types.WriteRequest{
 				PutRequest: &types.PutRequest{
 					Item: item,
 				},
 			})
 		}
-		
+
 		_, err := s.DB.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
 			RequestItems: map[string][]types.WriteRequest{
 				s.TableName: requests,
@@ -273,6 +273,6 @@ func (s *NodeAccessDatabaseStore) BatchGrantAccess(ctx context.Context, accesses
 			return fmt.Errorf("error batch granting access: %w", err)
 		}
 	}
-	
+
 	return nil
 }

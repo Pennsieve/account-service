@@ -18,22 +18,22 @@ func setupDeleteAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.Accou
 	// Generate unique test IDs for isolation
 	testId := test.GenerateTestId()
 	workspaceId := "workspace-" + testId
-	
+
 	// Use shared test client and tables
 	client := test.GetClient()
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, TEST_WORKSPACE_TABLE).(*store_dynamodb.AccountWorkspaceStoreImpl)
-	
+
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ACCOUNT_WORKSPACE_TABLE", TEST_WORKSPACE_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
 
 	return accountStore, workspaceStore, testId, workspaceId
@@ -51,7 +51,7 @@ func createTestAccountWithEnablement(ctx context.Context, accountStore *store_dy
 		Description: "Account for delete workspace testing",
 		Status:      "Enabled",
 	}
-	
+
 	enablement := store_dynamodb.AccountWorkspace{
 		AccountUuid: account.Uuid,
 		WorkspaceId: workspaceId,
@@ -59,7 +59,7 @@ func createTestAccountWithEnablement(ctx context.Context, accountStore *store_dy
 		EnabledBy:   userId,
 		EnabledAt:   time.Now().Unix(),
 	}
-	
+
 	return account, enablement
 }
 
@@ -68,7 +68,7 @@ func TestDeleteAccountWorkspaceHandler_Success(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account and enablement
 	account, enablement := createTestAccountWithEnablement(ctx, accountStore, workspaceStore, userId, workspaceId, testId, true)
 	err := accountStore.Insert(ctx, account)
@@ -99,7 +99,7 @@ func TestDeleteAccountWorkspaceHandler_Success(t *testing.T) {
 	// Verify response - should return 204 No Content
 	assert.Equal(t, 204, response.StatusCode)
 	assert.Empty(t, response.Body)
-	
+
 	// Verify enablement was deleted from database
 	deletedEnablement, err := workspaceStore.Get(ctx, account.Uuid, workspaceId)
 	assert.NoError(t, err)
@@ -134,7 +134,7 @@ func TestDeleteAccountWorkspaceHandler_Error_MissingWorkspaceId(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := store_dynamodb.Account{
 		Uuid:        "delete-test-account-" + testId,
@@ -223,7 +223,7 @@ func TestDeleteAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
 	// Verify 403 response
 	assert.Equal(t, 403, response.StatusCode)
 	assert.Contains(t, response.Body, "does not belong to user")
-	
+
 	// Verify enablement was NOT deleted
 	stillExists, err := workspaceStore.Get(ctx, account.Uuid, workspaceId)
 	assert.NoError(t, err)
@@ -235,7 +235,7 @@ func TestDeleteAccountWorkspaceHandler_Error_EnablementNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account WITHOUT enablement
 	account := store_dynamodb.Account{
 		Uuid:        "delete-test-account-" + testId,
@@ -278,7 +278,7 @@ func TestDeleteAccountWorkspaceHandler_Success_DeleteSpecificWorkspace(t *testin
 	userId := testId
 	workspace1 := "workspace-1-" + testId
 	workspace2 := "workspace-2-" + testId
-	
+
 	// Create test account
 	account := store_dynamodb.Account{
 		Uuid:        "delete-multi-test-" + testId,
@@ -293,7 +293,7 @@ func TestDeleteAccountWorkspaceHandler_Success_DeleteSpecificWorkspace(t *testin
 	}
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
-	
+
 	// Create two workspace enablements
 	enablement1 := store_dynamodb.AccountWorkspace{
 		AccountUuid: account.Uuid,
@@ -309,7 +309,7 @@ func TestDeleteAccountWorkspaceHandler_Success_DeleteSpecificWorkspace(t *testin
 		EnabledBy:   userId,
 		EnabledAt:   time.Now().Unix(),
 	}
-	
+
 	err = workspaceStore.Insert(ctx, enablement1)
 	require.NoError(t, err)
 	err = workspaceStore.Insert(ctx, enablement2)
@@ -329,12 +329,12 @@ func TestDeleteAccountWorkspaceHandler_Success_DeleteSpecificWorkspace(t *testin
 	response, err := account_handler.DeleteAccountWorkspaceEnablementHandler(ctx, request)
 	assert.NoError(t, err)
 	assert.Equal(t, 204, response.StatusCode)
-	
+
 	// Verify workspace1 was deleted
 	deleted, err := workspaceStore.Get(ctx, account.Uuid, workspace1)
 	assert.NoError(t, err)
 	assert.Empty(t, deleted.AccountUuid, "Workspace1 enablement should be deleted")
-	
+
 	// Verify workspace2 still exists
 	stillExists, err := workspaceStore.Get(ctx, account.Uuid, workspace2)
 	assert.NoError(t, err)
@@ -347,7 +347,7 @@ func TestDeleteAccountWorkspaceHandler_Success_IdempotentDelete(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account and enablement
 	account, enablement := createTestAccountWithEnablement(ctx, accountStore, workspaceStore, userId, workspaceId, testId, true)
 	err := accountStore.Insert(ctx, account)

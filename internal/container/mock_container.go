@@ -16,15 +16,15 @@ import (
 
 // MockContainer implements the container interface with mocked dependencies for unit tests
 type MockContainer struct {
-	MockDynamoDBClient     *dynamodb.Client
-	MockECSClient          *ecs.Client
-	MockPostgresDB         *sql.DB
-	MockAccountStore       store_dynamodb.DynamoDBStore
-	MockNodeAccessStore    store_dynamodb.NodeAccessStore
-	MockNodeStore          store_dynamodb.NodeStore
-	MockWorkspaceStore     store_dynamodb.AccountWorkspaceStore
-	MockOrganizationStore  store_postgres.OrganizationStore
-	MockPermissionService  *service.PermissionService
+	MockDynamoDBClient    *dynamodb.Client
+	MockECSClient         *ecs.Client
+	MockPostgresDB        *sql.DB
+	MockAccountStore      store_dynamodb.DynamoDBStore
+	MockNodeAccessStore   store_dynamodb.NodeAccessStore
+	MockNodeStore         store_dynamodb.NodeStore
+	MockWorkspaceStore    store_dynamodb.AccountWorkspaceStore
+	MockOrganizationStore store_postgres.OrganizationStore
+	MockPermissionService *service.PermissionService
 }
 
 func NewMockContainer() *MockContainer {
@@ -98,7 +98,7 @@ func NewIntegrationTestContainer() (*IntegrationTestContainer, error) {
 	}
 
 	container := NewContainerWithConfig(awsConfig)
-	
+
 	// Set test configuration
 	container.SetConfig(
 		os.Getenv("ACCOUNTS_TABLE"),
