@@ -16,14 +16,14 @@ const DefaultUserSentinel = "__default__"
 // A row with UserId == DefaultUserSentinel is the node-wide default for that node.
 // Any of the limit fields left nil means "no limit on that axis".
 type ChatUserQuota struct {
-	ComputeNodeId   string   `dynamodbav:"computeNodeId" json:"computeNodeId"`
-	UserId          string   `dynamodbav:"userId" json:"userId"`
-	DailyCostUsd    *float64 `dynamodbav:"dailyCostUsd,omitempty" json:"dailyCostUsd,omitempty"`
-	MonthlyCostUsd  *float64 `dynamodbav:"monthlyCostUsd,omitempty" json:"monthlyCostUsd,omitempty"`
-	PerWorkflowUsd  *float64 `dynamodbav:"perWorkflowUsd,omitempty" json:"perWorkflowUsd,omitempty"`
-	Notes           string   `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
-	UpdatedBy       string   `dynamodbav:"updatedBy,omitempty" json:"updatedBy,omitempty"`
-	UpdatedAt       string   `dynamodbav:"updatedAt,omitempty" json:"updatedAt,omitempty"`
+	ComputeNodeId  string   `dynamodbav:"computeNodeId" json:"computeNodeId"`
+	UserId         string   `dynamodbav:"userId" json:"userId"`
+	DailyCostUsd   *float64 `dynamodbav:"dailyCostUsd,omitempty" json:"dailyCostUsd,omitempty"`
+	MonthlyCostUsd *float64 `dynamodbav:"monthlyCostUsd,omitempty" json:"monthlyCostUsd,omitempty"`
+	PerWorkflowUsd *float64 `dynamodbav:"perWorkflowUsd,omitempty" json:"perWorkflowUsd,omitempty"`
+	Notes          string   `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
+	UpdatedBy      string   `dynamodbav:"updatedBy,omitempty" json:"updatedBy,omitempty"`
+	UpdatedAt      string   `dynamodbav:"updatedAt,omitempty" json:"updatedAt,omitempty"`
 }
 
 func (q ChatUserQuota) GetKey() map[string]types.AttributeValue {

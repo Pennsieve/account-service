@@ -11,7 +11,9 @@ import (
 )
 
 // memNodeStore keeps nodes in memory, for the event handlers.
-type memNodeStore struct{ nodes map[string]models.DynamoDBNode }
+type memNodeStore struct {
+	nodes map[string]models.DynamoDBNode
+}
 
 func (m *memNodeStore) GetById(_ context.Context, id string) (models.DynamoDBNode, error) {
 	return m.nodes[id], nil

@@ -38,7 +38,7 @@ func setupTestPostgreSQL(t *testing.T) *sql.DB {
 	if postgresHost := os.Getenv("POSTGRES_HOST"); postgresHost != "" {
 		host = postgresHost
 	}
-	
+
 	connectionString := fmt.Sprintf("postgres://postgres:password@%s:5432/postgres?sslmode=disable", host)
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
@@ -202,7 +202,7 @@ func TestPermissionService_CheckNodeAccess_DirectUserAccess(t *testing.T) {
 	userId := "user-123"
 	nodeUuid := "node-456"
 	organizationId := "org-789"
-	
+
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 	nodeId := models.FormatNodeId(nodeUuid)
 
@@ -1470,12 +1470,12 @@ func TestPermissionService_GetNodePermissions_AutoRepair_OwnerAlreadyExists(t *t
 // Using real PostgreSQL stores instead of mocks
 func TestPermissionService_SetNodePermissions_NonExistentUsersValidation(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)
-	
+
 	// Use real PostgreSQL stores
 	db := setupTestPostgreSQL(t)
 	teamStore := store_postgres.NewPostgresTeamStore(db)
 	orgStore := store_postgres.NewPostgresOrganizationStore(db)
-	
+
 	service := NewPermissionService(mockNodeStore, teamStore)
 	service.SetOrganizationStore(orgStore)
 
@@ -1516,12 +1516,12 @@ func TestPermissionService_SetNodePermissions_NonExistentUsersValidation(t *test
 
 func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)
-	
+
 	// Use real PostgreSQL stores
 	db := setupTestPostgreSQL(t)
 	teamStore := store_postgres.NewPostgresTeamStore(db)
 	orgStore := store_postgres.NewPostgresOrganizationStore(db)
-	
+
 	// Insert a test team into the database
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO pennsieve.teams (id, name, node_id) 
@@ -1531,7 +1531,7 @@ func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *test
 	if err != nil {
 		t.Fatalf("Failed to insert test team: %v", err)
 	}
-	
+
 	// Associate the team with an organization
 	_, err = db.ExecContext(context.Background(), `
 		INSERT INTO pennsieve.organization_team (organization_id, team_id) 
@@ -1541,7 +1541,7 @@ func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *test
 	if err != nil {
 		t.Fatalf("Failed to associate team with organization: %v", err)
 	}
-	
+
 	service := NewPermissionService(mockNodeStore, teamStore)
 	service.SetOrganizationStore(orgStore)
 
@@ -1554,7 +1554,7 @@ func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *test
 	req := models.NodeAccessRequest{
 		NodeUuid:        nodeUuid,
 		AccessScope:     models.AccessScopeShared,
-		SharedWithUsers: []string{"N:user:99f02be5-009c-4ecd-9006-f016d48628bf"}, // Valid user in seeded DB
+		SharedWithUsers: []string{"N:user:99f02be5-009c-4ecd-9006-f016d48628bf"},                        // Valid user in seeded DB
 		SharedWithTeams: []string{"N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca", "N:team:invalid-team"}, // First exists (we just created it), second doesn't
 	}
 
@@ -1583,12 +1583,12 @@ func TestPermissionService_SetNodePermissions_NonExistentTeamsValidation(t *test
 // Tests for cleanup of stale permissions when getting permissions
 func TestPermissionService_GetNodePermissions_CleanupStaleUsers(t *testing.T) {
 	mockNodeAccessStore := new(MockNodeAccessStore)
-	
+
 	// Use real PostgreSQL stores
 	db := setupTestPostgreSQL(t)
 	teamStore := store_postgres.NewPostgresTeamStore(db)
 	orgStore := store_postgres.NewPostgresOrganizationStore(db)
-	
+
 	service := NewPermissionService(mockNodeAccessStore, teamStore)
 	service.SetOrganizationStore(orgStore)
 
@@ -1633,7 +1633,7 @@ func TestPermissionService_GetNodePermissions_CleanupStaleUsers(t *testing.T) {
 	assert.Equal(t, nodeUuid, permissions.NodeUuid)
 	assert.Equal(t, "owner-123", permissions.Owner)
 	assert.Equal(t, models.AccessScopeShared, permissions.AccessScope)
-	
+
 	// Should only contain valid user, not the deleted one
 	assert.Contains(t, permissions.SharedWithUsers, "N:user:99f02be5-009c-4ecd-9006-f016d48628bf")
 	assert.NotContains(t, permissions.SharedWithUsers, "N:user:deleted-user")
@@ -1644,12 +1644,12 @@ func TestPermissionService_GetNodePermissions_CleanupStaleUsers(t *testing.T) {
 
 func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 	mockNodeAccessStore := new(MockNodeAccessStore)
-	
+
 	// Use real PostgreSQL stores
 	db := setupTestPostgreSQL(t)
 	teamStore := store_postgres.NewPostgresTeamStore(db)
 	orgStore := store_postgres.NewPostgresOrganizationStore(db)
-	
+
 	service := NewPermissionService(mockNodeAccessStore, teamStore)
 	service.SetOrganizationStore(orgStore)
 	service.SetNodeStore(nil) // Disable auto-repair for this test
@@ -1695,7 +1695,7 @@ func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 	assert.Equal(t, nodeUuid, permissions.NodeUuid)
 	assert.Equal(t, "owner-123", permissions.Owner)
 	assert.Equal(t, models.AccessScopeShared, permissions.AccessScope)
-	
+
 	// Should only contain valid team, not the deleted one
 	assert.Contains(t, permissions.SharedWithTeams, "N:team:c0a51db5-3a5f-4e8f-9ac6-5b17a6e12bca")
 	assert.NotContains(t, permissions.SharedWithTeams, "N:team:deleted-team")
@@ -1703,6 +1703,7 @@ func TestPermissionService_GetNodePermissions_CleanupStaleTeams(t *testing.T) {
 
 	mockNodeAccessStore.AssertExpectations(t)
 }
+
 // The platform node is usable by everyone, ahead of any grant.
 func TestPermissionService_CheckNodeAccess_PlatformNode(t *testing.T) {
 	mockNodeStore := new(MockNodeAccessStore)

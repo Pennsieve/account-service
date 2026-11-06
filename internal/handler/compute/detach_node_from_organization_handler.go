@@ -9,12 +9,12 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
-	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // DetachNodeFromOrganizationHandler detaches a compute node from an organization
@@ -25,7 +25,7 @@ import (
 // - Node becomes organization-independent after detachment
 func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "DetachNodeFromOrganizationHandler"
-	
+
 	nodeId := request.PathParameters["id"]
 	if nodeId == "" {
 		log.Println("Node ID is required")
@@ -48,7 +48,7 @@ func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGa
 	}
 
 	dynamoDBClient := dynamodb.NewFromConfig(cfg)
-	
+
 	// Get the node to check which account it belongs to
 	nodesTable := os.Getenv("COMPUTE_NODES_TABLE")
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, nodesTable)
@@ -60,7 +60,7 @@ func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGa
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrNotFound),
 		}, nil
 	}
-	
+
 	// Only the account owner can detach nodes (regardless of who created them)
 	if node.AccountUuid != "" {
 		accountsTable := os.Getenv("ACCOUNTS_TABLE")
@@ -73,7 +73,7 @@ func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGa
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
 			}, nil
 		}
-		
+
 		// Only the account owner can detach nodes
 		if account.UserId != userId {
 			log.Printf("User %s is not the account owner (%s), cannot detach node", userId, account.UserId)
@@ -98,7 +98,7 @@ func DetachNodeFromOrganizationHandler(ctx context.Context, request events.APIGa
 	err = permissionService.DetachNodeFromOrganization(ctx, nodeId, userId)
 	if err != nil {
 		log.Printf("Error detaching node from organization: %v", err)
-		
+
 		switch err {
 		case models.ErrOrganizationIndependentNodeCannotBeShared:
 			return events.APIGatewayV2HTTPResponse{

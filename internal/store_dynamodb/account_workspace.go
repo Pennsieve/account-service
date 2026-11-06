@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 type AccountWorkspaceStore interface {
@@ -44,8 +44,8 @@ func (r *AccountWorkspaceStoreImpl) Insert(ctx context.Context, enablement Accou
 
 func (r *AccountWorkspaceStoreImpl) Delete(ctx context.Context, accountUuid string, organizationId string) error {
 	enablement := AccountWorkspace{
-		AccountUuid:    accountUuid,
-		WorkspaceId: organizationId,  // organizationId is mapped to workspaceId in the DB
+		AccountUuid: accountUuid,
+		WorkspaceId: organizationId, // organizationId is mapped to workspaceId in the DB
 	}
 	_, err := r.DB.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		Key:       enablement.GetKey(),
@@ -116,8 +116,8 @@ func (r *AccountWorkspaceStoreImpl) GetByWorkspace(ctx context.Context, organiza
 
 func (r *AccountWorkspaceStoreImpl) Get(ctx context.Context, accountUuid string, organizationId string) (AccountWorkspace, error) {
 	enablement := AccountWorkspace{
-		AccountUuid:    accountUuid,
-		WorkspaceId: organizationId,  // organizationId is mapped to workspaceId in the DB
+		AccountUuid: accountUuid,
+		WorkspaceId: organizationId, // organizationId is mapped to workspaceId in the DB
 	}
 
 	response, err := r.DB.GetItem(ctx, &dynamodb.GetItemInput{

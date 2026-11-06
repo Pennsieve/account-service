@@ -25,23 +25,23 @@ import (
 func setupPostAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseStore, string) {
 	// Generate unique test ID for isolation
 	testId := test.GenerateTestId()
-	
+
 	// Use shared test client and accounts table with index
 	client := test.GetClient()
 	store := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
-	
+
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ROLE_CODES_TABLE", test.TEST_ROLE_CODES_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	// STS answers like a role whose trust policy requires the external ID
 	// the request carries (or any, for a legacy request without one).
 	useRoleAssumer(t, &stsFake{})
@@ -143,7 +143,7 @@ func TestPostAccountsHandler_Success(t *testing.T) {
 	// Call the handler
 	response, err := account.PostAccountsHandler(ctx, request)
 	assert.NoError(t, err)
-	
+
 	// Debug: Print the response if it's not the expected status
 	if response.StatusCode != 201 {
 		t.Logf("Unexpected response status: %d, body: %s", response.StatusCode, response.Body)

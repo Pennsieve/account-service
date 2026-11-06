@@ -26,7 +26,7 @@ func NewStoragePolicyService(cfg aws.Config, storageNodeStore store_dynamodb.Sto
 }
 
 type iamPolicyDocument struct {
-	Version   string              `json:"Version"`
+	Version   string               `json:"Version"`
 	Statement []iamPolicyStatement `json:"Statement"`
 }
 

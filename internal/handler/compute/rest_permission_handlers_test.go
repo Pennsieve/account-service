@@ -21,19 +21,19 @@ func setupPermissionHandlerTest(t *testing.T) (store_dynamodb.NodeStore, store_d
 	client := test.GetClient()
 	nodesStore := store_dynamodb.NewNodeDatabaseStore(client, TEST_NODES_TABLE)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, TEST_ACCESS_TABLE)
-	
+
 	// Set environment variables for handler
 	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	os.Setenv("NODE_ACCESS_TABLE", TEST_ACCESS_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	return nodesStore, nodeAccessStore
 }
 
@@ -54,12 +54,12 @@ func TestSetNodeAccessScopeHandler_ValidationErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	testCases := []struct {
-		name           string
-		nodeId         string
-		requestBody    string
-		userId         string
-		expectedCode   int
-		expectedError  string
+		name          string
+		nodeId        string
+		requestBody   string
+		userId        string
+		expectedCode  int
+		expectedError string
 	}{
 		{
 			name:          "MissingNodeId",
@@ -456,7 +456,7 @@ func TestPermissionHandlers_MissingEnvironmentVariables(t *testing.T) {
 			expectedErr:  "error loading AWS config",
 		},
 		{
-			name:         "MissingAccessTable", 
+			name:         "MissingAccessTable",
 			envToUnset:   "NODE_ACCESS_TABLE",
 			expectedCode: 500,
 			expectedErr:  "error loading AWS config",
@@ -482,7 +482,7 @@ func TestPermissionHandlers_MissingEnvironmentVariables(t *testing.T) {
 					"id": uuid.New().String(),
 				},
 				RequestContext: events.APIGatewayV2HTTPRequestContext{
-					Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), test.OrgNodeId("org-" + testId)),
+					Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-"+testId), test.OrgNodeId("org-"+testId)),
 				},
 			}
 

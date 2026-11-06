@@ -33,23 +33,23 @@ type DependencyContainer interface {
 
 // Container implements the production dependency container
 type Container struct {
-	awsConfig        aws.Config
-	dynamoClient     *dynamodb.Client
-	ecsClient        *ecs.Client
-	postgresDB       *sql.DB
-	postgresPool     *pgxpool.Pool
-	rdsProxy         *postgresClient.RDSProxy
-	accountStore     store_dynamodb.DynamoDBStore
-	nodeAccessStore  store_dynamodb.NodeAccessStore
-	nodeStore        store_dynamodb.NodeStore
-	workspaceStore   store_dynamodb.AccountWorkspaceStore
-	orgStore         store_postgres.OrganizationStore
-	permissionSvc    *service.PermissionService
-	
+	awsConfig       aws.Config
+	dynamoClient    *dynamodb.Client
+	ecsClient       *ecs.Client
+	postgresDB      *sql.DB
+	postgresPool    *pgxpool.Pool
+	rdsProxy        *postgresClient.RDSProxy
+	accountStore    store_dynamodb.DynamoDBStore
+	nodeAccessStore store_dynamodb.NodeAccessStore
+	nodeStore       store_dynamodb.NodeStore
+	workspaceStore  store_dynamodb.AccountWorkspaceStore
+	orgStore        store_postgres.OrganizationStore
+	permissionSvc   *service.PermissionService
+
 	// Configuration
 	accountsTable                   string
-	computeNodesTable              string
-	nodeAccessTable                string
+	computeNodesTable               string
+	nodeAccessTable                 string
 	accountWorkspaceEnablementTable string
 }
 
@@ -90,7 +90,7 @@ func (c *Container) PostgresDB() *sql.DB {
 		if c.rdsProxy == nil {
 			c.rdsProxy = postgresClient.NewRDSProxy(c.awsConfig)
 		}
-		
+
 		if c.postgresPool == nil {
 			pool, err := c.rdsProxy.Connect(context.Background())
 			if err != nil {
@@ -105,27 +105,27 @@ func (c *Container) PostgresDB() *sql.DB {
 				}
 				user := os.Getenv("POSTGRES_USER")
 				password := os.Getenv("POSTGRES_PASSWORD")
-				
+
 				// Determine connection mode
 				connectionMode := "RDS IAM Auth"
 				if password != "" {
 					connectionMode = "Password Auth"
 				}
-				
-				log.Printf("PostgreSQL connection failed [%s]: host=%s, database=%s, user=%s, error=%v", 
+
+				log.Printf("PostgreSQL connection failed [%s]: host=%s, database=%s, user=%s, error=%v",
 					connectionMode, host, database, user, err)
-				
+
 				// Log additional context for troubleshooting
 				if password == "" && (host == "localhost" || host == "pennsievedb") {
 					log.Printf("PostgreSQL troubleshooting: Test environment detected but no POSTGRES_PASSWORD set. This may indicate a configuration issue.")
 				}
-				
+
 				return nil
 			}
 			c.postgresPool = pool
 			// Convert pgx pool to sql.DB
 			c.postgresDB = stdlib.OpenDBFromPool(pool)
-			log.Printf("PostgreSQL connection established successfully: host=%s, database=%s", 
+			log.Printf("PostgreSQL connection established successfully: host=%s, database=%s",
 				os.Getenv("POSTGRES_HOST"), os.Getenv("POSTGRES_ORGANIZATION_DATABASE"))
 		}
 	}

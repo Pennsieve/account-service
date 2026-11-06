@@ -8,12 +8,12 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/mappers"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/utils"
 )
 
 // GetAccountHandler retrieves a specific account by ID

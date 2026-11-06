@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	
+
 	_ "github.com/lib/pq"
 )
 
@@ -38,7 +38,7 @@ func (s *PostgresTeamStore) GetTeamByNodeId(ctx context.Context, nodeId string) 
 		FROM pennsieve.teams t
 		JOIN pennsieve.organization_team ot ON ot.team_id = t.id
 		WHERE t.node_id = $1`
-	
+
 	var team Team
 	err := s.DB.QueryRowContext(ctx, query, nodeId).Scan(
 		&team.Id,
@@ -52,6 +52,6 @@ func (s *PostgresTeamStore) GetTeamByNodeId(ctx context.Context, nodeId string) 
 		}
 		return nil, fmt.Errorf("error getting team by node_id: %w", err)
 	}
-	
+
 	return &team, nil
 }

@@ -18,22 +18,22 @@ import (
 func setupPatchAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseStore, store_dynamodb.NodeStore, string) {
 	// Generate unique test ID for isolation
 	testId := test.GenerateTestId()
-	
+
 	// Use shared test client and tables
 	client := test.GetClient()
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(client, TEST_NODES_TABLE)
-	
+
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
 
 	return accountStore, nodeStore, testId
@@ -59,7 +59,7 @@ func TestPatchAccountHandler_Success_UpdateStatus(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -83,12 +83,12 @@ func TestPatchAccountHandler_Success_UpdateStatus(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var updatedAccount models.Account
 	err = json.Unmarshal([]byte(response.Body), &updatedAccount)
 	assert.NoError(t, err)
-	
+
 	// Verify the status was updated
 	assert.Equal(t, account.Uuid, updatedAccount.Uuid)
 	assert.Equal(t, "Paused", updatedAccount.Status)
@@ -101,7 +101,7 @@ func TestPatchAccountHandler_Success_UpdateName(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -125,12 +125,12 @@ func TestPatchAccountHandler_Success_UpdateName(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var updatedAccount models.Account
 	err = json.Unmarshal([]byte(response.Body), &updatedAccount)
 	assert.NoError(t, err)
-	
+
 	// Verify the name was updated
 	assert.Equal(t, account.Uuid, updatedAccount.Uuid)
 	assert.Equal(t, "Updated Account Name", updatedAccount.Name)
@@ -143,7 +143,7 @@ func TestPatchAccountHandler_Success_UpdateDescription(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -167,12 +167,12 @@ func TestPatchAccountHandler_Success_UpdateDescription(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var updatedAccount models.Account
 	err = json.Unmarshal([]byte(response.Body), &updatedAccount)
 	assert.NoError(t, err)
-	
+
 	// Verify the description was updated
 	assert.Equal(t, account.Uuid, updatedAccount.Uuid)
 	assert.Equal(t, "Updated account description", updatedAccount.Description)
@@ -185,7 +185,7 @@ func TestPatchAccountHandler_Success_UpdateMultipleFields(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -209,12 +209,12 @@ func TestPatchAccountHandler_Success_UpdateMultipleFields(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var updatedAccount models.Account
 	err = json.Unmarshal([]byte(response.Body), &updatedAccount)
 	assert.NoError(t, err)
-	
+
 	// Verify all fields were updated
 	assert.Equal(t, account.Uuid, updatedAccount.Uuid)
 	assert.Equal(t, "Paused", updatedAccount.Status)
@@ -227,7 +227,7 @@ func TestPatchAccountHandler_Success_PauseWithComputeNodes(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -276,7 +276,7 @@ func TestPatchAccountHandler_Success_PauseWithComputeNodes(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var updatedAccount models.Account
 	err = json.Unmarshal([]byte(response.Body), &updatedAccount)
@@ -319,7 +319,7 @@ func TestPatchAccountHandler_Error_InvalidJSON(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -351,7 +351,7 @@ func TestPatchAccountHandler_Error_InvalidStatus(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -383,7 +383,7 @@ func TestPatchAccountHandler_Error_NoFieldsProvided(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -440,7 +440,7 @@ func TestPatchAccountHandler_Error_NotAccountOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Create account owned by a different user
-	account := createTestAccount(ctx, accountStore, test.UserNodeId("different-user-" + testId), testId)
+	account := createTestAccount(ctx, accountStore, test.UserNodeId("different-user-"+testId), testId)
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
 
@@ -470,7 +470,7 @@ func TestPatchAccountHandler_Success_EnableAccount_DoesNotEnableNodes(t *testing
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account initially paused
 	account := createTestAccount(ctx, accountStore, userId, testId)
 	account.Status = "Paused"
@@ -507,7 +507,7 @@ func TestPatchAccountHandler_Success_EnableAccount_DoesNotEnableNodes(t *testing
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var updatedAccount models.Account
 	err = json.Unmarshal([]byte(response.Body), &updatedAccount)

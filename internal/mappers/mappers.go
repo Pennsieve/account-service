@@ -1,10 +1,10 @@
 package mappers
 
 import (
-	"os"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/platformnode"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"os"
 )
 
 // DynamoDBNodeToJsonNodeWithAccountStatus converts DynamoDB nodes to JSON nodes with account status override
@@ -47,6 +47,7 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 			Uuid:        c.Uuid,
 			Name:        c.Name,
 			Description: c.Description,
+			Region:      c.Region(),
 			QueueUrl:    c.QueueUrl,
 			Account: models.NodeAccount{
 				Uuid:        c.AccountUuid,
@@ -54,25 +55,25 @@ func DynamoDBNodeToJsonNodeWithAccountInfo(dynamoNodes []models.DynamoDBNode, ac
 				AccountType: c.AccountType,
 				OwnerId:     accountOwnerId,
 			},
-			CreatedAt:           c.CreatedAt,
-			OrganizationId:      responseOrganizationId,
-			OwnerId:             c.UserId,
-			Identifier:          c.Identifier,
-			WorkflowManagerTag:  c.WorkflowManagerTag,
-			ProvisionerImage:    c.ProvisionerImage,
-			ProvisionerImageTag: c.ProvisionerImageTag,
+			CreatedAt:                  c.CreatedAt,
+			OrganizationId:             responseOrganizationId,
+			OwnerId:                    c.UserId,
+			Identifier:                 c.Identifier,
+			WorkflowManagerTag:         c.WorkflowManagerTag,
+			ProvisionerImage:           c.ProvisionerImage,
+			ProvisionerImageTag:        c.ProvisionerImageTag,
 			PendingProvisionerImageTag: c.PendingProvisionerImageTag,
-			DeploymentMode:      c.DeploymentMode,
-			EnableLLMAccess:     c.EnableLLMAccess,
-			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
-			MaxGpuInstances:        c.MaxGpuInstances,
-			GpuTier:                c.GpuTier,
-			MaxInteractiveSessions: c.MaxInteractiveSessions,
-			AccessScope:            accessScope,
-			Status:                 nodeStatus,
-			HealthStatus:           c.HealthStatus,
-			LastHealthCheck:        c.LastHealthCheck,
-			Platform:               platformnode.Is(c.Uuid),
+			DeploymentMode:             c.DeploymentMode,
+			EnableLLMAccess:            c.EnableLLMAccess,
+			LlmBaaAcknowledged:         c.LlmBaaAcknowledged,
+			MaxGpuInstances:            c.MaxGpuInstances,
+			GpuTier:                    c.GpuTier,
+			MaxInteractiveSessions:     c.MaxInteractiveSessions,
+			AccessScope:                accessScope,
+			Status:                     nodeStatus,
+			HealthStatus:               c.HealthStatus,
+			LastHealthCheck:            c.LastHealthCheck,
+			Platform:                   platformnode.Is(c.Uuid),
 		})
 	}
 
@@ -84,35 +85,36 @@ func DynamoDBNodeToJsonNode(dynamoNodes []models.DynamoDBNode) []models.Node {
 
 	for _, c := range dynamoNodes {
 		responseOrganizationId := c.OrganizationNodeId()
-		
+
 		nodes = append(nodes, models.Node{
 			Uuid:        c.Uuid,
 			Name:        c.Name,
 			Description: c.Description,
+			Region:      c.Region(),
 			QueueUrl:    c.QueueUrl,
 			Account: models.NodeAccount{
 				Uuid:        c.AccountUuid,
 				AccountId:   c.AccountId,
 				AccountType: c.AccountType,
 			},
-			CreatedAt:           c.CreatedAt,
-			OrganizationId:      responseOrganizationId,
-			OwnerId:             c.UserId,
-			Identifier:          c.Identifier,
-			WorkflowManagerTag:  c.WorkflowManagerTag,
-			ProvisionerImage:    c.ProvisionerImage,
-			ProvisionerImageTag: c.ProvisionerImageTag,
+			CreatedAt:                  c.CreatedAt,
+			OrganizationId:             responseOrganizationId,
+			OwnerId:                    c.UserId,
+			Identifier:                 c.Identifier,
+			WorkflowManagerTag:         c.WorkflowManagerTag,
+			ProvisionerImage:           c.ProvisionerImage,
+			ProvisionerImageTag:        c.ProvisionerImageTag,
 			PendingProvisionerImageTag: c.PendingProvisionerImageTag,
-			DeploymentMode:      c.DeploymentMode,
-			EnableLLMAccess:     c.EnableLLMAccess,
-			LlmBaaAcknowledged:  c.LlmBaaAcknowledged,
-			MaxGpuInstances:        c.MaxGpuInstances,
-			GpuTier:                c.GpuTier,
-			MaxInteractiveSessions: c.MaxInteractiveSessions,
-			Platform:               platformnode.Is(c.Uuid),
-			Status:                 c.Status,
-			HealthStatus:           c.HealthStatus,
-			LastHealthCheck:        c.LastHealthCheck,
+			DeploymentMode:             c.DeploymentMode,
+			EnableLLMAccess:            c.EnableLLMAccess,
+			LlmBaaAcknowledged:         c.LlmBaaAcknowledged,
+			MaxGpuInstances:            c.MaxGpuInstances,
+			GpuTier:                    c.GpuTier,
+			MaxInteractiveSessions:     c.MaxInteractiveSessions,
+			Platform:                   platformnode.Is(c.Uuid),
+			Status:                     c.Status,
+			HealthStatus:               c.HealthStatus,
+			LastHealthCheck:            c.LastHealthCheck,
 		})
 	}
 

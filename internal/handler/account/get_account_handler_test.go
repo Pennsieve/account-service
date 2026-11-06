@@ -29,7 +29,7 @@ const (
 func TestMain(m *testing.M) {
 	// Setup: Create client and tables
 	_ = test.GetClient() // Initialize the global client
-	
+
 	if err := test.SetupPackageTables(); err != nil {
 		log.Fatalf("Failed to setup package tables: %v", err)
 	}
@@ -43,22 +43,22 @@ func TestMain(m *testing.M) {
 func setupAccountHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseStore, string) {
 	// Generate unique test ID for isolation
 	testId := test.GenerateTestId()
-	
+
 	// Use shared test client and accounts table
 	client := test.GetClient()
 	store := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_TABLE).(*store_dynamodb.AccountDatabaseStore)
-	
+
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	// Register cleanup for this test's specific data
 	t.Cleanup(func() {
 		// Clean up only this test's data using unique IDs
@@ -193,7 +193,7 @@ func TestGetAccountHandler_Forbidden(t *testing.T) {
 		AccountType: "aws",
 		RoleName:    "test-role-" + testId,
 		ExternalId:  "ext-123-" + testId,
-		UserId:      ownerUserId,  // Account owned by this user
+		UserId:      ownerUserId, // Account owned by this user
 		Name:        "Test Account " + testId,
 		Description: "Test account for permission testing",
 		Status:      "active",

@@ -23,20 +23,20 @@ func setupGetComputeNodesHandlerTest(t *testing.T) (store_dynamodb.NodeStore, st
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(client, TEST_NODES_TABLE)
 	accessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, TEST_ACCESS_TABLE)
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
-	
+
 	// Set environment variables for handler
 	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	os.Setenv("NODE_ACCESS_TABLE", TEST_ACCESS_TABLE)
 	os.Setenv("ACCOUNTS_TABLE", test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	return nodeStore, accessStore, accountStore
 }
 
@@ -65,7 +65,7 @@ func TestGetComputeNodesHandler_UserOwnedNodes(t *testing.T) {
 	testNode1.OrganizationId = "INDEPENDENT" // Organization-independent
 	testNode2 := createTestNode(testId + "2")
 	testNode2.OrganizationId = "INDEPENDENT" // Organization-independent
-	
+
 	err := nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
 	err = nodeStore.Put(ctx, testNode2)
@@ -125,7 +125,7 @@ func TestGetComputeNodesHandler_UserOwnedNodes(t *testing.T) {
 
 	// Should return at least one user-owned node (may be limited by DynamoDB GSI constraints)
 	assert.GreaterOrEqual(t, len(nodes), 1)
-	
+
 	// Verify node data - OrganizationId should be converted back to empty string
 	nodeUuids := make([]string, len(nodes))
 	for i, node := range nodes {
@@ -140,7 +140,7 @@ func TestGetComputeNodesHandler_UserOwnedNodes(t *testing.T) {
 		}
 	}
 	assert.True(t, foundAny, "Should find at least one test node")
-	
+
 	// All nodes should have empty OrganizationId (converted from INDEPENDENT)
 	for _, node := range nodes {
 		assert.Equal(t, "", node.OrganizationId)
@@ -159,7 +159,7 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 	testNode2.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode3 := createTestNode(testId + "3")
 	testNode3.OrganizationId = test.OrgNodeId("different-org-" + testId)
-	
+
 	err := nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
 	err = nodeStore.Put(ctx, testNode2)
@@ -217,7 +217,7 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 			"organization_id": test.OrgNodeId("org-" + testId),
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(testNode1.UserId, test.OrgNodeId("org-" + testId)),
+			Authorizer: test.CreateTestAuthorizer(testNode1.UserId, test.OrgNodeId("org-"+testId)),
 		},
 	}
 
@@ -236,12 +236,12 @@ func TestGetComputeNodesHandler_OrganizationNodes(t *testing.T) {
 
 	// Should return only nodes from the specified organization
 	assert.Len(t, nodes, 2)
-	
+
 	// Verify all nodes belong to the correct organization
 	for _, node := range nodes {
-		assert.Equal(t, test.OrgNodeId("org-" + testId), node.OrganizationId)
+		assert.Equal(t, test.OrgNodeId("org-"+testId), node.OrganizationId)
 	}
-	
+
 	// Verify specific node UUIDs
 	nodeUuids := []string{nodes[0].Uuid, nodes[1].Uuid}
 	assert.Contains(t, nodeUuids, testNode1.Uuid)
@@ -270,7 +270,7 @@ func TestGetComputeNodesHandler_AccountOwnerMode(t *testing.T) {
 	testNode2.AccountUuid = testAccount.Uuid
 	testNode2.UserId = userId
 	testNode2.OrganizationId = "INDEPENDENT" // Organization-independent node
-	
+
 	err = nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
 	err = nodeStore.Put(ctx, testNode2)
@@ -301,18 +301,18 @@ func TestGetComputeNodesHandler_AccountOwnerMode(t *testing.T) {
 
 	// Should return all nodes on user's accounts
 	assert.Len(t, nodes, 2)
-	
+
 	// Verify nodes belong to the user's account
 	for _, node := range nodes {
 		assert.Equal(t, testAccount.Uuid, node.Account.Uuid)
 	}
-	
+
 	// Verify that INDEPENDENT organization is converted to empty string
 	foundIndependent := false
 	foundOrgNode := false
 	for _, node := range nodes {
 		if node.Uuid == testNode1.Uuid {
-			assert.Equal(t, test.OrgNodeId("org-" + testId), node.OrganizationId)
+			assert.Equal(t, test.OrgNodeId("org-"+testId), node.OrganizationId)
 			foundOrgNode = true
 		} else if node.Uuid == testNode2.Uuid {
 			assert.Equal(t, "", node.OrganizationId) // Should be converted from INDEPENDENT
@@ -427,7 +427,7 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 	testNode2.OrganizationId = test.OrgNodeId("org-" + testId)
 	testNode3 := createTestNode(testId + "3")
 	testNode3.OrganizationId = test.OrgNodeId("org-" + testId)
-	
+
 	err := nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
 	err = nodeStore.Put(ctx, testNode2)
@@ -484,7 +484,7 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 			"organization_id": test.OrgNodeId("org-" + testId),
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(requestingUserId, test.OrgNodeId("org-" + testId)),
+			Authorizer: test.CreateTestAuthorizer(requestingUserId, test.OrgNodeId("org-"+testId)),
 		},
 	}
 
@@ -503,14 +503,14 @@ func TestGetComputeNodesHandler_MixedAccessTypes(t *testing.T) {
 
 	// Should return all nodes regardless of access type (owner, write, read)
 	assert.Len(t, nodes, 3)
-	
+
 	// Verify all nodes belong to the correct organization
 	nodeUuids := make([]string, len(nodes))
 	for i, node := range nodes {
-		assert.Equal(t, test.OrgNodeId("org-" + testId), node.OrganizationId)
+		assert.Equal(t, test.OrgNodeId("org-"+testId), node.OrganizationId)
 		nodeUuids[i] = node.Uuid
 	}
-	
+
 	// Verify all nodes are present
 	assert.Contains(t, nodeUuids, testNode1.Uuid)
 	assert.Contains(t, nodeUuids, testNode2.Uuid)

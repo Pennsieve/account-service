@@ -20,22 +20,22 @@ func setupPostAccountWorkspaceHandlerTest(t *testing.T) (*store_dynamodb.Account
 	// Generate unique test IDs for isolation
 	testId := test.GenerateTestId()
 	organizationId := test.OrgNodeId("org-" + testId)
-	
+
 	// Use shared test client and tables
 	client := test.GetClient()
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, TEST_WORKSPACE_TABLE).(*store_dynamodb.AccountWorkspaceStoreImpl)
-	
+
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ACCOUNT_WORKSPACE_TABLE", TEST_WORKSPACE_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
 
 	return accountStore, workspaceStore, testId, organizationId
@@ -61,7 +61,7 @@ func TestPostAccountWorkspaceHandler_Success_PublicEnablement(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccountForWorkspace(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -85,19 +85,19 @@ func TestPostAccountWorkspaceHandler_Success_PublicEnablement(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 201, response.StatusCode)
-	
+
 	// Parse response body
 	var enablement models.AccountWorkspaceEnablement
 	err = json.Unmarshal([]byte(response.Body), &enablement)
 	assert.NoError(t, err)
-	
+
 	// Verify the enablement was created correctly
 	assert.Equal(t, account.Uuid, enablement.AccountUuid)
 	assert.Equal(t, organizationId, enablement.OrganizationId)
 	assert.True(t, enablement.IsPublic)
 	assert.Equal(t, userId, enablement.EnabledBy)
 	assert.Greater(t, enablement.EnabledAt, int64(0))
-	
+
 	// Verify it was stored in the database
 	storedEnablement, err := workspaceStore.Get(ctx, account.Uuid, organizationId)
 	assert.NoError(t, err)
@@ -111,7 +111,7 @@ func TestPostAccountWorkspaceHandler_Success_PrivateEnablement(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccountForWorkspace(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -135,18 +135,18 @@ func TestPostAccountWorkspaceHandler_Success_PrivateEnablement(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 201, response.StatusCode)
-	
+
 	// Parse response body
 	var enablement models.AccountWorkspaceEnablement
 	err = json.Unmarshal([]byte(response.Body), &enablement)
 	assert.NoError(t, err)
-	
+
 	// Verify the enablement was created with isPublic=false
 	assert.Equal(t, account.Uuid, enablement.AccountUuid)
 	assert.Equal(t, organizationId, enablement.OrganizationId)
 	assert.False(t, enablement.IsPublic)
 	assert.Equal(t, userId, enablement.EnabledBy)
-	
+
 	// Verify it was stored in the database
 	storedEnablement, err := workspaceStore.Get(ctx, account.Uuid, organizationId)
 	assert.NoError(t, err)
@@ -181,7 +181,7 @@ func TestPostAccountWorkspaceHandler_Error_InvalidJSON(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccountForWorkspace(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -238,7 +238,7 @@ func TestPostAccountWorkspaceHandler_Error_NotAccountOwner(t *testing.T) {
 	ctx := context.Background()
 
 	// Create account owned by a different user
-	account := createTestAccountForWorkspace(ctx, accountStore, test.UserNodeId("different-user-" + testId), testId)
+	account := createTestAccountForWorkspace(ctx, accountStore, test.UserNodeId("different-user-"+testId), testId)
 	err := accountStore.Insert(ctx, account)
 	require.NoError(t, err)
 
@@ -268,7 +268,7 @@ func TestPostAccountWorkspaceHandler_Error_DuplicateEnablement(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccountForWorkspace(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -311,7 +311,7 @@ func TestPostAccountWorkspaceHandler_Success_MultipleAccountsSameWorkspace(t *te
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create two test accounts
 	account1 := store_dynamodb.Account{
 		Uuid:        "workspace-test-account-1-" + testId,
@@ -335,7 +335,7 @@ func TestPostAccountWorkspaceHandler_Success_MultipleAccountsSameWorkspace(t *te
 		Description: "Second account",
 		Status:      "Enabled",
 	}
-	
+
 	err := accountStore.Insert(ctx, account1)
 	require.NoError(t, err)
 	err = accountStore.Insert(ctx, account2)
@@ -386,7 +386,7 @@ func TestPostAccountWorkspaceHandler_Success_EnabledAtTimestamp(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account
 	account := createTestAccountForWorkspace(ctx, accountStore, userId, testId)
 	err := accountStore.Insert(ctx, account)
@@ -419,7 +419,7 @@ func TestPostAccountWorkspaceHandler_Success_EnabledAtTimestamp(t *testing.T) {
 	var enablement models.AccountWorkspaceEnablement
 	err = json.Unmarshal([]byte(response.Body), &enablement)
 	assert.NoError(t, err)
-	
+
 	// Verify EnabledAt is within the expected range
 	assert.GreaterOrEqual(t, enablement.EnabledAt, timeBefore)
 	assert.LessOrEqual(t, enablement.EnabledAt, timeAfter)

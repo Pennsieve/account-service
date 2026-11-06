@@ -27,7 +27,7 @@ import (
 func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetComputeNodeHandler"
 	uuid := request.PathParameters["id"]
-	
+
 	// Validate that ID is provided
 	if uuid == "" {
 		return events.APIGatewayV2HTTPResponse{
@@ -126,7 +126,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		} else {
 			// Get the account owner's userId
 			accountOwnerId = account.UserId
-			
+
 			// Override node status to Paused if account is Paused and node is not Pending
 			if computeNode.Status != "Pending" && account.Status == "Paused" {
 				nodeStatus = "Paused"
@@ -135,7 +135,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	} else {
 		log.Printf("Error: ACCOUNTS_TABLE environment variable not set")
 	}
-	
+
 	if accountOwnerId == "" {
 		log.Printf("Error: could not determine account owner for node %s (account: %s)", computeNode.Uuid, computeNode.AccountUuid)
 	}
@@ -155,6 +155,7 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		Uuid:        computeNode.Uuid,
 		Name:        computeNode.Name,
 		Description: computeNode.Description,
+		Region:      computeNode.Region(),
 		QueueUrl:    computeNode.QueueUrl,
 		Account: models.NodeAccount{
 			Uuid:        computeNode.AccountUuid,
@@ -162,22 +163,22 @@ func GetComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 			AccountType: computeNode.AccountType,
 			OwnerId:     accountOwnerId,
 		},
-		CreatedAt:           computeNode.CreatedAt,
-		OrganizationId:      responseOrganizationId,
-		OwnerId:             computeNode.UserId,
-		Identifier:          computeNode.Identifier,
-		WorkflowManagerTag:  computeNode.WorkflowManagerTag,
-		ProvisionerImage:    computeNode.ProvisionerImage,
-		ProvisionerImageTag: computeNode.ProvisionerImageTag,
+		CreatedAt:                  computeNode.CreatedAt,
+		OrganizationId:             responseOrganizationId,
+		OwnerId:                    computeNode.UserId,
+		Identifier:                 computeNode.Identifier,
+		WorkflowManagerTag:         computeNode.WorkflowManagerTag,
+		ProvisionerImage:           computeNode.ProvisionerImage,
+		ProvisionerImageTag:        computeNode.ProvisionerImageTag,
 		PendingProvisionerImageTag: computeNode.PendingProvisionerImageTag,
-		DeploymentMode:      computeNode.DeploymentMode,
-		EnableLLMAccess:     computeNode.EnableLLMAccess,
-		LlmBaaAcknowledged:  computeNode.LlmBaaAcknowledged,
-		MaxGpuInstances:        computeNode.MaxGpuInstances,
-		GpuTier:                computeNode.GpuTier,
-		MaxInteractiveSessions: computeNode.MaxInteractiveSessions,
-		AccessScope:            accessScope,
-		Status:                 nodeStatus,
+		DeploymentMode:             computeNode.DeploymentMode,
+		EnableLLMAccess:            computeNode.EnableLLMAccess,
+		LlmBaaAcknowledged:         computeNode.LlmBaaAcknowledged,
+		MaxGpuInstances:            computeNode.MaxGpuInstances,
+		GpuTier:                    computeNode.GpuTier,
+		MaxInteractiveSessions:     computeNode.MaxInteractiveSessions,
+		AccessScope:                accessScope,
+		Status:                     nodeStatus,
 	}}
 	annotateLatestVersions(ctx, cfg, nodes)
 

@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
+	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
-	"github.com/pennsieve/account-service/internal/errors"
 )
 
 // WorkspaceEnablementRequest contains the parameters for enabling a workspace on an account
@@ -130,13 +130,13 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 
 	// Create workspace enablement
 	enablement := store_dynamodb.AccountWorkspace{
-		AccountUuid:    accountUuid,
-		WorkspaceId:    organizationId,  // Map organizationId to WorkspaceId for DB
-		IsPublic:       enablementRequest.IsPublic,
-		EnableCompute:  enablementRequest.EnableCompute,
-		EnableStorage:  enablementRequest.EnableStorage,
-		EnabledBy:      userId,
-		EnabledAt:      time.Now().Unix(),
+		AccountUuid:   accountUuid,
+		WorkspaceId:   organizationId, // Map organizationId to WorkspaceId for DB
+		IsPublic:      enablementRequest.IsPublic,
+		EnableCompute: enablementRequest.EnableCompute,
+		EnableStorage: enablementRequest.EnableStorage,
+		EnabledBy:     userId,
+		EnabledAt:     time.Now().Unix(),
 	}
 
 	err = enablementStore.Insert(ctx, enablement)
@@ -151,7 +151,7 @@ func PostAccountWorkspaceEnablementHandler(ctx context.Context, request events.A
 	// Return the enablement
 	m, err := json.Marshal(models.AccountWorkspaceEnablement{
 		AccountUuid:    enablement.AccountUuid,
-		OrganizationId: organizationId,  // Use the original organizationId
+		OrganizationId: organizationId, // Use the original organizationId
 		IsPublic:       enablement.IsPublic,
 		EnableCompute:  enablement.EnableCompute,
 		EnableStorage:  enablement.EnableStorage,

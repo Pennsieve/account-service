@@ -36,7 +36,7 @@ func NewNodeDatabaseStore(db *dynamodb.Client, tableName string) NodeStore {
 func (r *NodeDatabaseStore) GetById(ctx context.Context, uuid string) (models.DynamoDBNode, error) {
 	node := models.DynamoDBNode{Uuid: uuid}
 	response, err := r.DB.GetItem(ctx, &dynamodb.GetItemInput{
-		Key: node.GetKey(), 
+		Key:       node.GetKey(),
 		TableName: aws.String(r.TableName),
 	})
 	if err != nil {
@@ -233,6 +233,7 @@ func (r *NodeDatabaseStore) UpdateHealthStatus(ctx context.Context, uuid string,
 
 	return nil
 }
+
 // withTenant sets the tenant of a node stored before nodes had one. A node
 // whose organizationId and userId don't name a tenant is returned as read,
 // so one bad record doesn't hide the rest of a listing; storing it fails.

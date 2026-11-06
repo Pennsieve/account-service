@@ -68,7 +68,7 @@ func setupPostComputeNodesHandlerTest(t *testing.T) (store_dynamodb.DynamoDBStor
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, TEST_ACCESS_TABLE)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, test.TEST_WORKSPACE_TABLE)
-	
+
 	// Set environment variables for handler
 	os.Setenv("ACCOUNTS_TABLE", test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("NODE_ACCESS_TABLE", TEST_ACCESS_TABLE)
@@ -81,13 +81,13 @@ func setupPostComputeNodesHandlerTest(t *testing.T) (store_dynamodb.DynamoDBStor
 	os.Setenv("TASK_DEF_CONTAINER_NAME", "test-container")
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	return accountStore, nodeAccessStore, workspaceStore
 }
 
@@ -108,10 +108,10 @@ func TestPostComputeNodesHandler_IndependentNodeSuccess(t *testing.T) {
 
 	// Create node request (organization-independent)
 	nodeRequest := models.CreateComputeNodeRequest{
-		Name:               "Test Node",
-		Description:        "Test Description",
-		AccountId:          testAccount.Uuid,
-		OrganizationId:     "", // Empty for organization-independent
+		Name:           "Test Node",
+		Description:    "Test Description",
+		AccountId:      testAccount.Uuid,
+		OrganizationId: "", // Empty for organization-independent
 	}
 	requestBody, err := json.Marshal(nodeRequest)
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestPostComputeNodesHandler_MissingEnvironmentVariables(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		Body: string(requestBody),
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), "123"),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-"+testId), "123"),
 		},
 	}
 
@@ -561,7 +561,7 @@ func TestPostComputeNodesHandler_NodeFieldValidation(t *testing.T) {
 
 			response, err := compute.PostComputeNodesHandler(ctx, request)
 			assert.NoError(t, err)
-			
+
 			// All should succeed in creation (validation happens at ECS level)
 			assert.Equal(t, 201, response.StatusCode)
 
@@ -669,7 +669,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
-		
+
 		// If not 201, log the response for debugging
 		if response.StatusCode != 201 {
 			t.Logf("Response status: %d, body: %s", response.StatusCode, response.Body)
@@ -697,7 +697,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
-		
+
 		// When POSTGRES_HOST is not set (test environment), the PostgreSQL connection won't be available
 		// and the handler should return an error since isPublic = true requires admin check
 		if os.Getenv("POSTGRES_HOST") == "" {
@@ -734,18 +734,18 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		// Test admin user (has permission_bit >= 16)
 		adminUserId := int64(100)
 		orgIdInt := int64(789)
-		
+
 		// First, ensure the organization exists (insert or update)
 		// The seeded database should already have the organizations table with node_id column
 		_, err = db.Exec(`
 			INSERT INTO pennsieve.organizations (id, name, slug, encryption_key_id, node_id)
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (id) DO UPDATE SET node_id = $5
-		`, orgIdInt, test.OrgNodeId("test-org-" + testId), test.OrgNodeId("test-org-" + testId), "test-key", orgId)
+		`, orgIdInt, test.OrgNodeId("test-org-"+testId), test.OrgNodeId("test-org-"+testId), "test-key", orgId)
 		if err != nil {
 			t.Logf("Warning: Could not create organization: %v", err)
 		}
-		
+
 		// Create the admin user in the users table
 		adminCognitoId := uuid.New().String()
 		_, err = db.Exec(`
@@ -756,7 +756,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		if err != nil {
 			t.Logf("Warning: Could not create admin user: %v", err)
 		}
-		
+
 		// Insert admin user into organization_user table
 		err = setupOrganizationUser(db, adminUserId, orgIdInt, 16) // Admin permission
 		if err != nil {
@@ -776,7 +776,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 
 		// Test non-admin user (has permission_bit < 16)
 		nonAdminUserId := int64(101)
-		
+
 		// Create the non-admin user in the users table
 		nonAdminCognitoId := uuid.New().String()
 		_, err = db.Exec(`
@@ -787,7 +787,7 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 		if err != nil {
 			t.Logf("Warning: Could not create non-admin user: %v", err)
 		}
-		
+
 		err = setupOrganizationUser(db, nonAdminUserId, orgIdInt, 8) // Collaborator permission
 		if err != nil {
 			t.Fatalf("Failed to set up non-admin user: %v", err)
@@ -821,15 +821,15 @@ func TestPostComputeNodesHandler_WorkspaceEnabledPublicAccount(t *testing.T) {
 
 		response, err := compute.PostComputeNodesHandler(ctx, request)
 		assert.NoError(t, err)
-		
+
 		// When POSTGRES_HOST is not set (normal test environment), the PostgreSQL connection
 		// won't be available and the handler should return an error for public accounts
 		// This tests that the public account logic requires PostgreSQL for admin checks
 		if os.Getenv("POSTGRES_HOST") == "" {
 			assert.Equal(t, 500, response.StatusCode) // Internal server error - no PostgreSQL
 		}
-		
-		// Note: In a production environment with PostgreSQL, non-admin users would be 
+
+		// Note: In a production environment with PostgreSQL, non-admin users would be
 		// rejected with 403 status and "only workspace admins can create nodes" message
 	})
 }

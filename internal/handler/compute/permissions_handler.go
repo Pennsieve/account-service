@@ -19,7 +19,6 @@ import (
 	"github.com/pennsieve/pennsieve-go-core/pkg/authorizer"
 )
 
-
 // GetNodePermissionsHandler retrieves the permissions for a compute node
 // GET /compute-nodes/{id}/permissions
 //
@@ -28,7 +27,7 @@ import (
 // - If organization_id is provided, user must be a member of that organization
 func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "GetNodePermissionsHandler"
-	
+
 	// Get node UUID from path
 	nodeUuid := request.PathParameters["id"]
 	if nodeUuid == "" {
@@ -37,11 +36,11 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMissingNodeUuid),
 		}, nil
 	}
-	
+
 	// Get user claims
 	claims := authorizer.ParseClaims(request.RequestContext.Authorizer.Lambda)
 	userId := claims.UserClaim.NodeId
-	
+
 	// Load AWS config
 	cfg, err := utils.LoadAWSConfig(ctx)
 	if err != nil {
@@ -78,7 +77,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 
 	// Use the node's own organization for access checks
 	organizationId := node.OrganizationNodeId()
-	
+
 	permissionService := service.NewPermissionService(nodeAccessStore, nil)
 	permissionService.SetNodeStore(nodeStore)
 	permissionService.SetAuthorizer(authclient.NewLambdaDirectAuthorizer(lambdaClient))
@@ -94,14 +93,14 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrCheckingAccess),
 		}, nil
 	}
-	
+
 	if !hasAccess {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusForbidden,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrForbidden),
 		}, nil
 	}
-	
+
 	// Set up Postgres stores for GetNodePermissions (stale permission cleanup)
 	appContainer, err := utils.GetContainer(ctx, cfg)
 	if err == nil {
@@ -121,7 +120,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrGettingPermissions),
 		}, nil
 	}
-	
+
 	response, err := json.Marshal(permissions)
 	if err != nil {
 		log.Println(err.Error())
@@ -130,7 +129,7 @@ func GetNodePermissionsHandler(ctx context.Context, request events.APIGatewayV2H
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrMarshaling),
 		}, nil
 	}
-	
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: http.StatusOK,
 		Body:       string(response),

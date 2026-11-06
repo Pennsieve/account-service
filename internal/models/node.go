@@ -1,6 +1,8 @@
 package models
 
 import (
+	"strings"
+
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/pennsieve/pennsieve-go-core/pkg/models/tenant"
@@ -26,32 +28,35 @@ type CreateComputeNodeRequest struct {
 
 // Node is the response representation of a compute node
 type Node struct {
-	Uuid                   string          `json:"uuid"`
-	Name                   string          `json:"name"`
-	Description            string          `json:"description"`
-	QueueUrl               string          `json:"queueUrl"`
-	Account                NodeAccount     `json:"account"`
-	CreatedAt              string          `json:"createdAt"`
-	OrganizationId         string          `json:"organizationId,omitempty"`
-	OwnerId                string          `json:"ownerId"`
-	Identifier             string          `json:"identifier"`
-	WorkflowManagerTag     string          `json:"workflowManagerTag"`
-	ProvisionerImage       string          `json:"provisionerImage,omitempty"`
-	ProvisionerImageTag    string          `json:"provisionerImageTag,omitempty"`
+	Uuid string `json:"uuid"`
+	Name string `json:"name"`
+	// Region is the node's AWS region, from its gateway's URL (the node
+	// record has none): what the app compares data's regions with.
+	Region              string      `json:"region,omitempty"`
+	Description         string      `json:"description"`
+	QueueUrl            string      `json:"queueUrl"`
+	Account             NodeAccount `json:"account"`
+	CreatedAt           string      `json:"createdAt"`
+	OrganizationId      string      `json:"organizationId,omitempty"`
+	OwnerId             string      `json:"ownerId"`
+	Identifier          string      `json:"identifier"`
+	WorkflowManagerTag  string      `json:"workflowManagerTag"`
+	ProvisionerImage    string      `json:"provisionerImage,omitempty"`
+	ProvisionerImageTag string      `json:"provisionerImageTag,omitempty"`
 	// PendingProvisionerImageTag is the version an update in progress is
 	// moving the node to; ProvisionerImageTag stays the running one until it
 	// finishes.
-	PendingProvisionerImageTag string `json:"pendingProvisionerImageTag,omitempty"`
-	DeploymentMode         string          `json:"deploymentMode,omitempty"`
-	EnableLLMAccess        bool            `json:"enableLLMAccess,omitempty"`
-	LlmBaaAcknowledged     bool            `json:"llmBaaAcknowledged,omitempty"`
-	MaxGpuInstances        int             `json:"maxGpuInstances"`
-	GpuTier                string          `json:"gpuTier"`
-	MaxInteractiveSessions int             `json:"maxInteractiveSessions"`
-	AccessScope            NodeAccessScope `json:"accessScope,omitempty"`
-	Status                 string          `json:"status"`
-	HealthStatus           string          `json:"healthStatus,omitempty"`
-	LastHealthCheck        string          `json:"lastHealthCheck,omitempty"`
+	PendingProvisionerImageTag string          `json:"pendingProvisionerImageTag,omitempty"`
+	DeploymentMode             string          `json:"deploymentMode,omitempty"`
+	EnableLLMAccess            bool            `json:"enableLLMAccess,omitempty"`
+	LlmBaaAcknowledged         bool            `json:"llmBaaAcknowledged,omitempty"`
+	MaxGpuInstances            int             `json:"maxGpuInstances"`
+	GpuTier                    string          `json:"gpuTier"`
+	MaxInteractiveSessions     int             `json:"maxInteractiveSessions"`
+	AccessScope                NodeAccessScope `json:"accessScope,omitempty"`
+	Status                     string          `json:"status"`
+	HealthStatus               string          `json:"healthStatus,omitempty"`
+	LastHealthCheck            string          `json:"lastHealthCheck,omitempty"`
 	// LatestVersion is the newest real vX.Y.Z provisioner image tag available on
 	// Docker Hub for this node's ProvisionerImage. Empty when it can't be
 	// determined (Docker Hub unreachable, no released versions, etc.).
@@ -117,31 +122,31 @@ type DynamoDBNode struct {
 	Tenant tenant.Tenant `dynamodbav:"tenant"`
 	// OrganizationId is derived from Tenant when the node is stored (see
 	// LegacyOrganizationId); read the organization with OrganizationNodeId.
-	OrganizationId         string `dynamodbav:"organizationId"`
-	UserId                 string `dynamodbav:"userId"`
-	Identifier             string `dynamodbav:"identifier"`
-	WorkflowManagerTag     string `dynamodbav:"workflowManagerTag"`
-	DeploymentMode         string `dynamodbav:"deploymentMode"`
-	ProvisionerImage       string `dynamodbav:"provisionerImage"`
-	ProvisionerImageTag    string `dynamodbav:"provisionerImageTag"`
+	OrganizationId      string `dynamodbav:"organizationId"`
+	UserId              string `dynamodbav:"userId"`
+	Identifier          string `dynamodbav:"identifier"`
+	WorkflowManagerTag  string `dynamodbav:"workflowManagerTag"`
+	DeploymentMode      string `dynamodbav:"deploymentMode"`
+	ProvisionerImage    string `dynamodbav:"provisionerImage"`
+	ProvisionerImageTag string `dynamodbav:"provisionerImageTag"`
 	// PendingProvisionerImage/Tag are what an update in progress runs; they
 	// become ProvisionerImage/Tag when the provisioner reports the update
 	// done, and are cleared when it fails.
 	PendingProvisionerImage    string `dynamodbav:"pendingProvisionerImage,omitempty"`
 	PendingProvisionerImageTag string `dynamodbav:"pendingProvisionerImageTag,omitempty"`
-	EnableLLMAccess        bool   `dynamodbav:"enableLLMAccess"`
-	LlmBaaAcknowledged     bool   `dynamodbav:"llmBaaAcknowledged"`
-	MaxGpuInstances        int    `dynamodbav:"maxGpuInstances"`
-	GpuTier                string `dynamodbav:"gpuTier"`
-	MaxInteractiveSessions int    `dynamodbav:"maxInteractiveSessions"`
+	EnableLLMAccess            bool   `dynamodbav:"enableLLMAccess"`
+	LlmBaaAcknowledged         bool   `dynamodbav:"llmBaaAcknowledged"`
+	MaxGpuInstances            int    `dynamodbav:"maxGpuInstances"`
+	GpuTier                    string `dynamodbav:"gpuTier"`
+	MaxInteractiveSessions     int    `dynamodbav:"maxInteractiveSessions"`
 	// RunDataStore is where a run's data passes between steps: "s3", or
 	// "efs" when empty. New nodes are created with "s3"; older ones are
 	// switched with update-config. A rollout switch: remove once every node
 	// is on S3.
-	RunDataStore           string `dynamodbav:"runDataStore,omitempty"`
-	Status                 string `dynamodbav:"status"`
-	HealthStatus           string `dynamodbav:"healthStatus"`
-	LastHealthCheck        string `dynamodbav:"lastHealthCheck"`
+	RunDataStore    string `dynamodbav:"runDataStore,omitempty"`
+	Status          string `dynamodbav:"status"`
+	HealthStatus    string `dynamodbav:"healthStatus"`
+	LastHealthCheck string `dynamodbav:"lastHealthCheck"`
 }
 
 func (i DynamoDBNode) GetKey() map[string]types.AttributeValue {
@@ -212,3 +217,17 @@ func (n DynamoDBNode) OrganizationNodeId() string {
 		func(string) string { return "" },
 	)
 }
+
+// RegionFromGatewayURL is the AWS region a compute node's gateway URL
+// (https://{url-id}.lambda-url.{region}.on.aws/) names, or "".
+func RegionFromGatewayURL(gatewayURL string) string {
+	parts := strings.Split(gatewayURL, ".")
+	if len(parts) < 3 || parts[1] != "lambda-url" {
+		return ""
+	}
+	return parts[2]
+}
+
+// Region is the node's AWS region, from its gateway's URL; "" before it's
+// provisioned.
+func (i DynamoDBNode) Region() string { return RegionFromGatewayURL(i.ComputeNodeGatewayUrl) }

@@ -84,7 +84,7 @@ func TestDeleteAccountHandler_MissingId(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), ""),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-"+testId), ""),
 		},
 	}
 
@@ -100,7 +100,7 @@ func TestDeleteAccountHandler_NotFound(t *testing.T) {
 	request := events.APIGatewayV2HTTPRequest{
 		PathParameters: map[string]string{"id": "nonexistent-" + testId},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
-			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-" + testId), ""),
+			Authorizer: test.CreateTestAuthorizer(test.UserNodeId("user-"+testId), ""),
 		},
 	}
 

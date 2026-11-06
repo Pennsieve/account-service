@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -142,7 +141,7 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 		region = os.Getenv("AWS_REGION")
 	}
 
-	// Look up the compute account so we can assume its cross-account role. 
+	// Look up the compute account so we can assume its cross-account role.
 	accountsTable := os.Getenv("ACCOUNTS_TABLE")
 	accountStore := store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
 	account, err := accountStore.GetById(ctx, node.AccountUuid)
@@ -176,14 +175,7 @@ func initSecretsContext(ctx context.Context, request events.APIGatewayV2HTTPRequ
 }
 
 func regionFromGatewayURL(gatewayURL string) string {
-	// URL form: https://{url-id}.lambda-url.{region}.on.aws/
-	parts := strings.Split(gatewayURL, ".")
-	if len(parts) < 3 || parts[1] != "lambda-url" {
-		return ""
-	}
-	region := parts[2]
-
-	return region
+	return models.RegionFromGatewayURL(gatewayURL)
 }
 
 func checkNodeAccess(ctx context.Context, lambdaClient *lambda.Client, dynamoDBClient *dynamodb.Client, handlerName, userId, nodeUuid, organizationId string) *events.APIGatewayV2HTTPResponse {

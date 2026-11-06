@@ -165,7 +165,7 @@ func GetAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequ
 			for i, e := range enablements {
 				modelEnablements[i] = models.AccountWorkspaceEnablement{
 					AccountUuid:    e.AccountUuid,
-					OrganizationId: e.WorkspaceId,  // WorkspaceId from DB maps to OrganizationId in model
+					OrganizationId: e.WorkspaceId, // WorkspaceId from DB maps to OrganizationId in model
 					IsPublic:       e.IsPublic,
 					EnableCompute:  e.EnableCompute,
 					EnableStorage:  e.EnableStorage,

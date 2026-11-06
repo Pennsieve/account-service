@@ -19,22 +19,22 @@ import (
 func setupGetAccountsHandlerTest(t *testing.T) (*store_dynamodb.AccountDatabaseStore, *store_dynamodb.AccountWorkspaceStoreImpl, string) {
 	// Generate unique test ID for isolation
 	testId := test.GenerateTestId()
-	
+
 	// Use shared test client and accounts table with index
 	client := test.GetClient()
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, TEST_ACCOUNTS_WITH_INDEX_TABLE).(*store_dynamodb.AccountDatabaseStore)
 	workspaceStore := store_dynamodb.NewAccountWorkspaceStore(client, TEST_WORKSPACE_TABLE).(*store_dynamodb.AccountWorkspaceStoreImpl)
-	
+
 	// Set environment variables for handler to use test client
 	os.Setenv("ACCOUNTS_TABLE", TEST_ACCOUNTS_WITH_INDEX_TABLE)
 	os.Setenv("ACCOUNT_WORKSPACE_TABLE", TEST_WORKSPACE_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
 
 	return accountStore, workspaceStore, testId
@@ -57,7 +57,7 @@ func TestGetAccountsHandler_Success_NoAccounts(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body - should be empty array
 	var accounts []models.Account
 	err = json.Unmarshal([]byte(response.Body), &accounts)
@@ -115,7 +115,7 @@ func TestGetAccountsHandler_Success_WithAccounts(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var accounts []models.Account
 	err = json.Unmarshal([]byte(response.Body), &accounts)
@@ -130,7 +130,7 @@ func TestGetAccountsHandler_Success_WithAccounts(t *testing.T) {
 
 	assert.Contains(t, accountMap, "account-1-"+testId)
 	assert.Contains(t, accountMap, "account-2-"+testId)
-	
+
 	acc1 := accountMap["account-1-"+testId]
 	assert.Equal(t, "123456789012", acc1.AccountId)
 	assert.Equal(t, "aws", acc1.AccountType)
@@ -149,7 +149,7 @@ func TestGetAccountsHandler_Success_WorkspaceFilter(t *testing.T) {
 
 	userId := testId
 	workspaceId := "workspace-1-" + testId
-	
+
 	// Create test accounts
 	testAccounts := []store_dynamodb.Account{
 		{
@@ -209,12 +209,12 @@ func TestGetAccountsHandler_Success_WorkspaceFilter(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var accounts []models.Account
 	err = json.Unmarshal([]byte(response.Body), &accounts)
 	assert.NoError(t, err)
-	
+
 	// Should only return the enabled account
 	require.Len(t, accounts, 1)
 	assert.Equal(t, "account-enabled-"+testId, accounts[0].Uuid)
@@ -228,7 +228,7 @@ func TestGetAccountsHandler_Success_IncludeWorkspaces(t *testing.T) {
 	userId := testId
 	workspaceId1 := "workspace-1-" + testId
 	workspaceId2 := "workspace-2-" + testId
-	
+
 	// Create test account
 	testAccount := store_dynamodb.Account{
 		Uuid:        "account-with-workspaces-" + testId,
@@ -284,30 +284,30 @@ func TestGetAccountsHandler_Success_IncludeWorkspaces(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body - should be AccountWithWorkspaces format
 	var accountsWithWorkspaces []models.AccountWithWorkspaces
 	err = json.Unmarshal([]byte(response.Body), &accountsWithWorkspaces)
 	assert.NoError(t, err)
-	
+
 	require.Len(t, accountsWithWorkspaces, 1)
-	
+
 	accountWithWorkspaces := accountsWithWorkspaces[0]
 	assert.Equal(t, testAccount.Uuid, accountWithWorkspaces.Account.Uuid)
 	assert.Equal(t, testAccount.Name, accountWithWorkspaces.Account.Name)
-	
+
 	// Should have 2 workspace enablements
 	require.Len(t, accountWithWorkspaces.EnabledWorkspaces, 2)
-	
+
 	// Verify workspace enablements (order might vary)
 	enablementMap := make(map[string]models.AccountWorkspaceEnablement)
 	for _, e := range accountWithWorkspaces.EnabledWorkspaces {
 		enablementMap[e.OrganizationId] = e
 	}
-	
+
 	assert.Contains(t, enablementMap, workspaceId1)
 	assert.Contains(t, enablementMap, workspaceId2)
-	
+
 	assert.True(t, enablementMap[workspaceId1].IsPublic)
 	assert.False(t, enablementMap[workspaceId2].IsPublic)
 }
@@ -318,7 +318,7 @@ func TestGetAccountsHandler_Success_CombinedFilters(t *testing.T) {
 
 	userId := testId
 	workspaceId := "workspace-filter-" + testId
-	
+
 	// Create test account enabled for specific workspace
 	testAccount := store_dynamodb.Account{
 		Uuid:        "account-combined-" + testId,
@@ -349,7 +349,7 @@ func TestGetAccountsHandler_Success_CombinedFilters(t *testing.T) {
 	// Create request with both workspace filter and includeWorkspaces and test authorizer
 	request := events.APIGatewayV2HTTPRequest{
 		QueryStringParameters: map[string]string{
-			"organization_id":         workspaceId,
+			"organization_id":   workspaceId,
 			"includeWorkspaces": "true",
 		},
 		RequestContext: events.APIGatewayV2HTTPRequestContext{
@@ -363,18 +363,18 @@ func TestGetAccountsHandler_Success_CombinedFilters(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var accountsWithWorkspaces []models.AccountWithWorkspaces
 	err = json.Unmarshal([]byte(response.Body), &accountsWithWorkspaces)
 	assert.NoError(t, err)
-	
+
 	require.Len(t, accountsWithWorkspaces, 1)
-	
+
 	accountWithWorkspaces := accountsWithWorkspaces[0]
 	assert.Equal(t, testAccount.Uuid, accountWithWorkspaces.Account.Uuid)
 	assert.Equal(t, testAccount.Name, accountWithWorkspaces.Account.Name)
-	
+
 	// Should include workspace details
 	require.Len(t, accountWithWorkspaces.EnabledWorkspaces, 1)
 	assert.Equal(t, workspaceId, accountWithWorkspaces.EnabledWorkspaces[0].OrganizationId)
@@ -386,7 +386,7 @@ func TestGetAccountsHandler_Success_EmptyWorkspaceFilter(t *testing.T) {
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account (no workspace enablements)
 	testAccount := store_dynamodb.Account{
 		Uuid:        "account-no-workspace-" + testId,
@@ -419,7 +419,7 @@ func TestGetAccountsHandler_Success_EmptyWorkspaceFilter(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body - should be empty since no accounts enabled for this workspace
 	var accounts []models.Account
 	err = json.Unmarshal([]byte(response.Body), &accounts)
@@ -432,7 +432,7 @@ func TestGetAccountsHandler_Success_IncludeWorkspaces_NoEnablements(t *testing.T
 	ctx := context.Background()
 
 	userId := testId
-	
+
 	// Create test account without any workspace enablements
 	testAccount := store_dynamodb.Account{
 		Uuid:        "account-no-enablements-" + testId,
@@ -465,17 +465,17 @@ func TestGetAccountsHandler_Success_IncludeWorkspaces_NoEnablements(t *testing.T
 
 	// Verify response
 	assert.Equal(t, 200, response.StatusCode)
-	
+
 	// Parse response body
 	var accountsWithWorkspaces []models.AccountWithWorkspaces
 	err = json.Unmarshal([]byte(response.Body), &accountsWithWorkspaces)
 	assert.NoError(t, err)
-	
+
 	require.Len(t, accountsWithWorkspaces, 1)
-	
+
 	accountWithWorkspaces := accountsWithWorkspaces[0]
 	assert.Equal(t, testAccount.Uuid, accountWithWorkspaces.Account.Uuid)
-	
+
 	// Should have empty workspace enablements
 	assert.Empty(t, accountWithWorkspaces.EnabledWorkspaces)
 }

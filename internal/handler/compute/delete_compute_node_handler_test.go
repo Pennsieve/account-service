@@ -21,7 +21,7 @@ func setupDeleteComputeNodeHandlerTest(t *testing.T) (store_dynamodb.NodeStore, 
 	client := test.GetClient()
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(client, TEST_NODES_TABLE)
 	accountStore := store_dynamodb.NewAccountDatabaseStore(client, test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
-	
+
 	// Set environment variables for handler
 	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	os.Setenv("ACCOUNTS_TABLE", test.TEST_ACCOUNTS_WITH_INDEX_TABLE)
@@ -32,13 +32,13 @@ func setupDeleteComputeNodeHandlerTest(t *testing.T) (store_dynamodb.NodeStore, 
 	os.Setenv("TASK_DEF_CONTAINER_NAME", "test-container")
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	return nodeStore, accountStore
 }
 
@@ -162,7 +162,7 @@ func TestDeleteComputeNodeHandler_DifferentNodeStatuses(t *testing.T) {
 
 			response, err := compute.DeleteComputeNodeHandler(ctx, request)
 			assert.NoError(t, err)
-			
+
 			// Should successfully initiate deletion regardless of status
 			assert.Equal(t, 202, response.StatusCode)
 
@@ -314,7 +314,7 @@ func TestDeleteComputeNodeHandler_DifferentAccountTypes(t *testing.T) {
 
 			response, err := compute.DeleteComputeNodeHandler(ctx, request)
 			assert.NoError(t, err)
-			
+
 			// Should successfully initiate deletion regardless of account type
 			assert.Equal(t, 202, response.StatusCode)
 
@@ -335,7 +335,7 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 	t.Run("NodeOwner_CanDelete", func(t *testing.T) {
 		testNode := createTestNode(testId + "_owner")
 		nodeOwner := testNode.UserId
-		
+
 		err := nodeStore.Put(ctx, testNode)
 		require.NoError(t, err)
 
@@ -370,7 +370,7 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 		testNode := createTestNode(testId + "_account")
 		testNode.AccountUuid = testAccount.Uuid
 		testNode.UserId = test.UserNodeId("different-user-" + testId) // Different from account owner
-		
+
 		err = nodeStore.Put(ctx, testNode)
 		require.NoError(t, err)
 
@@ -397,7 +397,7 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 			Uuid:        uuid.New().String(),
 			AccountId:   "test-account-" + testId + "_forbidden",
 			AccountType: "aws",
-			UserId:      test.UserNodeId("account-owner-" + testId) + "_forbidden",
+			UserId:      test.UserNodeId("account-owner-"+testId) + "_forbidden",
 		}
 		err := accountStore.Insert(ctx, testAccount)
 		require.NoError(t, err)
@@ -405,7 +405,7 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 		// Create node
 		testNode := createTestNode(testId + "_forbidden")
 		testNode.AccountUuid = testAccount.Uuid
-		
+
 		err = nodeStore.Put(ctx, testNode)
 		require.NoError(t, err)
 
@@ -435,7 +435,7 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 
 		testNode := createTestNode(testId + "_no_table")
 		testNode.UserId = test.UserNodeId("different-user-" + testId) // Different user to trigger account check
-		
+
 		err := nodeStore.Put(ctx, testNode)
 		require.NoError(t, err)
 
@@ -459,7 +459,7 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 		testNode := createTestNode(testId + "_no_account")
 		testNode.UserId = test.UserNodeId("different-user-" + testId)
 		testNode.AccountUuid = "non-existent-account-" + uuid.New().String()
-		
+
 		err := nodeStore.Put(ctx, testNode)
 		require.NoError(t, err)
 

@@ -10,29 +10,29 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/pennsieve/account-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/google/uuid"
+	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
-	"github.com/pennsieve/account-service/internal/errors"
+	"github.com/pennsieve/account-service/internal/utils"
 )
 
 // PostAccountsHandler creates a new account
 // POST /accounts
 //
 // Required Permissions:
-// - Must be an authenticated user
-// - Account will be associated with the requesting user (userId)
-// - Prevents duplicate account registration per user
-// - Pennsieve must be able to assume the role before it's registered; with an
-//   external ID (agents that asked for one), the ID must be one Pennsieve
-//   issued to this user for this role (unexpired and unused, used up here), the
-//   role must also require it, and the account's role can't already be
-//   registered by anyone. Those refusals carry {"message": ...}, which the
-//   agent shows the user.
-// - Without an external ID (older agents), only until LEGACY_REGISTRATION_CUTOFF:
-//   before it, accepted with Deprecation/Sunset headers; from it, refused.
+//   - Must be an authenticated user
+//   - Account will be associated with the requesting user (userId)
+//   - Prevents duplicate account registration per user
+//   - Pennsieve must be able to assume the role before it's registered; with an
+//     external ID (agents that asked for one), the ID must be one Pennsieve
+//     issued to this user for this role (unexpired and unused, used up here), the
+//     role must also require it, and the account's role can't already be
+//     registered by anyone. Those refusals carry {"message": ...}, which the
+//     agent shows the user.
+//   - Without an external ID (older agents), only until LEGACY_REGISTRATION_CUTOFF:
+//     before it, accepted with Deprecation/Sunset headers; from it, refused.
 func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostAccountsHandler"
 	var account models.Account
@@ -110,7 +110,7 @@ func PostAccountsHandler(ctx context.Context, request events.APIGatewayV2HTTPReq
 			Body:       errors.HandlerError(handlerName, errors.ErrConfig),
 		}, nil
 	}
-	
+
 	// Check for duplicate account for this user
 	for _, existingAccount := range userAccounts {
 		if existingAccount.AccountId == account.AccountId {

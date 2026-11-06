@@ -29,10 +29,10 @@ func TestMain(m *testing.M) {
 	if err := test.SetupPackageTables(); err != nil {
 		panic(err)
 	}
-	
+
 	// Run tests
 	code := m.Run()
-	
+
 	// Exit with test result code
 	os.Exit(code)
 }
@@ -42,21 +42,21 @@ func setupGetComputeNodeHandlerTest(t *testing.T) (store_dynamodb.NodeStore, sto
 	client := test.GetClient()
 	nodeStore := store_dynamodb.NewNodeDatabaseStore(client, TEST_NODES_TABLE)
 	accessStore := store_dynamodb.NewNodeAccessDatabaseStore(client, TEST_ACCESS_TABLE)
-	
+
 	// Set environment variables for handler
 	os.Setenv("COMPUTE_NODES_TABLE", TEST_NODES_TABLE)
 	os.Setenv("NODE_ACCESS_TABLE", TEST_ACCESS_TABLE)
 	// Don't override ENV if already set (Docker sets it to DOCKER)
 	if os.Getenv("ENV") == "" {
-		os.Setenv("ENV", "TEST")  // This triggers test-aware config in LoadAWSConfig
+		os.Setenv("ENV", "TEST") // This triggers test-aware config in LoadAWSConfig
 	}
 	// Don't override DYNAMODB_URL if already set (Docker sets it to http://dynamodb:8000)
 	if os.Getenv("DYNAMODB_URL") == "" {
-		os.Setenv("DYNAMODB_URL", "http://localhost:8000")  // Local DynamoDB endpoint for local testing
+		os.Setenv("DYNAMODB_URL", "http://localhost:8000") // Local DynamoDB endpoint for local testing
 	}
-	
+
 	// No specific cleanup needed as we use unique test IDs
-	
+
 	return nodeStore, accessStore
 }
 
@@ -198,7 +198,7 @@ func TestGetComputeNodeHandler_MultipleNodes(t *testing.T) {
 	// Create and insert multiple test nodes
 	testNode1 := createTestNode(testId1)
 	testNode2 := createTestNode(testId2)
-	
+
 	err := nodeStore.Put(ctx, testNode1)
 	require.NoError(t, err)
 	err = nodeStore.Put(ctx, testNode2)
@@ -370,7 +370,6 @@ func TestGetComputeNodeHandler_DifferentStatuses(t *testing.T) {
 		})
 	}
 }
-
 
 func TestGetComputeNodeHandler_UserOwnedNode_NoOrgClaim(t *testing.T) {
 	nodeStore, accessStore := setupGetComputeNodeHandlerTest(t)

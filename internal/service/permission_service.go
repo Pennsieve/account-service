@@ -14,12 +14,12 @@ import (
 )
 
 type PermissionService struct {
-	NodeAccessStore         store_dynamodb.NodeAccessStore
-	TeamStore               store_postgres.TeamStore
-	OrganizationStore       store_postgres.OrganizationStore
-	NodeStore               store_dynamodb.NodeStore
-	AccountWorkspaceStore   store_dynamodb.AccountWorkspaceStore
-	Authorizer              authorizer.DirectAuthorizer
+	NodeAccessStore       store_dynamodb.NodeAccessStore
+	TeamStore             store_postgres.TeamStore
+	OrganizationStore     store_postgres.OrganizationStore
+	NodeStore             store_dynamodb.NodeStore
+	AccountWorkspaceStore store_dynamodb.AccountWorkspaceStore
+	Authorizer            authorizer.DirectAuthorizer
 }
 
 func NewPermissionService(nodeAccessStore store_dynamodb.NodeAccessStore, teamStore store_postgres.TeamStore) *PermissionService {
@@ -141,7 +141,7 @@ func (s *PermissionService) CheckNodeAccess(ctx context.Context, userId, nodeUui
 		return false, nil
 	}
 
-	authResp, err := s.Authorizer.Authorize(ctx,userId, organizationId)
+	authResp, err := s.Authorizer.Authorize(ctx, userId, organizationId)
 	if err != nil {
 		return false, fmt.Errorf("error invoking direct authorizer: %w", err)
 	}
@@ -225,7 +225,7 @@ func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, orga
 
 	// 3. Get team-accessible nodes using direct authorizer for team membership
 	if s.Authorizer != nil && organizationId != "" {
-		authResp, err := s.Authorizer.Authorize(ctx,userId, organizationId)
+		authResp, err := s.Authorizer.Authorize(ctx, userId, organizationId)
 		if err != nil {
 			slog.Warn("Failed to get team claims from direct authorizer",
 				"userId", userId,
@@ -258,33 +258,33 @@ func (s *PermissionService) GetAccessibleNodes(ctx context.Context, userId, orga
 // For organization-independent nodes, only private access is allowed
 func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid string, req models.NodeAccessRequest, ownerId, organizationId, grantedBy string) error {
 	nodeId := models.FormatNodeId(nodeUuid)
-	
+
 	// Validate request for organization-independent nodes
 	if organizationId == "" {
 		if err := req.ValidateForOrganizationIndependent(); err != nil {
 			return err
 		}
 	}
-	
+
 	// First, get current access to determine what needs to be removed
 	currentAccess, err := s.NodeAccessStore.GetNodeAccess(ctx, nodeUuid)
 	if err != nil {
 		return fmt.Errorf("error getting current access: %w", err)
 	}
-	
+
 	// Build map of desired access
 	desiredAccess := make(map[string]bool)
-	
+
 	// Owner always has access
 	ownerEntityId := models.FormatEntityId(models.EntityTypeUser, ownerId)
 	desiredAccess[ownerEntityId] = true
-	
+
 	// Handle access scope settings
 	switch req.AccessScope {
 	case models.AccessScopeWorkspace:
 		workspaceEntityId := models.FormatEntityId(models.EntityTypeWorkspace, organizationId)
 		desiredAccess[workspaceEntityId] = true
-		
+
 	case models.AccessScopeShared:
 		// Validate and add shared users
 		for _, userId := range req.SharedWithUsers {
@@ -295,16 +295,16 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 				if err != nil {
 					return fmt.Errorf("error checking if user %s exists: %w", userId, err)
 				}
-				
+
 				if !userExists {
 					return fmt.Errorf("user %s does not exist", userId)
 				}
 			}
-			
+
 			userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 			desiredAccess[userEntityId] = true
 		}
-		
+
 		// Validate and add shared teams
 		for _, teamId := range req.SharedWithTeams {
 			// Validate team exists if we have TeamStore
@@ -314,17 +314,17 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 				if err != nil {
 					return fmt.Errorf("error checking if team %s exists: %w", teamId, err)
 				}
-				
+
 				if team == nil {
 					return fmt.Errorf("team %s does not exist", teamId)
 				}
 			}
-			
+
 			teamEntityId := models.FormatEntityId(models.EntityTypeTeam, teamId)
 			desiredAccess[teamEntityId] = true
 		}
 	}
-	
+
 	// Remove access that is no longer desired
 	for _, access := range currentAccess {
 		if !desiredAccess[access.EntityId] && access.EntityId != ownerEntityId {
@@ -334,16 +334,16 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 			}
 		}
 	}
-	
+
 	// Create map of current access for comparison
 	currentAccessMap := make(map[string]bool)
 	for _, access := range currentAccess {
 		currentAccessMap[access.EntityId] = true
 	}
-	
+
 	// Grant new access
 	var newAccesses []models.NodeAccess
-	
+
 	// Always ensure owner has access
 	if !currentAccessMap[ownerEntityId] {
 		newAccesses = append(newAccesses, models.NodeAccess{
@@ -357,7 +357,7 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 			GrantedBy:      grantedBy,
 		})
 	}
-	
+
 	// Handle new access scope-based access
 	switch req.AccessScope {
 	case models.AccessScopeWorkspace:
@@ -374,7 +374,7 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 				GrantedBy:      grantedBy,
 			})
 		}
-		
+
 	case models.AccessScopeShared:
 		// Grant access to shared users
 		for _, userId := range req.SharedWithUsers {
@@ -392,7 +392,7 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 				})
 			}
 		}
-		
+
 		// Grant access to shared teams
 		for _, teamId := range req.SharedWithTeams {
 			teamEntityId := models.FormatEntityId(models.EntityTypeTeam, teamId)
@@ -410,7 +410,7 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 			}
 		}
 	}
-	
+
 	// Batch grant new accesses
 	if len(newAccesses) > 0 {
 		if batchStore, ok := s.NodeAccessStore.(*store_dynamodb.NodeAccessDatabaseStore); ok {
@@ -425,7 +425,7 @@ func (s *PermissionService) SetNodePermissions(ctx context.Context, nodeUuid str
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -435,14 +435,14 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 	if err != nil {
 		return nil, fmt.Errorf("error getting node access: %w", err)
 	}
-	
+
 	response := &models.NodeAccessResponse{
 		NodeUuid:        nodeUuid,
 		AccessScope:     models.AccessScopePrivate,
 		SharedWithUsers: []string{},
 		SharedWithTeams: []string{},
 	}
-	
+
 	for _, access := range accessList {
 		switch access.EntityType {
 		case models.EntityTypeUser:
@@ -458,14 +458,14 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 			response.OrganizationId = access.OrganizationId
 		}
 	}
-	
+
 	// Determine access scope - workspace takes precedence over shared
 	if response.AccessScope != models.AccessScopeWorkspace {
 		if len(response.SharedWithUsers) > 0 || len(response.SharedWithTeams) > 0 {
 			response.AccessScope = models.AccessScopeShared
 		}
 	}
-	
+
 	// Auto-healing: If no owner found in access entries, look up actual node owner and restore access
 	if response.Owner == "" && s.NodeStore != nil {
 		// Look up the actual node to get the real owner
@@ -475,7 +475,7 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 			// Create the missing owner access entry
 			nodeId := models.FormatNodeId(nodeUuid)
 			ownerEntityId := models.FormatEntityId(models.EntityTypeUser, node.UserId)
-			
+
 			ownerAccess := models.NodeAccess{
 				EntityId:       ownerEntityId,
 				NodeId:         nodeId,
@@ -486,7 +486,7 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 				OrganizationId: node.OrganizationNodeId(),
 				GrantedBy:      node.UserId, // Self-granted for auto-healing
 			}
-			
+
 			// Grant the missing owner access
 			err = s.NodeAccessStore.GrantAccess(ctx, ownerAccess)
 			if err != nil {
@@ -503,13 +503,13 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 			}
 		}
 	}
-	
+
 	// Cleanup stale user/team permissions if PostgreSQL stores are available
 	var stalePermissions []models.NodeAccess
 	if s.OrganizationStore != nil || s.TeamStore != nil {
 		for _, access := range accessList {
 			shouldRemove := false
-			
+
 			// Check if user permissions reference users that no longer exist
 			if access.EntityType == models.EntityTypeUser && s.OrganizationStore != nil {
 				// Skip owner validation (owners should always be valid)
@@ -529,7 +529,7 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 					}
 				}
 			}
-			
+
 			// Check if team permissions reference teams that no longer exist
 			if access.EntityType == models.EntityTypeTeam && s.TeamStore != nil {
 				// EntityRawId contains the node_id (e.g., "N:team:uuid")
@@ -547,12 +547,12 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 						"nodeUuid", nodeUuid)
 				}
 			}
-			
+
 			if shouldRemove {
 				stalePermissions = append(stalePermissions, access)
 			}
 		}
-		
+
 		// Remove stale permissions from DynamoDB
 		if len(stalePermissions) > 0 {
 			nodeId := models.FormatNodeId(nodeUuid)
@@ -585,7 +585,7 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 					}
 				}
 			}
-			
+
 			// Recalculate access scope after cleanup
 			if response.AccessScope != models.AccessScopeWorkspace {
 				if len(response.SharedWithUsers) > 0 || len(response.SharedWithTeams) > 0 {
@@ -596,10 +596,10 @@ func (s *PermissionService) GetNodePermissions(ctx context.Context, nodeUuid str
 			}
 		}
 	}
-	
+
 	// Set organization independent flag
 	response.OrganizationIndependent = response.IsOrganizationIndependent()
-	
+
 	return response, nil
 }
 
@@ -609,7 +609,7 @@ func (s *PermissionService) AttachNodeToOrganization(ctx context.Context, nodeUu
 	// First, check if the user is the owner of the node
 	userEntityId := models.FormatEntityId(models.EntityTypeUser, userId)
 	nodeId := models.FormatNodeId(nodeUuid)
-	
+
 	hasAccess, err := s.NodeAccessStore.HasAccess(ctx, userEntityId, nodeId)
 	if err != nil {
 		return fmt.Errorf("error checking user access: %w", err)
@@ -617,13 +617,13 @@ func (s *PermissionService) AttachNodeToOrganization(ctx context.Context, nodeUu
 	if !hasAccess {
 		return errors.ErrForbidden
 	}
-	
+
 	// Get current access to verify node is organization-independent
 	currentAccess, err := s.NodeAccessStore.GetNodeAccess(ctx, nodeUuid)
 	if err != nil {
 		return fmt.Errorf("error getting current access: %w", err)
 	}
-	
+
 	// Find owner access to check if node is organization-independent
 	var ownerAccess *models.NodeAccess
 	for _, access := range currentAccess {
@@ -632,30 +632,30 @@ func (s *PermissionService) AttachNodeToOrganization(ctx context.Context, nodeUu
 			break
 		}
 	}
-	
+
 	if ownerAccess == nil {
 		return errors.ErrForbidden // User is not the owner
 	}
-	
+
 	if !ownerAccess.IsOrganizationIndependent() {
 		return models.ErrCannotAttachNodeWithExistingOrganization
 	}
-	
+
 	// Update the owner's access entry to include the organization
 	updatedOwnerAccess := *ownerAccess
 	updatedOwnerAccess.OrganizationId = organizationId
-	
+
 	// Remove old access and grant new access with organization
 	err = s.NodeAccessStore.RevokeAccess(ctx, ownerAccess.EntityId, nodeId)
 	if err != nil {
 		return fmt.Errorf("error removing old access: %w", err)
 	}
-	
+
 	err = s.NodeAccessStore.GrantAccess(ctx, updatedOwnerAccess)
 	if err != nil {
 		return fmt.Errorf("error granting new access with organization: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -663,13 +663,13 @@ func (s *PermissionService) AttachNodeToOrganization(ctx context.Context, nodeUu
 // Note: The handler should verify the user is the account owner before calling this
 func (s *PermissionService) DetachNodeFromOrganization(ctx context.Context, nodeUuid, userId string) error {
 	nodeId := models.FormatNodeId(nodeUuid)
-	
+
 	// Get current access to verify node has an organization
 	currentAccess, err := s.NodeAccessStore.GetNodeAccess(ctx, nodeUuid)
 	if err != nil {
 		return fmt.Errorf("error getting current access: %w", err)
 	}
-	
+
 	// Find the owner access entry to check if node has an organization
 	var ownerAccess *models.NodeAccess
 	for _, access := range currentAccess {
@@ -678,15 +678,15 @@ func (s *PermissionService) DetachNodeFromOrganization(ctx context.Context, node
 			break
 		}
 	}
-	
+
 	if ownerAccess == nil {
 		return errors.ErrNotFound // No owner found - invalid state
 	}
-	
+
 	if ownerAccess.IsOrganizationIndependent() {
 		return models.ErrOrganizationIndependentNodeCannotBeShared // Node is already organization-independent
 	}
-	
+
 	// Remove all current access entries (they all have organizationId)
 	for _, access := range currentAccess {
 		err = s.NodeAccessStore.RevokeAccess(ctx, access.EntityId, nodeId)
@@ -694,7 +694,7 @@ func (s *PermissionService) DetachNodeFromOrganization(ctx context.Context, node
 			return fmt.Errorf("error removing access entry: %w", err)
 		}
 	}
-	
+
 	// Grant new owner access without organization (making it organization-independent and private)
 	newOwnerAccess := models.NodeAccess{
 		EntityId:       ownerAccess.EntityId,
@@ -703,14 +703,14 @@ func (s *PermissionService) DetachNodeFromOrganization(ctx context.Context, node
 		EntityRawId:    ownerAccess.EntityRawId, // Use the original owner's ID
 		NodeUuid:       nodeUuid,
 		AccessType:     models.AccessTypeOwner,
-		OrganizationId: "", // No organization - this makes it organization-independent
+		OrganizationId: "",                      // No organization - this makes it organization-independent
 		GrantedBy:      ownerAccess.EntityRawId, // Owner is granting to themselves
 	}
-	
+
 	err = s.NodeAccessStore.GrantAccess(ctx, newOwnerAccess)
 	if err != nil {
 		return fmt.Errorf("error granting new organization-independent access: %w", err)
 	}
-	
+
 	return nil
 }
