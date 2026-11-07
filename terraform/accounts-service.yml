@@ -154,7 +154,7 @@ components:
           description: the name of the created role
         externalId:
           type: string
-          description: the external ID Pennsieve issued with the role setup (GET /role-policy?externalId=true), to the user registering, for this role
+          description: required; the external ID Pennsieve issued with the role setup (GET /role-policy?externalId=true), to the user registering, for this role
         templateVersion:
           type: string
           description: the CloudFormation template version the role was made from; with an externalId, records the account as connected with CloudFormation
@@ -1128,9 +1128,10 @@ paths:
     post:
       summary: Registers an external compute resource account
       description: |
-        Registers an external compute resource (such as AWS). This method assumes that this account has a role that
-        the Pennsieve platform can assume to deploy infrastructure for the compute nodes.
-        The Pennsieve Agent handles the creation of this role.
+        Registers an external compute resource (such as AWS). The account has a role, created from Pennsieve's
+        CloudFormation template with a role setup from GET /role-policy?externalId=true, that the Pennsieve platform
+        can assume to deploy infrastructure for the compute nodes. The web app's "Connect AWS account" does this.
+        A registration without an external ID (the retired agent registration) is refused with 400.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: postAccounts
@@ -3238,9 +3239,9 @@ paths:
     get:
       summary: Get IAM role policy
       description: |
-        Returns the scoped IAM permission policy document that agents use when
-        creating cross-account roles. This is the single source of truth for
-        the set of AWS actions the provisioner requires.
+        Returns a role setup for connecting an AWS account: the scoped IAM permission policy (the single source of
+        truth for the AWS actions the provisioner requires), the trust policy, the external ID issued for the role,
+        and how to create it from the CloudFormation template.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getRolePolicy
@@ -3256,8 +3257,9 @@ paths:
             enum: ["true"]
           required: false
           description: |
-            Issue an external ID for the role (recorded as issued to the caller, for this role, for 24 hours) and
-            return how to create the role from the CloudFormation template.
+            Required: issue an external ID for the role (recorded as issued to the caller, for this role, for 24 hours)
+            and return how to create the role from the CloudFormation template. Without it the endpoint answers 410
+            Gone: the role setup without an external ID (the retired agent registration) is no longer served.
         - in: query
           name: accountId
           schema:
@@ -3269,6 +3271,8 @@ paths:
             CloudShell command carry it as the template's AccountId parameter, and the stack refuses to be created in
             any other account. Without it, the console asks for it.
       responses:
+        '410':
+          description: Without externalId=true. The role setup without an external ID is retired; connect the account in the web app.
         '200':
           description: The role setup
           content:

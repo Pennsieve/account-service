@@ -86,16 +86,6 @@ func TestVerifyRole_WrongExternalId(t *testing.T) {
 	}
 }
 
-func TestVerifyRole_Legacy(t *testing.T) {
-	f := &fakeAssumer{}
-	if err := verifyRole(context.Background(), f, "1", "r", "", noSleep); err != nil {
-		t.Fatalf("want ok, got %v", err)
-	}
-	if len(f.calls) != 1 || f.calls[0].ExternalId != nil {
-		t.Fatalf("legacy: want one call without an external id, got %d", len(f.calls))
-	}
-}
-
 func TestVerifyRetryDelaysFitTheGateway(t *testing.T) {
 	var total time.Duration
 	for _, d := range verifyRetryDelays {
@@ -103,11 +93,5 @@ func TestVerifyRetryDelaysFitTheGateway(t *testing.T) {
 	}
 	if total > 20*time.Second {
 		t.Fatalf("retries take %v; API Gateway stops waiting at 30s", total)
-	}
-}
-
-func TestValidExternalIdAllowsLegacy(t *testing.T) {
-	if !validExternalId("") || !validExternalId(validId) || validExternalId("ext-123") {
-		t.Fatal("empty and issued ids are valid, anything else isn't")
 	}
 }

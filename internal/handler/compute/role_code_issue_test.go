@@ -44,7 +44,7 @@ func TestIssueRoleCode(t *testing.T) {
 // GET /role-policy serves the policy file byte for byte: the same document the
 // CloudFormation template is rendered from.
 func TestRolePolicyIsThePolicyFile(t *testing.T) {
-	resp, err := buildRoleConfig("Pennsieve-Compute-dev-1a2b3c4d", "123456789012", false, nil)
+	resp, err := buildRoleConfig("Pennsieve-Compute-dev-1a2b3c4d", "123456789012", func() (string, error) { return "pn-0123456789abcdef0123456789abcdef", nil })
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/pennsieve/account-service/internal/clients"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
@@ -69,7 +70,7 @@ func PostAccountRoleHandler(ctx context.Context, request events.APIGatewayV2HTTP
 	if err := json.Unmarshal([]byte(request.Body), &body); err != nil {
 		return events.APIGatewayV2HTTPResponse{StatusCode: http.StatusBadRequest, Body: errors.HandlerError(handlerName, errors.ErrUnmarshaling)}, nil
 	}
-	if body.RoleName == "" || body.ExternalId == "" || !validExternalId(body.ExternalId) {
+	if body.RoleName == "" || !clients.ValidExternalId(body.ExternalId) {
 		return refuse(http.StatusBadRequest, ErrInvalidExternalId)
 	}
 	if !validTemplateVersion(body.TemplateVersion) {

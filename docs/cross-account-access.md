@@ -10,10 +10,11 @@ To do this, Pennsieve needs temporary, scoped access to your AWS account through
 
 1. **You create a role in your account, from Pennsieve's CloudFormation template.** Connecting an AWS account creates a role named `Pennsieve-Compute-{env}-{id}` (e.g., `Pennsieve-Compute-dev-a3f1b20c`) in your AWS account. This role trusts the Pennsieve provisioner account, allowing it to temporarily "assume" the role.
 
-   The role is made by a CloudFormation stack from Pennsieve's published template (`cfn/pennsieve-compute-role/v<N>.yaml`, public-read). There are three ways to create the stack, and all of them use the same template:
-   - **"Connect AWS account" in the app** opens the AWS console's quick-create page with the parameters filled in. You review it and click *Create stack*, signed in to your own account.
+   The role is made by a CloudFormation stack from Pennsieve's published template (`cfn/pennsieve-compute-role/v<N>.yaml`, public-read). You start from **"Connect AWS account" in the app**, and create the stack in one of two ways, both from the same template:
+   - **The AWS console:** the app opens its quick-create page with the parameters filled in. You review it and click *Create stack*, signed in to your own account. The template refuses to create the role in any other account than the one you're connecting.
    - **AWS CloudShell, or any aws CLI:** paste the `aws cloudformation create-stack …` command the app shows.
-   - **`pennsieve account register`** runs that command with your `--profile`.
+
+   Registering an account without the template and an external ID (what older versions of the Pennsieve agent did) is no longer accepted.
 
    Your AWS credentials never leave AWS or your computer. When the stack is done, Pennsieve checks that it can use the role, and only then registers the account. The template's permission policy is the same document `GET /role-policy` serves (`policies/compute-role-policy.json`).
 
