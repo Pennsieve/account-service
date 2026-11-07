@@ -28,6 +28,19 @@ Parameters:
     Type: String
     Description: Pennsieve's AWS account, which may assume the role.
     AllowedPattern: "^[0-9]{12}$"
+  AccountId:
+    Type: String
+    Description: The AWS account you are connecting to Pennsieve. The stack is created only there.
+    AllowedPattern: "^[0-9]{12}$"
+
+# The console opens in whatever account the user is signed in to, and a role
+# made elsewhere is one Pennsieve can't find. This stops the stack before it
+# creates anything. (CloudFormation adds its own full stop to the message.)
+Rules:
+  ConnectingAccount:
+    Assertions:
+      - Assert: !Equals [!Ref AccountId, !Ref "AWS::AccountId"]
+        AssertDescription: You're signed in to a different AWS account than the one you're connecting. Switch to that account in the console, then create the stack again
 
 Resources:
   PennsieveComputeRole:

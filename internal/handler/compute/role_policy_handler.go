@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -62,6 +63,10 @@ type roleConfigResponse struct {
 	// PennsieveAccountId is the account the role trusts, with an external ID:
 	// the template's PennsieveAccountId parameter.
 	PennsieveAccountId string `json:"pennsieveAccountId,omitempty"`
+	// AccountId is the AWS account being connected (?accountId=), the
+	// template's AccountId parameter: the stack is created only there. Without
+	// it, the console asks for it.
+	AccountId string `json:"accountId,omitempty"`
 	// CloudFormation is how to create the role from the published template,
 	// with an external ID and when a template is published.
 	CloudFormation *cloudFormationSetup `json:"cloudFormation,omitempty"`
@@ -90,6 +95,7 @@ func newCloudFormationSetup(templateURL, version, region string, resp roleConfig
 	params.Set("param_RoleName", resp.RoleName)
 	params.Set("param_ExternalId", resp.ExternalId)
 	params.Set("param_PennsieveAccountId", resp.PennsieveAccountId)
+	params.Set("param_AccountId", resp.AccountId)
 	quickCreate := fmt.Sprintf("https://console.aws.amazon.com/cloudformation/home?region=%s#/stacks/quickcreate?%s",
 		url.QueryEscape(region), quickCreateQuery(params))
 	command := strings.Join([]string{
@@ -101,6 +107,7 @@ func newCloudFormationSetup(templateURL, version, region string, resp roleConfig
 		"ParameterKey=RoleName,ParameterValue=" + resp.RoleName,
 		"ParameterKey=ExternalId,ParameterValue=" + resp.ExternalId,
 		"ParameterKey=PennsieveAccountId,ParameterValue=" + resp.PennsieveAccountId,
+		"ParameterKey=AccountId,ParameterValue=" + accountIdOrPlaceholder(resp.AccountId),
 		"--capabilities CAPABILITY_NAMED_IAM",
 	}, " ")
 	return &cloudFormationSetup{
@@ -111,16 +118,32 @@ func newCloudFormationSetup(templateURL, version, region string, resp roleConfig
 	}
 }
 
+// accountIdOrPlaceholder is accountId, or, not knowing it, a placeholder the
+// user replaces in the command (CloudFormation refuses it as it stands).
+func accountIdOrPlaceholder(accountId string) string {
+	if accountId == "" {
+		return "<your-aws-account-id>"
+	}
+	return accountId
+}
+
 // quickCreateQuery is params in the console's order (templateURL, stackName,
-// then the parameters), query-encoded.
+// then the parameters), query-encoded; a parameter without a value is left
+// out, for the console to ask.
 func quickCreateQuery(params url.Values) string {
-	order := []string{"templateURL", "stackName", "param_RoleName", "param_ExternalId", "param_PennsieveAccountId"}
+	order := []string{"templateURL", "stackName", "param_RoleName", "param_ExternalId", "param_PennsieveAccountId", "param_AccountId"}
 	parts := make([]string, 0, len(order))
 	for _, k := range order {
+		if params.Get(k) == "" {
+			continue
+		}
 		parts = append(parts, k+"="+url.QueryEscape(params.Get(k)))
 	}
 	return strings.Join(parts, "&")
 }
+
+// awsAccountIdPattern is an AWS account ID.
+var awsAccountIdPattern = regexp.MustCompile(`^[0-9]{12}$`)
 
 // buildRoleConfig is the role configuration for a new role trusting
 // pennsieveAccountId, with a freshly issued external ID when withExternalId.
@@ -196,6 +219,13 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 	}
 
 	withExternalId := request.QueryStringParameters["externalId"] == "true"
+	accountId := strings.ReplaceAll(strings.TrimSpace(request.QueryStringParameters["accountId"]), "-", "")
+	if accountId != "" && !awsAccountIdPattern.MatchString(accountId) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       `{"error":"accountId must be a 12-digit AWS account ID"}`,
+		}, nil
+	}
 	resp, err := buildRoleConfig(roleName, *identity.Account, withExternalId, clients.NewRandomExternalId)
 	if err != nil {
 		return events.APIGatewayV2HTTPResponse{
@@ -207,6 +237,9 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 	region := os.Getenv("REGION")
 	if region == "" {
 		region = "us-east-1"
+	}
+	if withExternalId {
+		resp.AccountId = accountId
 	}
 	resp.CloudFormation = newCloudFormationSetup(os.Getenv("CFN_TEMPLATE_URL"), os.Getenv("CFN_TEMPLATE_VERSION"), region, resp)
 

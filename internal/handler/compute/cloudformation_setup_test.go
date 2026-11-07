@@ -13,6 +13,7 @@ func testSetupResponse() roleConfigResponse {
 		RoleName:           "Pennsieve-Compute-dev-1a2b3c4d",
 		ExternalId:         "pn-0123456789abcdef0123456789abcdef",
 		PennsieveAccountId: "123456789012",
+		AccountId:          "210987654321",
 	}
 }
 
@@ -39,6 +40,7 @@ func TestCloudFormationSetup_QuickCreateUrl(t *testing.T) {
 		"param_RoleName":           "Pennsieve-Compute-dev-1a2b3c4d",
 		"param_ExternalId":         "pn-0123456789abcdef0123456789abcdef",
 		"param_PennsieveAccountId": "123456789012",
+		"param_AccountId":          "210987654321",
 	}
 	for k, v := range want {
 		if q.Get(k) != v {
@@ -58,6 +60,7 @@ func TestCloudFormationSetup_CloudShellCommand(t *testing.T) {
 		" ParameterKey=RoleName,ParameterValue=Pennsieve-Compute-dev-1a2b3c4d" +
 		" ParameterKey=ExternalId,ParameterValue=pn-0123456789abcdef0123456789abcdef" +
 		" ParameterKey=PennsieveAccountId,ParameterValue=123456789012" +
+		" ParameterKey=AccountId,ParameterValue=210987654321" +
 		" --capabilities CAPABILITY_NAMED_IAM"
 	if cf.CloudShellCommand != want {
 		t.Fatalf("command\n %s\nwant\n %s", cf.CloudShellCommand, want)
@@ -86,5 +89,19 @@ func TestBuildRoleConfig_PennsieveAccountId(t *testing.T) {
 	legacy, _ := buildRoleConfig("r", "123456789012", false, nil)
 	if legacy.PennsieveAccountId != "" || legacy.CloudFormation != nil {
 		t.Fatal("a legacy role setup gains no fields")
+	}
+}
+
+// Without the account being connected, the console asks for it (no empty
+// param_AccountId), and the command has a placeholder to replace.
+func TestCloudFormationSetup_WithoutAccountId(t *testing.T) {
+	resp := testSetupResponse()
+	resp.AccountId = ""
+	cf := newCloudFormationSetup(testTemplateURL, "3", "us-east-1", resp)
+	if strings.Contains(cf.QuickCreateUrl, "param_AccountId") {
+		t.Errorf("quick-create URL %q has an empty account id", cf.QuickCreateUrl)
+	}
+	if !strings.Contains(cf.CloudShellCommand, "ParameterKey=AccountId,ParameterValue=<your-aws-account-id>") {
+		t.Errorf("command %q", cf.CloudShellCommand)
 	}
 }

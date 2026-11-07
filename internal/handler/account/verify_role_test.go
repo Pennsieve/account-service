@@ -59,8 +59,13 @@ func TestVerifyRole_RetriesWhilePropagating(t *testing.T) {
 
 func TestVerifyRole_GivesUp(t *testing.T) {
 	f := &fakeAssumer{requiredId: validId, failFirst: 100}
-	if err := verifyRole(context.Background(), f, "1", "r", validId, noSleep); !errors.Is(err, ErrRoleUnusable) {
+	err := verifyRole(context.Background(), f, "123456789012", "Pennsieve-Compute-dev-1a2b3c4d", validId, noSleep)
+	if !errors.Is(err, ErrRoleUnusable) {
 		t.Fatalf("want ErrRoleUnusable, got %v", err)
+	}
+	// The message names the role and the account it was looked for in.
+	if !strings.Contains(err.Error(), "Pennsieve-Compute-dev-1a2b3c4d in AWS account 123456789012") {
+		t.Fatalf("message %q", err)
 	}
 	if len(f.calls) != len(verifyRetryDelays)+1 {
 		t.Fatalf("want %d attempts, got %d", len(verifyRetryDelays)+1, len(f.calls))

@@ -98,7 +98,7 @@ func TestTemplateRole(t *testing.T) {
 	assert.Equal(t, "!Ref", condition.Tag)
 	assert.Equal(t, "ExternalId", condition.Value)
 
-	for _, p := range []string{"RoleName", "ExternalId", "PennsieveAccountId"} {
+	for _, p := range []string{"RoleName", "ExternalId", "PennsieveAccountId", "AccountId"} {
 		at(t, root, "Parameters", p)
 	}
 	at(t, root, "Outputs", "RoleArn")
@@ -114,4 +114,20 @@ func TestTemplatePlaceholders(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, strings.Count(string(tpl), "__ROLE_POLICY__"))
 	assert.NotContains(t, render(t, "1"), "__")
+}
+
+// The stack is made only in the account being connected: a rule compares the
+// AccountId parameter with the account the stack is created in.
+func TestTemplateAccountRule(t *testing.T) {
+	root := parse(t, render(t, "2"))
+	assertion := at(t, root, "Rules", "ConnectingAccount", "Assertions", 0)
+	equals := at(t, assertion, "Assert")
+	assert.Equal(t, "!Equals", equals.Tag)
+	require.Len(t, equals.Content, 2)
+	assert.Equal(t, "!Ref", equals.Content[0].Tag)
+	assert.Equal(t, "AccountId", equals.Content[0].Value)
+	assert.Equal(t, "!Ref", equals.Content[1].Tag)
+	assert.Equal(t, "AWS::AccountId", equals.Content[1].Value)
+	// CloudFormation ends the message with its own full stop.
+	assert.False(t, strings.HasSuffix(at(t, assertion, "AssertDescription").Value, "."))
 }
