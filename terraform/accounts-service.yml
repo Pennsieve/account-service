@@ -3258,6 +3258,16 @@ paths:
           description: |
             Issue an external ID for the role (recorded as issued to the caller, for this role, for 24 hours) and
             return how to create the role from the CloudFormation template.
+        - in: query
+          name: accountId
+          schema:
+            type: string
+            pattern: '^[0-9]{12}$'
+          required: false
+          description: |
+            The AWS account being connected (dashes allowed). With externalId, the quick-create link and the
+            CloudShell command carry it as the template's AccountId parameter, and the stack refuses to be created in
+            any other account. Without it, the console asks for it.
       responses:
         '200':
           description: The role setup
@@ -3278,6 +3288,9 @@ paths:
                   pennsieveAccountId:
                     type: string
                     description: the account the role trusts (with externalId)
+                  accountId:
+                    type: string
+                    description: the account being connected (with externalId and accountId)
                   cloudFormation:
                     type: object
                     description: how to create the role from the published template (with externalId, when one is published)

@@ -28,8 +28,10 @@ var NewRoleAssumer = func(cfg aws.Config) RoleAssumer { return sts.NewFromConfig
 var verifyRetryDelays = []time.Duration{1 * time.Second, 2 * time.Second, 3 * time.Second, 4 * time.Second, 4 * time.Second, 4 * time.Second}
 
 var (
-	// ErrRoleUnusable: Pennsieve could not assume the role.
-	ErrRoleUnusable = errors.New("Pennsieve couldn't use the role: check that it exists in this AWS account and trusts Pennsieve")
+	// ErrRoleUnusable: Pennsieve could not assume the role. Most often the
+	// stack was created while the console was signed in to another account;
+	// verifyRole names the role and the account.
+	ErrRoleUnusable = errors.New("Pennsieve couldn't use the role")
 	// ErrRoleNotRestricted: the role can be assumed without its external ID.
 	ErrRoleNotRestricted = errors.New("the role's trust policy doesn't require its external ID: recreate the role with the trust policy Pennsieve provides")
 	// ErrNotCloudFormation: a template version for an account whose role isn't a stack.
@@ -69,7 +71,7 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 		}
 		if attempt >= len(verifyRetryDelays) || ctx.Err() != nil {
 			log.Printf("registration: assuming %s failed: %v", roleArn, err)
-			return ErrRoleUnusable
+			return fmt.Errorf("%w %s in AWS account %s: was its stack created while signed in to that account? Create it there, from the link Pennsieve gave", ErrRoleUnusable, roleName, accountId)
 		}
 		sleep(verifyRetryDelays[attempt])
 	}
