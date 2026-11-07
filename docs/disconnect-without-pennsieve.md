@@ -47,6 +47,9 @@ also share one network.
 | VPC, subnets, security groups, IAM roles and policies, ECS cluster, Lambda functions, Step Functions state machines, DynamoDB tables, SSM parameters | nothing while idle |
 | GPU instances (an autoscaling group, usually at zero) | only while instances run |
 
+To see what each node actually costs on your bill, see
+[Seeing what Pennsieve compute costs in your AWS account](compute-costs-in-your-aws-account.md).
+
 ## 3. Find it
 
 **By tag.** Nodes created or updated with the provisioner release that adds
