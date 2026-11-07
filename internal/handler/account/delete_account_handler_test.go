@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	account_handler "github.com/pennsieve/account-service/internal/handler/account"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/roleaccess/roleaccesstest"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/test"
 	"github.com/stretchr/testify/assert"
@@ -268,4 +269,73 @@ func TestDeleteAccountHandler_DeletesWorkspaceEnablements(t *testing.T) {
 	enablements, err := workspaceStore.GetByAccount(ctx, accountUuid)
 	assert.NoError(t, err)
 	assert.Empty(t, enablements)
+}
+
+// An account whose role is gone (or no longer trusts Pennsieve) is
+// disconnected even with nodes left: Pennsieve can't tear them down, so it
+// removes its records and says what may remain in the AWS account.
+func TestDeleteAccountHandler_RoleGoneDisconnects(t *testing.T) {
+	accountStore, nodeStore, _, testId := setupDeleteAccountHandlerTest(t)
+	ctx := context.Background()
+	defer roleaccesstest.Answer("AccessDenied")()
+
+	accountUuid := "del-rolegone-" + testId
+	userId := test.UserNodeId("del-rolegone-user-" + testId)
+	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
+		Uuid: accountUuid, AccountId: "123456789012", AccountType: "aws",
+		RoleName: "test-role-" + testId, UserId: userId,
+	}))
+	require.NoError(t, nodeStore.Put(ctx, models.DynamoDBNode{
+		Uuid: "node-rolegone-" + testId, AccountUuid: accountUuid,
+		OrganizationId: test.OrgNodeId("rolegone-" + testId), Status: "Failed",
+	}))
+
+	response, err := account_handler.DeleteAccountHandler(ctx, events.APIGatewayV2HTTPRequest{
+		PathParameters:        map[string]string{"id": accountUuid},
+		QueryStringParameters: map[string]string{},
+		RequestContext:        events.APIGatewayV2HTTPRequestContext{Authorizer: test.CreateTestAuthorizer(userId, "")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 200, response.StatusCode, response.Body)
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(response.Body), &body))
+	assert.Equal(t, true, body["resourcesMayRemain"])
+	assert.Equal(t, float64(1), body["computeNodesRemoved"])
+	assert.Contains(t, body["runbookUrl"], "disconnect-without-pennsieve.md")
+	assert.Equal(t, accountUuid, body["uuid"])
+
+	node, err := nodeStore.GetById(ctx, "node-rolegone-"+testId)
+	require.NoError(t, err)
+	assert.Empty(t, node.Uuid, "the node's record is removed")
+	acct, err := accountStore.GetById(ctx, accountUuid)
+	require.NoError(t, err)
+	assert.Empty(t, acct.Uuid, "the account is removed")
+}
+
+// A role check that fails for another reason (here throttling) keeps the
+// refusal: nodes are only orphaned when the role is known to be unusable.
+func TestDeleteAccountHandler_RoleCheckUnknownKeepsConflict(t *testing.T) {
+	accountStore, nodeStore, _, testId := setupDeleteAccountHandlerTest(t)
+	ctx := context.Background()
+	defer roleaccesstest.Answer("Throttling")()
+
+	accountUuid := "del-roleunknown-" + testId
+	userId := test.UserNodeId("del-roleunknown-user-" + testId)
+	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
+		Uuid: accountUuid, AccountId: "123456789012", AccountType: "aws",
+		RoleName: "test-role-" + testId, UserId: userId,
+	}))
+	require.NoError(t, nodeStore.Put(ctx, models.DynamoDBNode{
+		Uuid: "node-roleunknown-" + testId, AccountUuid: accountUuid,
+		OrganizationId: test.OrgNodeId("roleunknown-" + testId), Status: "Enabled",
+	}))
+
+	response, err := account_handler.DeleteAccountHandler(ctx, events.APIGatewayV2HTTPRequest{
+		PathParameters:        map[string]string{"id": accountUuid},
+		QueryStringParameters: map[string]string{},
+		RequestContext:        events.APIGatewayV2HTTPRequestContext{Authorizer: test.CreateTestAuthorizer(userId, "")},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 409, response.StatusCode)
 }

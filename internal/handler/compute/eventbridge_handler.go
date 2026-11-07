@@ -8,11 +8,10 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/pennsieve/account-service/internal/interactivedns"
-	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/noderecords"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
 )
@@ -290,67 +289,7 @@ func handleDeleteComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 		return fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	dynamoDBClient := dynamodb.NewFromConfig(cfg)
-
-	// Capture the node's account before we delete it, so we can decide whether
-	// the per-account interactive DNS delegation should be torn down.
-	deletedNode, _ := nodeStore.GetById(ctx, event.ComputeNodeId)
-
-	// Clean up all node access records (permissions) for this node
-	nodeAccessTable := os.Getenv("NODE_ACCESS_TABLE")
-	if nodeAccessTable != "" {
-		nodeAccessStore := store_dynamodb.NewNodeAccessDatabaseStore(dynamoDBClient, nodeAccessTable)
-		if err := nodeAccessStore.RemoveAllNodeAccess(ctx, event.ComputeNodeId); err != nil {
-			log.Printf("Error removing access records for node %s: %v", event.ComputeNodeId, err)
-			// Continue with deletion even if access cleanup fails
-		} else {
-			log.Printf("Cleaned up all access records for node %s", event.ComputeNodeId)
-		}
-	} else {
-		log.Printf("NODE_ACCESS_TABLE not configured, skipping access cleanup")
-	}
-
-	// Delete the node from the main nodes table
-	if err := nodeStore.Delete(ctx, event.ComputeNodeId); err != nil {
-		log.Printf("Error deleting node %s from nodes table: %v", event.ComputeNodeId, err)
-		return fmt.Errorf("failed to delete node: %w", err)
-	}
-
-	log.Printf("Successfully deleted node %s and all associated access records from database", event.ComputeNodeId)
-
-	// If this account no longer has any interactive node, the per-account
-	// interactive zone is (being) torn down — remove its NS delegation from the
-	// Pennsieve parent zone so it doesn't dangle. Best-effort.
-	removeInteractiveDelegationIfUnused(ctx, cfg, nodeStore, deletedNode)
-	return nil
-}
-
-// removeInteractiveDelegationIfUnused deletes the parent-zone NS delegation for
-// the account's interactive subdomain when no interactive nodes remain for the
-// account (i.e. the per-account zone is gone or about to be). Safe: if a node
-// later re-enables interactive, the provisioner re-creates the zone and
-// account-service re-delegates. No-op if interactive was never in play.
-func removeInteractiveDelegationIfUnused(ctx context.Context, cfg aws.Config, nodeStore store_dynamodb.NodeStore, deletedNode models.DynamoDBNode) {
-	parentZoneID := os.Getenv("INTERACTIVE_PARENT_ZONE_ID")
-	parentDomain := os.Getenv("INTERACTIVE_PARENT_DOMAIN")
-	if parentZoneID == "" || parentDomain == "" || deletedNode.AccountUuid == "" || deletedNode.AccountId == "" {
-		return
-	}
-	remaining, err := nodeStore.GetByAccount(ctx, deletedNode.AccountUuid)
-	if err != nil {
-		log.Printf("Warning: could not list account %s nodes for delegation cleanup: %v", deletedNode.AccountUuid, err)
-		return
-	}
-	for _, n := range remaining {
-		if n.MaxInteractiveSessions > 0 {
-			return // another interactive node still needs the zone
-		}
-	}
-	zoneName := fmt.Sprintf("%s.%s", deletedNode.AccountId, parentDomain)
-	r53 := route53.NewFromConfig(cfg)
-	if err := interactivedns.RemoveZoneDelegation(ctx, r53, parentZoneID, zoneName); err != nil {
-		log.Printf("Warning: failed to remove NS delegation for %s: %v", zoneName, err)
-		return
-	}
-	log.Printf("Removed interactive NS delegation for %s (no interactive nodes remain)", zoneName)
+	// The node's records, its access records and, when no interactive node
+	// remains, the account's interactive DNS delegation.
+	return noderecords.Remove(ctx, cfg, dynamodb.NewFromConfig(cfg), nodeStore, event.ComputeNodeId)
 }

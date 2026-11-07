@@ -140,6 +140,21 @@ components:
         enableSimpleResponses: true
         authorizerCredentials: ${gateway_authorizer_role}
   schemas:
+    RemovedNote:
+      type: object
+      description: Pennsieve removed its records without a teardown, because the account's role was unusable.
+      properties:
+        message:
+          type: string
+        resourcesMayRemain:
+          type: boolean
+        runbookUrl:
+          type: string
+          description: how to find and remove what Pennsieve built in the AWS account, without Pennsieve
+        computeNodesRemoved:
+          type: integer
+        storageNodesRemoved:
+          type: integer
     accountRequest:
       type: object
       properties:
@@ -1298,7 +1313,10 @@ paths:
       description: |
         Delete a compute resource account and its workspace enablements. Must be the account owner.
         If the account has active compute nodes, the request will fail with a 409 Conflict unless
-        the force query parameter is set to true.
+        the force query parameter is set to true, or Pennsieve can no longer use the account's role
+        (it was removed outside Pennsieve, or no longer trusts it). Then the account, its compute and
+        storage node records and its workspace enablements are removed without a teardown, and the
+        answer says what may remain in the AWS account (`resourcesMayRemain`, `runbookUrl`).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteAccount
@@ -1322,13 +1340,17 @@ paths:
           description: If true, delete even if account has active compute nodes
       responses:
         '200':
-          description: The deleted account details
+          description: |
+            The deleted account details. With the role already gone, also the note fields
+            (`message`, `resourcesMayRemain`, `runbookUrl`, `computeNodesRemoved`, `storageNodesRemoved`).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/accountsGetResponse'
+                allOf:
+                  - $ref: '#/components/schemas/accountsGetResponse'
+                  - $ref: '#/components/schemas/RemovedNote'
         '409':
-          description: Account has active compute nodes
+          description: Account has active compute nodes and its role still works
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':
@@ -1567,6 +1589,10 @@ paths:
         delete the API Gateway, EFS storage, and SQS queues.
 
         **Permissions:** Node owner, account owner, or workspace administrator on public accounts (isPublic=true).
+
+        When Pennsieve can no longer use the account's role (removed outside Pennsieve, or no longer
+        trusting it), no teardown is started: the node's records are removed and the answer (200) says
+        what may remain in the AWS account.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteComputeNode
@@ -1582,6 +1608,14 @@ paths:
             type: string
           description: The UUID of the compute node to delete
       responses:
+        '200':
+          description: The account's role is unusable; the node's records were removed without a teardown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemovedNote'
+        '202':
+          description: Teardown started; the node is removed when it completes
         '204':
           description: Successfully deleted compute node
         '404':

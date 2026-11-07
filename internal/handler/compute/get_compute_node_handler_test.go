@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pennsieve/account-service/internal/handler/compute"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/roleaccess/roleaccesstest"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/test"
 	"github.com/stretchr/testify/assert"
@@ -29,6 +30,9 @@ func TestMain(m *testing.M) {
 	if err := test.SetupPackageTables(); err != nil {
 		panic(err)
 	}
+
+	// The role check answers "usable" unless a test says otherwise; no STS.
+	roleaccesstest.Answer("")
 
 	// Run tests
 	code := m.Run()

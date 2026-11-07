@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/noderecords"
+	"github.com/pennsieve/account-service/internal/roleaccess"
 	"github.com/pennsieve/account-service/internal/service"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
@@ -118,7 +120,23 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}
 	}
 
+	// With nodes left, the account is disconnected only once they're torn down
+	// (or with force=true) — unless its role was removed outside Pennsieve, or
+	// no longer trusts it. Then nothing can tear the nodes down from here, and
+	// refusing would leave the account stuck: Pennsieve removes its records and
+	// says what may remain in the AWS account. A role check that fails for
+	// another reason (throttling, network) keeps the refusal.
+	roleGone := false
 	if (len(nodes) > 0 || len(storageNodes) > 0) && force != "true" {
+		usability, cerr := roleaccess.Check(ctx, roleaccess.NewAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId)
+		if usability == roleaccess.Unusable {
+			log.Printf("Role %s of account %s is unusable (%v): disconnecting with %d compute and %d storage nodes", account.RoleName, uuid, cerr, len(nodes), len(storageNodes))
+			roleGone = true
+		} else if cerr != nil && usability == roleaccess.Unknown {
+			log.Printf("Warning: could not check role %s of account %s: %v", account.RoleName, uuid, cerr)
+		}
+	}
+	if (len(nodes) > 0 || len(storageNodes) > 0) && force != "true" && !roleGone {
 		body, _ := json.Marshal(map[string]interface{}{
 			"error":            fmt.Sprintf("account has %d active compute nodes and %d active storage nodes", len(nodes), len(storageNodes)),
 			"nodeCount":        len(nodes),
@@ -174,6 +192,16 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}
 	}
 
+	// The compute nodes Pennsieve can no longer reach: their records go (as a
+	// teardown's completion would remove them); what they built may remain.
+	if roleGone {
+		for _, n := range nodes {
+			if err := noderecords.Remove(ctx, cfg, dynamoDBClient, nodeStore, n.Uuid); err != nil {
+				log.Printf("warning: failed to remove compute node %s: %v", n.Uuid, err)
+			}
+		}
+	}
+
 	// Delete the account record
 	err = accountsStore.Delete(ctx, uuid)
 	if err != nil {
@@ -184,15 +212,26 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}, nil
 	}
 
-	// Return the deleted account info so the agent can clean up the IAM role
-	m, err := json.Marshal(models.Account{
+	// The deleted account, so the owner can delete its role (or the stack
+	// that made it); with the role already gone, also what may remain.
+	deleted := disconnectedAccount{Account: models.Account{
 		Uuid:        account.Uuid,
 		AccountId:   account.AccountId,
 		AccountType: account.AccountType,
 		RoleName:    account.RoleName,
 		ExternalId:  account.ExternalId,
 		UserId:      account.UserId,
-	})
+	}}
+	if roleGone {
+		deleted.RemovedNote = &roleaccess.RemovedNote{
+			Message:             "Pennsieve can no longer use this account's role, so it disconnected the account without tearing its nodes down. Their resources may remain in the AWS account.",
+			ResourcesMayRemain:  true,
+			RunbookUrl:          roleaccess.RunbookURL,
+			ComputeNodesRemoved: len(nodes),
+			StorageNodesRemoved: len(storageNodes),
+		}
+	}
+	m, err := json.Marshal(deleted)
 	if err != nil {
 		log.Println(err.Error())
 		return events.APIGatewayV2HTTPResponse{
@@ -205,4 +244,11 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		StatusCode: http.StatusOK,
 		Body:       string(m),
 	}, nil
+}
+
+// disconnectedAccount is DELETE /accounts/{id}'s answer: the account, and,
+// when its role was already gone, what may remain in the AWS account.
+type disconnectedAccount struct {
+	models.Account
+	*roleaccess.RemovedNote
 }
