@@ -10,7 +10,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/pennsieve/account-service/internal/clients"
 )
 
 // RoleAssumer is the part of STS that registration checks a role with.
@@ -49,18 +48,16 @@ var (
 )
 
 // verifyRole checks, before an account is registered, that Pennsieve can use
-// its role: assuming it (with the external ID, when there is one) must work,
-// and, when there is one, assuming it without must not, which proves the trust
-// policy requires it. sleep is time.Sleep outside tests.
+// its role: assuming it with the external ID must work, and assuming it without
+// must not, which proves the trust policy requires it. sleep is time.Sleep
+// outside tests.
 func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, externalId string, sleep func(time.Duration)) error {
 	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, roleName)
 	in := &sts.AssumeRoleInput{
 		RoleArn:         aws.String(roleArn),
 		RoleSessionName: aws.String("pennsieve-account-registration"),
 		DurationSeconds: aws.Int32(900),
-	}
-	if externalId != "" {
-		in.ExternalId = aws.String(externalId)
+		ExternalId:      aws.String(externalId),
 	}
 
 	var err error
@@ -84,11 +81,6 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 		}
 	}
 
-	if externalId == "" {
-		log.Printf("registration: %s registered with a legacy trust policy (no external id)", roleArn)
-		return nil
-	}
-
 	without := *in
 	without.ExternalId = nil
 	if _, err := assumer.AssumeRole(ctx, &without); err == nil {
@@ -96,12 +88,6 @@ func verifyRole(ctx context.Context, assumer RoleAssumer, accountId, roleName, e
 		return ErrRoleNotRestricted
 	}
 	return nil
-}
-
-// validExternalId reports whether externalId, when given, is one Pennsieve
-// issues; an empty one is a legacy agent's.
-func validExternalId(externalId string) bool {
-	return externalId == "" || clients.ValidExternalId(externalId)
 }
 
 // validTemplateVersion reports whether v, when given, is a template version

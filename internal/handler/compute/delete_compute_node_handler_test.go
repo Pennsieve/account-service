@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pennsieve/account-service/internal/handler/compute"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/roleaccess/roleaccesstest"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/test"
 	"github.com/stretchr/testify/assert"
@@ -477,4 +478,66 @@ func TestDeleteComputeNodeHandler_PermissionChecks(t *testing.T) {
 		assert.Equal(t, 403, response.StatusCode) // Forbidden (account doesn't exist, so can't delete)
 		assert.Contains(t, response.Body, "forbidden")
 	})
+}
+
+// With the account's role gone, deleting a node removes its record instead of
+// starting a teardown that couldn't run, and says what may remain.
+func TestDeleteComputeNodeHandler_RoleGoneRemovesRecord(t *testing.T) {
+	nodeStore, accountStore := setupDeleteComputeNodeHandlerTest(t)
+	ctx := context.Background()
+	testId := test.GenerateTestId()
+	defer roleaccesstest.Answer("AccessDenied")()
+
+	testNode := createTestNode(testId)
+	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
+		Uuid: testNode.AccountUuid, AccountId: testNode.AccountId, AccountType: "aws",
+		RoleName: "test-role-" + testId, UserId: testNode.UserId, Connection: models.ConnectionCloudFormation,
+	}))
+	require.NoError(t, nodeStore.Put(ctx, testNode))
+
+	response, err := compute.DeleteComputeNodeHandler(ctx, events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{"id": testNode.Uuid},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, testNode.OrganizationId),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 200, response.StatusCode, response.Body)
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(response.Body), &body))
+	assert.Equal(t, true, body["resourcesMayRemain"])
+	assert.Contains(t, body["runbookUrl"], "disconnect-without-pennsieve.md")
+
+	node, err := nodeStore.GetById(ctx, testNode.Uuid)
+	require.NoError(t, err)
+	assert.Empty(t, node.Uuid, "the node's record is removed")
+}
+
+// For an older connection the role isn't checked: the teardown starts as
+// before, even if this service couldn't assume the role.
+func TestDeleteComputeNodeHandler_LegacyRoleStillTearsDown(t *testing.T) {
+	nodeStore, accountStore := setupDeleteComputeNodeHandlerTest(t)
+	ctx := context.Background()
+	testId := test.GenerateTestId()
+	defer roleaccesstest.Answer("AccessDenied")()
+
+	testNode := createTestNode(testId)
+	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
+		Uuid: testNode.AccountUuid, AccountId: testNode.AccountId, AccountType: "aws",
+		RoleName: "ROLE-" + testId, UserId: testNode.UserId,
+	}))
+	require.NoError(t, nodeStore.Put(ctx, testNode))
+
+	response, err := compute.DeleteComputeNodeHandler(ctx, events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{"id": testNode.Uuid},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(testNode.UserId, testNode.OrganizationId),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 202, response.StatusCode, "the teardown is started")
+	node, err := nodeStore.GetById(ctx, testNode.Uuid)
+	require.NoError(t, err)
+	assert.Equal(t, "Destroying", node.Status)
 }

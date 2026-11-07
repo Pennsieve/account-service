@@ -56,12 +56,11 @@ type roleConfigResponse struct {
 	RoleName            string          `json:"roleName"`
 	PolicyDocument      json.RawMessage `json:"policyDocument"`
 	TrustPolicyDocument json.RawMessage `json:"trustPolicyDocument"`
-	// ExternalId is the sts:ExternalId the trust policy requires; the agent
-	// registers the account with it. Only for agents that ask (?externalId=true),
-	// so older agents get exactly the configuration they always did.
+	// ExternalId is the sts:ExternalId the trust policy requires; the account
+	// is registered with it.
 	ExternalId string `json:"externalId,omitempty"`
-	// PennsieveAccountId is the account the role trusts, with an external ID:
-	// the template's PennsieveAccountId parameter.
+	// PennsieveAccountId is the account the role trusts: the template's
+	// PennsieveAccountId parameter.
 	PennsieveAccountId string `json:"pennsieveAccountId,omitempty"`
 	// AccountId is the AWS account being connected (?accountId=), the
 	// template's AccountId parameter: the stack is created only there. Without
@@ -146,31 +145,28 @@ func quickCreateQuery(params url.Values) string {
 var awsAccountIdPattern = regexp.MustCompile(`^[0-9]{12}$`)
 
 // buildRoleConfig is the role configuration for a new role trusting
-// pennsieveAccountId, with a freshly issued external ID when withExternalId.
-func buildRoleConfig(roleName, pennsieveAccountId string, withExternalId bool, newExternalId func() (string, error)) (roleConfigResponse, error) {
-	externalId := ""
-	if withExternalId {
-		id, err := newExternalId()
-		if err != nil {
-			return roleConfigResponse{}, err
-		}
-		externalId = id
+// pennsieveAccountId, with a freshly issued external ID.
+func buildRoleConfig(roleName, pennsieveAccountId string, newExternalId func() (string, error)) (roleConfigResponse, error) {
+	externalId, err := newExternalId()
+	if err != nil {
+		return roleConfigResponse{}, err
 	}
 	trust, err := clients.TrustPolicy(pennsieveAccountId, externalId)
 	if err != nil {
 		return roleConfigResponse{}, err
 	}
-	resp := roleConfigResponse{
+	return roleConfigResponse{
 		RoleName:            roleName,
 		PolicyDocument:      json.RawMessage(rolePolicyDocument),
 		TrustPolicyDocument: json.RawMessage(trust),
 		ExternalId:          externalId,
-	}
-	if externalId != "" {
-		resp.PennsieveAccountId = pennsieveAccountId
-	}
-	return resp, nil
+		PennsieveAccountId:  pennsieveAccountId,
+	}, nil
 }
+
+// legacyRoleSetupGone answers a role setup asked for without an external ID:
+// the agent's registration with an unconditional trust policy is retired.
+const legacyRoleSetupGone = `{"message":"A role without an external ID is no longer supported. Connect the account in the Pennsieve web app: Analysis → Compute Nodes → Connect AWS account."}`
 
 // issueRoleCode records the external ID in resp as issued to userId, for
 // resp's role, until ExternalIdLifetime from now.
@@ -184,10 +180,21 @@ func issueRoleCode(ctx context.Context, codes store_dynamodb.RoleCodeStore, resp
 	})
 }
 
-// GetRolePolicyHandler returns the role configuration (name + permission policy +
-// trust policy) that agents use when creating cross-account roles.
-// GET /role-policy
+// GetRolePolicyHandler returns a role setup for connecting an AWS account: the
+// role's name, permission and trust policies, the external ID issued for it,
+// and how to create it from the CloudFormation template.
+// GET /role-policy?externalId=true[&accountId=…]
+//
+// Without externalId=true (the retired agent registration, whose role had an
+// unconditional trust policy) it answers 410 Gone.
 func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	if request.QueryStringParameters["externalId"] != "true" {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusGone,
+			Headers:    map[string]string{"Content-Type": "application/json"},
+			Body:       legacyRoleSetupGone,
+		}, nil
+	}
 	env := strings.ToLower(os.Getenv("ENV"))
 	if env == "" {
 		env = "dev"
@@ -218,7 +225,6 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}, nil
 	}
 
-	withExternalId := request.QueryStringParameters["externalId"] == "true"
 	accountId := strings.ReplaceAll(strings.TrimSpace(request.QueryStringParameters["accountId"]), "-", "")
 	if accountId != "" && !awsAccountIdPattern.MatchString(accountId) {
 		return events.APIGatewayV2HTTPResponse{
@@ -226,7 +232,7 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 			Body:       `{"error":"accountId must be a 12-digit AWS account ID"}`,
 		}, nil
 	}
-	resp, err := buildRoleConfig(roleName, *identity.Account, withExternalId, clients.NewRandomExternalId)
+	resp, err := buildRoleConfig(roleName, *identity.Account, clients.NewRandomExternalId)
 	if err != nil {
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -238,29 +244,25 @@ func GetRolePolicyHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 	if region == "" {
 		region = "us-east-1"
 	}
-	if withExternalId {
-		resp.AccountId = accountId
-	}
+	resp.AccountId = accountId
 	resp.CloudFormation = newCloudFormationSetup(os.Getenv("CFN_TEMPLATE_URL"), os.Getenv("CFN_TEMPLATE_VERSION"), region, resp)
 
 	// Pennsieve remembers whom it gave the code to, for which role: only that
 	// user can register that role with it (POST /accounts).
-	if withExternalId {
-		userId, err := utils.GetUserIdFromRequest(request)
-		if err != nil {
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusUnauthorized,
-				Body:       `{"error":"no user on the request"}`,
-			}, nil
-		}
-		codes := store_dynamodb.NewRoleCodeStore(dynamodb.NewFromConfig(cfg), os.Getenv("ROLE_CODES_TABLE"))
-		if err := issueRoleCode(ctx, codes, resp, userId, time.Now()); err != nil {
-			log.Printf("role-policy: %v", err)
-			return events.APIGatewayV2HTTPResponse{
-				StatusCode: http.StatusInternalServerError,
-				Body:       `{"error":"failed to issue the role's external id"}`,
-			}, nil
-		}
+	userId, err := utils.GetUserIdFromRequest(request)
+	if err != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusUnauthorized,
+			Body:       `{"error":"no user on the request"}`,
+		}, nil
+	}
+	codes := store_dynamodb.NewRoleCodeStore(dynamodb.NewFromConfig(cfg), os.Getenv("ROLE_CODES_TABLE"))
+	if err := issueRoleCode(ctx, codes, resp, userId, time.Now()); err != nil {
+		log.Printf("role-policy: %v", err)
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       `{"error":"failed to issue the role's external id"}`,
+		}, nil
 	}
 
 	body, err := json.Marshal(resp)

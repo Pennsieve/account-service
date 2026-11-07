@@ -140,6 +140,21 @@ components:
         enableSimpleResponses: true
         authorizerCredentials: ${gateway_authorizer_role}
   schemas:
+    RemovedNote:
+      type: object
+      description: Pennsieve removed its records without a teardown, because the account's role was unusable.
+      properties:
+        message:
+          type: string
+        resourcesMayRemain:
+          type: boolean
+        runbookUrl:
+          type: string
+          description: how to find and remove what Pennsieve built in the AWS account, without Pennsieve
+        computeNodesRemoved:
+          type: integer
+        storageNodesRemoved:
+          type: integer
     accountRequest:
       type: object
       properties:
@@ -154,7 +169,7 @@ components:
           description: the name of the created role
         externalId:
           type: string
-          description: the external ID Pennsieve issued with the role setup (GET /role-policy?externalId=true), to the user registering, for this role
+          description: required; the external ID Pennsieve issued with the role setup (GET /role-policy?externalId=true), to the user registering, for this role
         templateVersion:
           type: string
           description: the CloudFormation template version the role was made from; with an externalId, records the account as connected with CloudFormation
@@ -1128,9 +1143,10 @@ paths:
     post:
       summary: Registers an external compute resource account
       description: |
-        Registers an external compute resource (such as AWS). This method assumes that this account has a role that
-        the Pennsieve platform can assume to deploy infrastructure for the compute nodes.
-        The Pennsieve Agent handles the creation of this role.
+        Registers an external compute resource (such as AWS). The account has a role, created from Pennsieve's
+        CloudFormation template with a role setup from GET /role-policy?externalId=true, that the Pennsieve platform
+        can assume to deploy infrastructure for the compute nodes. The web app's "Connect AWS account" does this.
+        A registration without an external ID (the retired agent registration) is refused with 400.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: postAccounts
@@ -1297,7 +1313,11 @@ paths:
       description: |
         Delete a compute resource account and its workspace enablements. Must be the account owner.
         If the account has active compute nodes, the request will fail with a 409 Conflict unless
-        the force query parameter is set to true.
+        the force query parameter is set to true, or (for connections made in the web app with
+        CloudFormation) Pennsieve can no longer use the account's role (it was removed outside
+        Pennsieve, or no longer trusts it). Then the account, its compute and
+        storage node records and its workspace enablements are removed without a teardown, and the
+        answer says what may remain in the AWS account (`resourcesMayRemain`, `runbookUrl`).
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteAccount
@@ -1321,13 +1341,19 @@ paths:
           description: If true, delete even if account has active compute nodes
       responses:
         '200':
-          description: The deleted account details
+          description: |
+            The deleted account details. With the role already gone, also the note fields
+            (`message`, `resourcesMayRemain`, `runbookUrl`, `computeNodesRemoved`, `storageNodesRemoved`).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/accountsGetResponse'
+                allOf:
+                  - $ref: '#/components/schemas/accountsGetResponse'
+                  - $ref: '#/components/schemas/RemovedNote'
         '409':
-          description: Account has active compute nodes
+          description: |
+            Account has active compute nodes and its role still works, or it's an older connection
+            (whose role isn't checked; the message suggests upgrading the connection first)
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':
@@ -1566,6 +1592,10 @@ paths:
         delete the API Gateway, EFS storage, and SQS queues.
 
         **Permissions:** Node owner, account owner, or workspace administrator on public accounts (isPublic=true).
+
+        When Pennsieve can no longer use the account's role (removed outside Pennsieve, or no longer
+        trusting it), and the account was connected in the web app (CloudFormation), no teardown is started: the node's records are removed and the answer (200) says
+        what may remain in the AWS account.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteComputeNode
@@ -1581,6 +1611,14 @@ paths:
             type: string
           description: The UUID of the compute node to delete
       responses:
+        '200':
+          description: The account's role is unusable; the node's records were removed without a teardown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemovedNote'
+        '202':
+          description: Teardown started; the node is removed when it completes
         '204':
           description: Successfully deleted compute node
         '404':
@@ -3238,9 +3276,9 @@ paths:
     get:
       summary: Get IAM role policy
       description: |
-        Returns the scoped IAM permission policy document that agents use when
-        creating cross-account roles. This is the single source of truth for
-        the set of AWS actions the provisioner requires.
+        Returns a role setup for connecting an AWS account: the scoped IAM permission policy (the single source of
+        truth for the AWS actions the provisioner requires), the trust policy, the external ID issued for the role,
+        and how to create it from the CloudFormation template.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: getRolePolicy
@@ -3256,8 +3294,9 @@ paths:
             enum: ["true"]
           required: false
           description: |
-            Issue an external ID for the role (recorded as issued to the caller, for this role, for 24 hours) and
-            return how to create the role from the CloudFormation template.
+            Required: issue an external ID for the role (recorded as issued to the caller, for this role, for 24 hours)
+            and return how to create the role from the CloudFormation template. Without it the endpoint answers 410
+            Gone: the role setup without an external ID (the retired agent registration) is no longer served.
         - in: query
           name: accountId
           schema:
@@ -3269,6 +3308,8 @@ paths:
             CloudShell command carry it as the template's AccountId parameter, and the stack refuses to be created in
             any other account. Without it, the console asks for it.
       responses:
+        '410':
+          description: Without externalId=true. The role setup without an external ID is retired; connect the account in the web app.
         '200':
           description: The role setup
           content:

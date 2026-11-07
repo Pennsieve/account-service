@@ -1,9 +1,13 @@
 package compute
 
 import (
+	"context"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/aws/aws-lambda-go/events"
 )
 
 const testTemplateURL = "https://pennsieve-dev-cloudformation-templates-use1.s3.us-east-1.amazonaws.com/cfn/pennsieve-compute-role/v3.yaml"
@@ -79,16 +83,25 @@ func TestCloudFormationSetup_LeftOut(t *testing.T) {
 	}
 }
 
-// With an external ID the response names the account the role trusts; the
-// legacy response is unchanged.
+// The response names the account the role trusts.
 func TestBuildRoleConfig_PennsieveAccountId(t *testing.T) {
-	withId, err := buildRoleConfig("r", "123456789012", true, func() (string, error) { return "pn-0123456789abcdef0123456789abcdef", nil })
+	withId, err := buildRoleConfig("r", "123456789012", func() (string, error) { return "pn-0123456789abcdef0123456789abcdef", nil })
 	if err != nil || withId.PennsieveAccountId != "123456789012" {
 		t.Fatalf("got %q, %v", withId.PennsieveAccountId, err)
 	}
-	legacy, _ := buildRoleConfig("r", "123456789012", false, nil)
-	if legacy.PennsieveAccountId != "" || legacy.CloudFormation != nil {
-		t.Fatal("a legacy role setup gains no fields")
+}
+
+// A role setup without an external ID (the retired agent registration) is
+// gone, before anything is issued.
+func TestGetRolePolicy_WithoutExternalIdGone(t *testing.T) {
+	for _, q := range []map[string]string{nil, {"externalId": "false"}} {
+		resp, err := GetRolePolicyHandler(context.Background(), events.APIGatewayV2HTTPRequest{QueryStringParameters: q})
+		if err != nil || resp.StatusCode != http.StatusGone {
+			t.Fatalf("%v: got %d, %v", q, resp.StatusCode, err)
+		}
+		if !strings.Contains(resp.Body, "Connect AWS account") {
+			t.Fatalf("body %s", resp.Body)
+		}
 	}
 }
 

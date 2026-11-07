@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/pennsieve/account-service/internal/handler/account"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/roleaccess/roleaccesstest"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/test"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,9 @@ func TestMain(m *testing.M) {
 	if err := test.SetupPackageTables(); err != nil {
 		log.Fatalf("Failed to setup package tables: %v", err)
 	}
+
+	// The role check answers "usable" unless a test says otherwise; no STS.
+	roleaccesstest.Answer("")
 
 	// Run all tests - individual tests clean up their own data with unique IDs
 	exitCode := m.Run()

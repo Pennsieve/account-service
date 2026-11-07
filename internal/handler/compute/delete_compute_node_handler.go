@@ -17,6 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/pennsieve/account-service/internal/errors"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/noderecords"
+	"github.com/pennsieve/account-service/internal/roleaccess"
 	"github.com/pennsieve/account-service/internal/runner"
 	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/pennsieve/account-service/internal/utils"
@@ -131,6 +133,42 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	provisionerImageTag := os.Getenv("PROVISIONER_TEARDOWN_IMAGE_TAG")
 	if provisionerImageTag == "" {
 		provisionerImageTag = "latest"
+	}
+
+	// When the account's role was removed (or no longer trusts Pennsieve), the
+	// provisioner can't assume it, so a teardown would only fail and leave the
+	// node Failed. Remove Pennsieve's records instead and say what may remain
+	// in the AWS account. The active-work gate below doesn't apply: without the
+	// role nothing can be started on the node, and what may still run there is
+	// the customer's to stop. A check that fails for another reason
+	// (throttling, network) carries on as before.
+	//
+	// Only for connections made in the web app (CloudFormation): their
+	// registration or upgrade proved this service can assume the role, so a
+	// refusal now means the role was removed or changed. An older role may
+	// trust only the provisioner, not this service; for it a refusal proves
+	// nothing, and the teardown runs as before.
+	if (store_dynamodb.Account{}) != account && account.Connection == models.ConnectionCloudFormation {
+		usability, cerr := roleaccess.Check(ctx, roleaccess.NewAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId)
+		if usability == roleaccess.Unusable {
+			log.Printf("Role %s of account %s is unusable (%v): removing node %s without a teardown", account.RoleName, account.Uuid, cerr, uuid)
+			if err := noderecords.Remove(ctx, cfg, dynamoDBClient, dynamo_store, uuid); err != nil {
+				log.Println(err.Error())
+				return events.APIGatewayV2HTTPResponse{
+					StatusCode: http.StatusInternalServerError,
+					Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
+				}, nil
+			}
+			body, _ := json.Marshal(roleaccess.RemovedNote{
+				Message:            "Pennsieve can no longer use this account's role, so it removed the compute node without tearing it down. Its resources may remain in the AWS account.",
+				ResourcesMayRemain: true,
+				RunbookUrl:         roleaccess.RunbookURL,
+			})
+			return events.APIGatewayV2HTTPResponse{StatusCode: http.StatusOK, Body: string(body)}, nil
+		}
+		if usability == roleaccess.Unknown && cerr != nil {
+			log.Printf("Warning: could not check role %s of account %s (%v); deleting as usual", account.RoleName, account.Uuid, cerr)
+		}
 	}
 
 	// Gate: refuse to delete a node with live work — running workflows OR
