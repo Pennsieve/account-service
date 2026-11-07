@@ -72,6 +72,19 @@ data "terraform_remote_state" "workflow_service" {
   }
 }
 
+# Apps installed on compute nodes from before the App Store (its applications
+# table): a node delete is refused while any are on the node.
+data "terraform_remote_state" "app_deploy_service" {
+  backend = "s3"
+
+  config = {
+    bucket  = "${var.aws_account}-terraform-state"
+    key     = "aws/${data.aws_region.current_region.name}/${var.vpc_name}/${var.environment_name}/app-deploy-service/terraform.tfstate"
+    region  = "us-east-1"
+    profile = var.aws_account
+  }
+}
+
 # IMPORT FARGATE CLUSTER DATA
 data "terraform_remote_state" "fargate" {
   backend = "s3"

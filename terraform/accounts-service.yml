@@ -1585,6 +1585,11 @@ paths:
           description: Successfully deleted compute node
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            The node can't be deleted yet: it has workflow executions or interactive sessions running, or apps
+            installed on it from before the App Store (named in the message; delete them first with
+            app-deploy-service's DELETE /applications/{id}).
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':

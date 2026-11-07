@@ -146,6 +146,22 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
+	// Gate: apps installed on the node from before the App Store keep its
+	// permissions boundary in use, so its teardown would fail at the end
+	// (legacy_apps.go). A failed lookup doesn't block the delete.
+	if table := os.Getenv("LEGACY_APPLICATIONS_TABLE"); table != "" {
+		apps, err := legacyAppsOnNode(ctx, dynamoDBClient, table, uuid)
+		if err != nil {
+			log.Printf("Warning: %v (deleting anyway)", err)
+		} else if len(apps) > 0 {
+			log.Printf("Refusing delete of node %s: %d app(s) installed from before the App Store", uuid, len(apps))
+			return events.APIGatewayV2HTTPResponse{
+				StatusCode: http.StatusConflict,
+				Body:       errors.ComputeHandlerError(handlerName, legacyAppsError(apps)),
+			}, nil
+		}
+	}
+
 	// Set node status to "Destroying" before launching the delete task
 	computeNode.Status = "Destroying"
 	err = dynamo_store.Put(ctx, computeNode)

@@ -99,6 +99,14 @@ data "aws_iam_policy_document" "service_iam_policy_document" {
     ]
   }
 
+  # The node delete's check for apps installed the older way (legacy_apps.go).
+  statement {
+    sid       = "LambdaReadLegacyApplications"
+    effect    = "Allow"
+    actions   = ["dynamodb:Scan"]
+    resources = [data.terraform_remote_state.app_deploy_service.outputs.applications_table_arn]
+  }
+
   statement {
     sid    = "LambdaAccessToDynamoDB"
     effect = "Allow"

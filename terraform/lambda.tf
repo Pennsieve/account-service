@@ -45,6 +45,8 @@ resource "aws_lambda_function" "service_lambda" {
       // External IDs issued with role configurations, and to whom: only that
       // user can register the role with one (POST /accounts).
       ROLE_CODES_TABLE = aws_dynamodb_table.compute_role_codes_table.name
+      // app-deploy-service's apps installed on nodes from before the App Store.
+      LEGACY_APPLICATIONS_TABLE = data.terraform_remote_state.app_deploy_service.outputs.applications_table_name
 
       // The compute role's CloudFormation template (cloudformation.tf): what
       // role setups point the app, the CLI and CloudShell at, and its version,
