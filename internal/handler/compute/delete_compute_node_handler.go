@@ -142,7 +142,13 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	// role nothing can be started on the node, and what may still run there is
 	// the customer's to stop. A check that fails for another reason
 	// (throttling, network) carries on as before.
-	if (store_dynamodb.Account{}) != account {
+	//
+	// Only for connections made in the web app (CloudFormation): their
+	// registration or upgrade proved this service can assume the role, so a
+	// refusal now means the role was removed or changed. An older role may
+	// trust only the provisioner, not this service; for it a refusal proves
+	// nothing, and the teardown runs as before.
+	if (store_dynamodb.Account{}) != account && account.Connection == models.ConnectionCloudFormation {
 		usability, cerr := roleaccess.Check(ctx, roleaccess.NewAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId)
 		if usability == roleaccess.Unusable {
 			log.Printf("Role %s of account %s is unusable (%v): removing node %s without a teardown", account.RoleName, account.Uuid, cerr, uuid)

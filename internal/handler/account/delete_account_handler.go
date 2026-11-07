@@ -126,8 +126,14 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 	// refusing would leave the account stuck: Pennsieve removes its records and
 	// says what may remain in the AWS account. A role check that fails for
 	// another reason (throttling, network) keeps the refusal.
+	//
+	// Only for connections made in the web app (CloudFormation): their
+	// registration or upgrade proved this service can assume the role. An older
+	// role may trust only the provisioner, so a refusal proves nothing; those
+	// keep the refusal, with a hint to upgrade the connection first.
+	cloudFormation := account.Connection == models.ConnectionCloudFormation
 	roleGone := false
-	if (len(nodes) > 0 || len(storageNodes) > 0) && force != "true" {
+	if (len(nodes) > 0 || len(storageNodes) > 0) && force != "true" && cloudFormation {
 		usability, cerr := roleaccess.Check(ctx, roleaccess.NewAssumer(cfg), account.AccountId, account.RoleName, account.ExternalId)
 		if usability == roleaccess.Unusable {
 			log.Printf("Role %s of account %s is unusable (%v): disconnecting with %d compute and %d storage nodes", account.RoleName, uuid, cerr, len(nodes), len(storageNodes))
@@ -137,8 +143,12 @@ func DeleteAccountHandler(ctx context.Context, request events.APIGatewayV2HTTPRe
 		}
 	}
 	if (len(nodes) > 0 || len(storageNodes) > 0) && force != "true" && !roleGone {
+		msg := fmt.Sprintf("account has %d active compute nodes and %d active storage nodes", len(nodes), len(storageNodes))
+		if !cloudFormation {
+			msg += ". If its role was removed in AWS, upgrade the connection in the Pennsieve web app first, or clean up with " + roleaccess.RunbookURL
+		}
 		body, _ := json.Marshal(map[string]interface{}{
-			"error":            fmt.Sprintf("account has %d active compute nodes and %d active storage nodes", len(nodes), len(storageNodes)),
+			"error":            msg,
 			"nodeCount":        len(nodes),
 			"storageNodeCount": len(storageNodes),
 		})

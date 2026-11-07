@@ -21,9 +21,11 @@ Pennsieve immediately: it can no longer create, change or delete anything.
 - **Connected earlier** (with the Pennsieve agent): open IAM → Roles and
   delete the role whose name starts with `Pennsieve-Compute-` or `ROLE-`.
 
-If you later use Pennsieve again, Pennsieve treats the account as
-disconnected: deleting a node or disconnecting the account removes Pennsieve's
-records without trying to reach your account, and points back to this guide.
+If you later use Pennsieve again, Pennsieve recognises the removed role for
+connections made in the Pennsieve web app: deleting a node or disconnecting
+the account removes Pennsieve's records without trying to reach your account,
+and points back to this guide. Older connections (made with the Pennsieve
+agent) should be upgraded in the web app first, or cleaned up with this guide.
 
 Removing the role does **not** remove what Pennsieve built. That keeps running,
 and some of it keeps costing money, until you delete it (steps 2 and 3).

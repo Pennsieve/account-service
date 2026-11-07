@@ -283,7 +283,7 @@ func TestDeleteAccountHandler_RoleGoneDisconnects(t *testing.T) {
 	userId := test.UserNodeId("del-rolegone-user-" + testId)
 	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
 		Uuid: accountUuid, AccountId: "123456789012", AccountType: "aws",
-		RoleName: "test-role-" + testId, UserId: userId,
+		RoleName: "test-role-" + testId, UserId: userId, Connection: models.ConnectionCloudFormation,
 	}))
 	require.NoError(t, nodeStore.Put(ctx, models.DynamoDBNode{
 		Uuid: "node-rolegone-" + testId, AccountUuid: accountUuid,
@@ -324,7 +324,7 @@ func TestDeleteAccountHandler_RoleCheckUnknownKeepsConflict(t *testing.T) {
 	userId := test.UserNodeId("del-roleunknown-user-" + testId)
 	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
 		Uuid: accountUuid, AccountId: "123456789012", AccountType: "aws",
-		RoleName: "test-role-" + testId, UserId: userId,
+		RoleName: "test-role-" + testId, UserId: userId, Connection: models.ConnectionCloudFormation,
 	}))
 	require.NoError(t, nodeStore.Put(ctx, models.DynamoDBNode{
 		Uuid: "node-roleunknown-" + testId, AccountUuid: accountUuid,
@@ -338,4 +338,37 @@ func TestDeleteAccountHandler_RoleCheckUnknownKeepsConflict(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 409, response.StatusCode)
+}
+
+// An older connection's role may trust only the provisioner, so a refusal to
+// this service proves nothing: the 409 stays, with a hint to upgrade first.
+func TestDeleteAccountHandler_LegacyRoleKeepsConflict(t *testing.T) {
+	accountStore, nodeStore, _, testId := setupDeleteAccountHandlerTest(t)
+	ctx := context.Background()
+	defer roleaccesstest.Answer("AccessDenied")()
+
+	accountUuid := "del-legacy-" + testId
+	userId := test.UserNodeId("del-legacy-user-" + testId)
+	require.NoError(t, accountStore.Insert(ctx, store_dynamodb.Account{
+		Uuid: accountUuid, AccountId: "123456789012", AccountType: "aws",
+		RoleName: "ROLE-" + testId, UserId: userId,
+	}))
+	require.NoError(t, nodeStore.Put(ctx, models.DynamoDBNode{
+		Uuid: "node-legacy-" + testId, AccountUuid: accountUuid,
+		OrganizationId: test.OrgNodeId("legacy-" + testId), Status: "Enabled",
+	}))
+
+	response, err := account_handler.DeleteAccountHandler(ctx, events.APIGatewayV2HTTPRequest{
+		PathParameters:        map[string]string{"id": accountUuid},
+		QueryStringParameters: map[string]string{},
+		RequestContext:        events.APIGatewayV2HTTPRequestContext{Authorizer: test.CreateTestAuthorizer(userId, "")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 409, response.StatusCode)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(response.Body), &body))
+	assert.Contains(t, body["error"], "upgrade the connection")
+	node, err := nodeStore.GetById(ctx, "node-legacy-"+testId)
+	require.NoError(t, err)
+	assert.NotEmpty(t, node.Uuid, "the node's record stays")
 }
