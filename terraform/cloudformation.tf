@@ -9,7 +9,7 @@
 // cfn_template_version whenever the template or the policy changes: accounts
 // connected with an older version then show "update available".
 locals {
-  cfn_template_version = 2
+  cfn_template_version = 3
   cfn_template_prefix  = "cfn/pennsieve-compute-role"
   compute_role_policy  = jsonencode(jsondecode(file("${path.module}/../policies/compute-role-policy.json")))
   cfn_template = replace(
