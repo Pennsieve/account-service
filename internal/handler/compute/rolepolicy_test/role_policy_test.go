@@ -43,7 +43,7 @@ func findStatement(t *testing.T, doc policyDocument, sid string) policyStatement
 func TestRolePolicyDocument_IsValidJSON(t *testing.T) {
 	doc := parsePolicy(t)
 	assert.Equal(t, "2012-10-17", doc.Version)
-	assert.Len(t, doc.Statement, 6)
+	assert.Len(t, doc.Statement, 7)
 }
 
 func TestRolePolicyDocument_CreateServiceLinkedRoleInAllowServices(t *testing.T) {
@@ -59,12 +59,13 @@ func TestRolePolicyDocument_AllExpectedStatementsPresent(t *testing.T) {
 	doc := parsePolicy(t)
 
 	expected := map[string]string{
-		"AllowServices":                 "Allow",
-		"AllowIAMRoleManagement":        "Allow",
-		"AllowMetricReads":              "Allow",
-		"DenyCreateRoleWithoutBoundary": "Deny",
-		"DenyBoundaryStripping":         "Deny",
-		"DenySelfModification":          "Deny",
+		"AllowServices":                         "Allow",
+		"AllowIAMRoleManagement":                "Allow",
+		"AllowMetricReads":                      "Allow",
+		"DenyCreateRoleWithoutBoundary":         "Deny",
+		"DenyBoundaryStripping":                 "Deny",
+		"DenySelfModification":                  "Deny",
+		"DenyTrustChangesOutsidePennsieveRoles": "Deny",
 	}
 
 	found := make(map[string]string)
@@ -135,4 +136,18 @@ func TestRolePolicyDocument_DenySelfModification_ProtectsComputeRoles(t *testing
 	require.True(t, ok)
 	assert.Contains(t, resources, "arn:aws:iam::*:role/Pennsieve-Compute-*")
 	assert.Contains(t, resources, "arn:aws:iam::*:role/ROLE-*")
+}
+
+// The connection role may change a role's trust policy only on roles that
+// carry a Pennsieve boundary (every role the provisioner creates): never a
+// customer's own role, which it could otherwise make trust any account.
+func TestRolePolicyDocument_TrustChangesOnlyOnPennsieveRoles(t *testing.T) {
+	doc := parsePolicy(t)
+	stmt := findStatement(t, doc, "DenyTrustChangesOutsidePennsieveRoles")
+	assert.Equal(t, "Deny", stmt.Effect)
+	assert.Equal(t, "iam:UpdateAssumeRolePolicy", stmt.Action)
+	assert.Equal(t, "*", stmt.Resource)
+	cond, ok := stmt.Condition["StringNotLike"]["iam:PermissionsBoundary"]
+	require.True(t, ok, "the deny must be conditioned on iam:PermissionsBoundary (StringNotLike, so a role without one is denied too)")
+	assert.JSONEq(t, `"arn:aws:iam::*:policy/pennsieve-boundary-*"`, string(cond))
 }

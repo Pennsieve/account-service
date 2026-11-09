@@ -91,6 +91,7 @@
 				"iam:AttachRolePolicy",
 				"iam:DetachRolePolicy",
 				"iam:ListRolePolicies",
+				"iam:UpdateAssumeRolePolicy",
 				"iam:ListAttachedRolePolicies",
 				"iam:CreateInstanceProfile",
 				"iam:DeleteInstanceProfile",
@@ -156,6 +157,17 @@
 				"arn:aws:iam::*:role/Pennsieve-Compute-*",
 				"arn:aws:iam::*:role/ROLE-*"
 			]
+		},
+		{
+			"Sid": "DenyTrustChangesOutsidePennsieveRoles",
+			"Effect": "Deny",
+			"Action": "iam:UpdateAssumeRolePolicy",
+			"Resource": "*",
+			"Condition": {
+				"StringNotLike": {
+					"iam:PermissionsBoundary": "arn:aws:iam::*:policy/pennsieve-boundary-*"
+				}
+			}
 		}
 	]
 }
