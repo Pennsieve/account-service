@@ -91,6 +91,7 @@
 				"iam:AttachRolePolicy",
 				"iam:DetachRolePolicy",
 				"iam:ListRolePolicies",
+				"iam:UpdateAssumeRolePolicy",
 				"iam:ListAttachedRolePolicies",
 				"iam:CreateInstanceProfile",
 				"iam:DeleteInstanceProfile",
