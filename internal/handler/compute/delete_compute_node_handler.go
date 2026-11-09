@@ -282,9 +282,9 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	destroyInteractiveKey := "DESTROY_INTERACTIVE"
 	destroyInteractiveValue := "false"
 	if computeNode.MaxInteractiveSessions > 0 {
-		otherInteractive, err := accountHasInteractiveExcept(ctx, dynamo_store, computeNode.AccountUuid, computeNode.Uuid)
+		otherInteractive, err := accountHasInteractiveExcept(ctx, accountStore, dynamo_store, account.AccountId, computeNode.Uuid)
 		if err != nil {
-			log.Printf("Warning: could not determine remaining interactive nodes for account %s; not tearing down interactive infra: %v", computeNode.AccountUuid, err)
+			log.Printf("Warning: could not determine remaining interactive nodes for AWS account %s; not tearing down interactive infra: %v", account.AccountId, err)
 		} else if !otherInteractive {
 			destroyInteractiveValue = "true"
 		}
