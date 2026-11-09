@@ -483,7 +483,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			DeploymentMode:         req.DeploymentMode,
 			EnableLLMAccess:        req.EnableLLMAccess,
 			LlmBaaAcknowledged:     req.LlmBaaAcknowledged,
-			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, 2),
+			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, defaultMaxGpuInstances),
 			GpuTier:                resolveStringPtr(req.GpuTier, "small"),
 			MaxInteractiveSessions: resolveIntPtr(req.MaxInteractiveSessions, 0),
 			RunDataStore:           newNodeRunDataStore,
@@ -553,7 +553,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			enableLLMAccessValue = "true"
 		}
 		maxGpuInstancesKey := "MAX_GPU_INSTANCES"
-		maxGpuInstancesValue := strconv.Itoa(resolveIntPtr(req.MaxGpuInstances, 2))
+		maxGpuInstancesValue := strconv.Itoa(resolveIntPtr(req.MaxGpuInstances, defaultMaxGpuInstances))
 		gpuTierKey := "GPU_TIER"
 		gpuTierValue := resolveStringPtr(req.GpuTier, "small")
 
@@ -748,7 +748,7 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			DeploymentMode:         req.DeploymentMode,
 			EnableLLMAccess:        req.EnableLLMAccess,
 			LlmBaaAcknowledged:     req.LlmBaaAcknowledged,
-			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, 2),
+			MaxGpuInstances:        resolveIntPtr(req.MaxGpuInstances, defaultMaxGpuInstances),
 			GpuTier:                resolveStringPtr(req.GpuTier, "small"),
 			MaxInteractiveSessions: resolveIntPtr(req.MaxInteractiveSessions, 0),
 			Status:                 "Pending",
@@ -786,6 +786,12 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		Body:       string(m),
 	}, nil
 }
+
+// defaultMaxGpuInstances is a new node's GPU capacity when the request
+// doesn't say: none. GPUs are something a node asks for; with the old default
+// of 2, a node created through the API got GPU instances and, on a compliant
+// node, the account's network got GPU endpoints nobody asked for.
+const defaultMaxGpuInstances = 0
 
 // resolveIntPtr returns the dereferenced pointer value, or the default if nil.
 func resolveIntPtr(p *int, defaultVal int) int {

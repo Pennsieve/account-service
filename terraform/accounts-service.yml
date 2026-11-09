@@ -307,8 +307,8 @@ components:
           default: false
         maxGpuInstances:
           type: integer
-          description: Maximum number of GPU EC2 instances in the Auto Scaling Group. Set to 0 to disable GPU support.
-          default: 2
+          description: Maximum number of GPU EC2 instances in the Auto Scaling Group. 0 (the default) disables GPU support.
+          default: 0
           minimum: 0
         gpuTier:
           type: string
