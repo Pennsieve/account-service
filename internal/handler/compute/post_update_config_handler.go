@@ -269,9 +269,9 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	// on uncertainty.
 	destroyInteractive := "false"
 	if req.MaxInteractiveSessions != nil && *req.MaxInteractiveSessions == 0 {
-		otherInteractive, err := accountHasInteractiveExcept(ctx, nodesStore, computeNode.AccountUuid, computeNode.Uuid)
+		otherInteractive, err := accountHasInteractiveExcept(ctx, accountStore, nodesStore, account.AccountId, computeNode.Uuid)
 		if err != nil {
-			log.Printf("Warning: could not determine remaining interactive nodes for account %s; not tearing down interactive infra: %v", computeNode.AccountUuid, err)
+			log.Printf("Warning: could not determine remaining interactive nodes for AWS account %s; not tearing down interactive infra: %v", account.AccountId, err)
 		} else if !otherInteractive {
 			destroyInteractive = "true"
 		}

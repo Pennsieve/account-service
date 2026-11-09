@@ -41,24 +41,29 @@ func Remove(ctx context.Context, cfg aws.Config, dynamoDBClient *dynamodb.Client
 	}
 	log.Printf("Deleted node %s and its access records from the database", nodeId)
 
-	RemoveInteractiveDelegationIfUnused(ctx, cfg, nodeStore, deletedNode)
+	var accountStore store_dynamodb.DynamoDBStore
+	if accountsTable := os.Getenv("ACCOUNTS_TABLE"); accountsTable != "" {
+		accountStore = store_dynamodb.NewAccountDatabaseStore(dynamoDBClient, accountsTable)
+	}
+	RemoveInteractiveDelegationIfUnused(ctx, cfg, accountStore, nodeStore, deletedNode)
 	return nil
 }
 
 // RemoveInteractiveDelegationIfUnused deletes the parent-zone NS delegation
 // for the account's interactive subdomain when no interactive nodes remain for
-// the account (i.e. the per-account zone is gone or about to be). Safe: if a
-// node still needs it, or the configuration to find it is missing, nothing
-// happens. Best-effort.
-func RemoveInteractiveDelegationIfUnused(ctx context.Context, cfg aws.Config, nodeStore store_dynamodb.NodeStore, deletedNode models.DynamoDBNode) {
+// the AWS account (i.e. the per-account zone is gone or about to be). The
+// delegation is per AWS account, which several account records can share, so
+// every record's nodes count. Safe: if a node still needs it, or the
+// configuration to find it is missing, nothing happens. Best-effort.
+func RemoveInteractiveDelegationIfUnused(ctx context.Context, cfg aws.Config, accountStore store_dynamodb.DynamoDBStore, nodeStore store_dynamodb.NodeStore, deletedNode models.DynamoDBNode) {
 	parentZoneID := os.Getenv("INTERACTIVE_PARENT_ZONE_ID")
 	parentDomain := os.Getenv("INTERACTIVE_PARENT_DOMAIN")
-	if parentZoneID == "" || parentDomain == "" || deletedNode.AccountUuid == "" || deletedNode.AccountId == "" {
+	if parentZoneID == "" || parentDomain == "" || accountStore == nil || deletedNode.AccountId == "" {
 		return
 	}
-	remaining, err := nodeStore.GetByAccount(ctx, deletedNode.AccountUuid)
+	remaining, err := store_dynamodb.NodesInAWSAccount(ctx, accountStore, nodeStore, deletedNode.AccountId)
 	if err != nil {
-		log.Printf("Warning: could not list account %s nodes for delegation cleanup: %v", deletedNode.AccountUuid, err)
+		log.Printf("Warning: could not list AWS account %s nodes for delegation cleanup: %v", deletedNode.AccountId, err)
 		return
 	}
 	for _, n := range remaining {
