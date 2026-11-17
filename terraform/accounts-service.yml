@@ -3402,13 +3402,30 @@ paths:
                 providerType:
                   type: string
                   enum: ["s3", "azure-blob", "local"]
+                deploymentMode:
+                  type: string
+                  enum: ["basic", "compliant"]
+                  description: Bucket configuration the provisioner applies. Defaults to basic.
+                skipProvisioning:
+                  type: boolean
+                  description: |
+                    When true, registers an existing bucket without launching the provisioner;
+                    the node is created Enabled and returned with provisioned=false. Its bucket
+                    configuration is not managed through update-config, and deleting the node
+                    removes only the record. When false (the default) for an S3 node, the
+                    provisioner creates the bucket; the node starts Pending and is returned with
+                    provisioned=true.
       responses:
         '201':
-          description: Storage node created
+          description: Storage node created (registered, or a non-S3 node)
+        '202':
+          description: Storage node created and bucket provisioning started
         '400':
           description: Bad request
         '403':
           description: Forbidden
+        '404':
+          description: Account not found
     get:
       summary: List storage nodes
       description: Lists storage nodes filtered by organization_id or account_owner=true.
@@ -3496,7 +3513,11 @@ paths:
           description: Not found
     delete:
       summary: Delete a storage node
-      description: Deletes a storage node. Account owner only.
+      description: |
+        Deletes a storage node. Account owner only. For an S3 node the bucket must carry
+        the tag pennsieve:allow-delete=true. A provisioned node (provisioned=true) is
+        destroyed by the provisioner asynchronously. A registered node, or any non-S3 node,
+        has only its record and workspace attachments removed; the bucket is left untouched.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: deleteStorageNode
@@ -3510,13 +3531,23 @@ paths:
           required: true
           schema:
             type: string
+        - name: force
+          in: query
+          description: Set to true to delete even though workspaces are still attached.
+          schema:
+            type: string
+            enum: ["true"]
       responses:
         '200':
-          description: Storage node deleted
+          description: Storage node record deleted (registered or non-S3 node)
+        '202':
+          description: Provisioned storage node deletion initiated
         '403':
           description: Forbidden
         '404':
           description: Not found
+        '409':
+          description: Workspaces still attached (without force=true), or the bucket lacks the pennsieve:allow-delete tag
   /storage-nodes/{id}/update-config:
     post:
       summary: Update storage node infrastructure config
@@ -3524,6 +3555,8 @@ paths:
         Re-applies the provisioner terraform on an existing storage node to update
         bucket configuration (CORS, lifecycle, encryption settings, etc.) without
         touching bucket contents. The bucket has prevent_destroy=true in terraform.
+        Only S3 nodes whose bucket the provisioner created (provisioned=true) can be
+        updated; registered nodes are rejected with 400.
       x-amazon-apigateway-integration:
         $ref: '#/components/x-amazon-apigateway-integrations/account-service'
       operationId: updateStorageNodeConfig
@@ -3540,6 +3573,8 @@ paths:
       responses:
         '202':
           description: Config update initiated
+        '400':
+          description: Not an S3 node, or a registered node not created by the provisioner
         '403':
           description: Forbidden
         '404':

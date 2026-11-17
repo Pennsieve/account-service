@@ -58,6 +58,7 @@ var ErrInvalidProviderType = errors.New("invalid provider type - must be s3, azu
 var ErrInvalidDeploymentMode = errors.New("invalid deployment mode - must be basic or compliant")
 var ErrStorageNodeHasAttachments = errors.New("storage node has workspace attachments - detach them first or pass force=true to override")
 var ErrDeleteTagRequired = errors.New("bucket must have tag 'pennsieve:allow-delete' set to 'true' before deletion - set this tag on the S3 bucket in the AWS console to confirm")
+var ErrStorageNodeNotProvisioned = errors.New("storage node was registered from an existing bucket, not created by the provisioner - its bucket configuration is not managed through update-config")
 var ErrTooManySecrets = errors.New("too many secrets (max 50)")
 var ErrSecretKeyTooLong = errors.New("secret key exceeds max length (256)")
 var ErrSecretValueTooLong = errors.New("secret value exceeds max length (10000)")

@@ -179,6 +179,10 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		initialStatus = "Enabled"
 	}
 
+	// Recorded so later update-config and delete calls know whether the
+	// provisioner owns this bucket. Only S3 nodes are provisioned.
+	provisioned := !req.SkipProvisioning && req.ProviderType == "s3"
+
 	// Default deployment mode
 	deploymentMode := req.DeploymentMode
 	if deploymentMode == "" {
@@ -199,6 +203,7 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		Status:          initialStatus,
 		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
 		CreatedBy:       userId,
+		Provisioned:     provisioned,
 	}
 
 	err = storageNodeStore.Put(ctx, newNode)
@@ -265,6 +270,7 @@ func PostStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTP
 		Status:          newNode.Status,
 		CreatedAt:       newNode.CreatedAt,
 		CreatedBy:       newNode.CreatedBy,
+		Provisioned:     newNode.Provisioned,
 	}
 
 	m, err := json.Marshal(response)
