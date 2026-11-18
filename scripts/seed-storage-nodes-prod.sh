@@ -141,8 +141,9 @@ create_storage_node \
   "${SPARC_ACCOUNT_UUID}"
 SPARC_UUID="$node_uuid"
 
-attach_to_workspace "$SPARC_UUID" "N:organization:618e8dd9-f8d2-4dc4-9abb-c6aaab2e78a0" true  # SPARC
-attach_to_workspace "$SPARC_UUID" "N:organization:914dd509-2f87-466f-95ed-369e149d7cfc" true  # SPARC Codeathon - NWB-Team
+# Not the default: the bucket keeps existing SPARC data but takes no new datasets.
+attach_to_workspace "$SPARC_UUID" "N:organization:618e8dd9-f8d2-4dc4-9abb-c6aaab2e78a0" false  # SPARC
+attach_to_workspace "$SPARC_UUID" "N:organization:914dd509-2f87-466f-95ed-369e149d7cfc" false  # SPARC Codeathon - NWB-Team
 echo ""
 
 # ==============================================
