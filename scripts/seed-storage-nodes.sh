@@ -194,8 +194,9 @@ create_storage_node \
   "${SPARC_ACCOUNT_UUID}"
 SPARC_UUID="$node_uuid"
 
+# Not the default: the bucket keeps existing SPARC data but takes no new datasets.
 if [ "$ENV" = "dev" ]; then
-  attach_to_workspace "$SPARC_UUID" "N:organization:df3d6291-7fc7-4bb4-b916-5eca3a026380" true
+  attach_to_workspace "$SPARC_UUID" "N:organization:df3d6291-7fc7-4bb4-b916-5eca3a026380" false
 fi
 echo ""
 
