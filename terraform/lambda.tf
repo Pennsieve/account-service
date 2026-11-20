@@ -296,12 +296,15 @@ resource "aws_lambda_function" "check_user_node_access" {
   )
 }
 
-# Lambda permission to allow any Lambda function in the same account to invoke this function
+# Lambda permission to allow any Lambda function in the same account to invoke this function.
+# The principal is the account root ARN, not the bare account ID: AWS stores an
+# account-ID principal as this ARN, and since principal forces replacement, the
+# bare ID makes every plan destroy and recreate this permission.
 resource "aws_lambda_permission" "allow_same_account_lambdas" {
   statement_id  = "AllowSameAccountLambdasInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.check_user_node_access.function_name
-  principal     = data.aws_caller_identity.current.account_id
+  principal     = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
 }
 
 # Health Checker Lambda Function
