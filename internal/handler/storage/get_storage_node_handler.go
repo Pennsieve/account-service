@@ -135,6 +135,7 @@ func GetStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		Status:          node.Status,
 		CreatedAt:       node.CreatedAt,
 		CreatedBy:       node.CreatedBy,
+		Provisioned:     node.Provisioned,
 		Workspaces:      wsEnablements,
 	}
 

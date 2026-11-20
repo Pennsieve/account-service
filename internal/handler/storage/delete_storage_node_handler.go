@@ -27,8 +27,10 @@ import (
 // DeleteStorageNodeHandler deletes a storage node
 // DELETE /storage-nodes/{id}
 //
-// For provisioned nodes (status was Pending→Enabled via provisioner), launches a Fargate destroy task.
-// For registered nodes (skipProvisioning=true), deletes the DynamoDB record directly.
+// For provisioned S3 nodes (created by the provisioner), launches a Fargate destroy task.
+// For registered nodes (skipProvisioning=true, or records predating the
+// provisioned flag) and non-S3 nodes, deletes the DynamoDB record directly and
+// leaves the bucket untouched.
 func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "DeleteStorageNodeHandler"
 	nodeId := request.PathParameters["id"]
@@ -141,7 +143,7 @@ func DeleteStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	}
 
 	storageTaskDefArn := os.Getenv("STORAGE_TASK_DEF_ARN")
-	needsProvisioning := node.ProviderType == "s3" && storageTaskDefArn != "" && envValue != "DOCKER" && envValue != "TEST"
+	needsProvisioning := node.RunsProvisioner() && storageTaskDefArn != "" && envValue != "DOCKER" && envValue != "TEST"
 
 	if needsProvisioning {
 		// Resolve access BEFORE marking the node Destroying: a node we cannot

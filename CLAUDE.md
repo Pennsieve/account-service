@@ -34,9 +34,10 @@ See `docs/storage-nodes-plan.md` for the full design. Key concepts:
 - Storage nodes represent S3 buckets (or Azure/local storage) managed through the API
 - Two managed IAM policies (`{env}-storage-bucket-read`, `{env}-storage-bucket-write`) are auto-updated when storage nodes are created/modified/deleted
 - `skipProvisioning: true` registers existing buckets without launching the provisioner
+- The node record's `provisioned` flag says whether the provisioner created the bucket; records without it read as registered
 - `deploymentMode`: `basic` (AES256) or `compliant` (SSE-KMS with auto-rotating key)
-- `POST /storage-nodes/{id}/update-config` re-applies provisioner terraform (safe — `prevent_destroy` on buckets)
-- DELETE requires `pennsieve:allow-delete=true` tag on the S3 bucket as a safety check
+- `POST /storage-nodes/{id}/update-config` re-applies provisioner terraform (safe — `prevent_destroy` on buckets); provisioned nodes only
+- DELETE requires `pennsieve:allow-delete=true` tag on the S3 bucket as a safety check; it runs the provisioner's destroy only for provisioned nodes, and otherwise just removes the record
 - EventBridge handler routes by source: `storage-node-provisioner` vs `compute-node-provisioner`
 
 ## Permission Model

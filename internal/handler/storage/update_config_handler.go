@@ -100,6 +100,16 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
+	// A registered bucket was not created by the provisioner, which has no
+	// Terraform state for it; running the provisioner against it could create
+	// or reconfigure resources on a live bucket.
+	if !node.RunsProvisioner() {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       errors.ComputeHandlerError(handlerName, errors.ErrStorageNodeNotProvisioned),
+		}, nil
+	}
+
 	envValue := os.Getenv("ENV")
 	storageTaskDefArn := os.Getenv("STORAGE_TASK_DEF_ARN")
 	if storageTaskDefArn == "" || envValue == "DOCKER" || envValue == "TEST" {

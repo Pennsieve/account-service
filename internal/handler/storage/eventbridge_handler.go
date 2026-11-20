@@ -89,6 +89,9 @@ func handleStorageCreateComplete(ctx context.Context, cfg awsconfig.Config, stor
 	}
 
 	node.Status = "Enabled"
+	// The provisioner created this bucket. Set explicitly so a node whose
+	// creation started before the provisioned flag existed is still recorded.
+	node.Provisioned = true
 	if err := storageNodeStore.Put(ctx, node); err != nil {
 		return fmt.Errorf("failed to update storage node: %w", err)
 	}

@@ -32,6 +32,7 @@ type StorageNode struct {
 	Status          string                           `json:"status"`
 	CreatedAt       string                           `json:"createdAt"`
 	CreatedBy       string                           `json:"createdBy"`
+	Provisioned     bool                             `json:"provisioned"`
 	Workspaces      []StorageNodeWorkspaceEnablement `json:"workspaces,omitempty"`
 }
 
@@ -68,6 +69,19 @@ type DynamoDBStorageNode struct {
 	Status          string `dynamodbav:"status"`
 	CreatedAt       string `dynamodbav:"createdAt"`
 	CreatedBy       string `dynamodbav:"createdBy"`
+	// Provisioned is true when the bucket was created by the storage node
+	// provisioner, which therefore holds Terraform state for it and may update
+	// or destroy it. Nodes registered from an existing bucket
+	// (skipProvisioning) are false. A record without the attribute reads as
+	// false, so older records are treated as registered, not provisioned: the provisioner is
+	// never pointed at a bucket it did not create.
+	Provisioned bool `dynamodbav:"provisioned"`
+}
+
+// RunsProvisioner reports whether the storage node provisioner manages this
+// node's bucket, i.e. whether update-config and delete should launch it.
+func (i DynamoDBStorageNode) RunsProvisioner() bool {
+	return i.ProviderType == "s3" && i.Provisioned
 }
 
 func (i DynamoDBStorageNode) GetKey() map[string]types.AttributeValue {

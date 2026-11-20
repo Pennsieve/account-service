@@ -169,6 +169,8 @@ After all services use the new resolution:
 - `skipProvisioning: true` → status `Enabled`, no Fargate task, returns `201 Created`
 - `deploymentMode`: `basic` (AES256) or `compliant` (SSE-KMS with auto-rotating key)
 
+The node record stores `provisioned` (also returned by the API): `true` for an S3 node whose bucket the provisioner created, `false` for a registered bucket or a non-S3 node. A record without the attribute reads as `false`, so nodes created before the flag existed are treated as registered. Update-config and delete only launch the provisioner for provisioned nodes, since it has no Terraform state for a bucket it did not create.
+
 ### Storage Node Lifecycle
 
 ```
@@ -185,7 +187,7 @@ POST (skipProvisioning=false)     POST (skipProvisioning=true)
                                   ▼
                                Enabled
 
-POST update-config
+POST update-config (provisioned nodes only; registered → 400)
   │
   ▼
 Updating ──EventBridge──→ Enabled
@@ -194,10 +196,15 @@ Updating ──EventBridge──→ Enabled
   ▼
 Failed
 
-DELETE (requires pennsieve:allow-delete tag on bucket)
+DELETE, provisioned node (requires pennsieve:allow-delete tag on bucket)
   │
   ▼
 Destroying ──EventBridge──→ (deleted from DynamoDB)
+
+DELETE, registered or non-S3 node (S3 still requires the tag)
+  │
+  ▼
+(deleted from DynamoDB; bucket untouched)
 ```
 
 ### Delete Safeguard
@@ -218,7 +225,7 @@ This safeguard applies to all S3 storage nodes (both provisioned and registered)
 
 ### Update Config
 
-`POST /storage-nodes/{id}/update-config` re-applies the provisioner's terraform against the existing state. This updates bucket configuration (CORS, lifecycle, encryption settings, etc.) without touching bucket contents.
+`POST /storage-nodes/{id}/update-config` re-applies the provisioner's terraform against the existing state. This updates bucket configuration (CORS, lifecycle, encryption settings, etc.) without touching bucket contents. It is only available for provisioned nodes: a registered bucket has no provisioner state and is configured wherever it was created, so the API rejects the request with `400`.
 
 Safety: the storage bucket has `prevent_destroy = true` in terraform, so terraform will refuse to destroy the bucket even if a configuration change would normally trigger a replacement.
 

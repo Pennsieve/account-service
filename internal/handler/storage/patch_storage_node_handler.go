@@ -148,6 +148,7 @@ func PatchStorageNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		Status:          node.Status,
 		CreatedAt:       node.CreatedAt,
 		CreatedBy:       node.CreatedBy,
+		Provisioned:     node.Provisioned,
 	}
 
 	m, err := json.Marshal(response)

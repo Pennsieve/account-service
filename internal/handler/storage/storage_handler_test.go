@@ -396,6 +396,123 @@ func TestPostStorageNodeHandler_OwnerBypassesEnableStorage(t *testing.T) {
 	assert.Equal(t, 201, response.StatusCode)
 }
 
+func TestPostStorageNodeHandler_RecordsProvisioned(t *testing.T) {
+	accountStore, storageNodeStore, _ := setupStorageHandlerTest(t)
+	ctx := context.Background()
+	userId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, userId)
+
+	for _, tc := range []struct {
+		name             string
+		providerType     string
+		storageLocation  string
+		skipProvisioning bool
+		wantStatusCode   int
+		wantProvisioned  bool
+	}{
+		{"registered s3", "s3", "registered-bucket", true, 201, false},
+		{"provisioned s3", "s3", "provisioned-bucket", false, 202, true},
+		{"non-s3 without skip", "local", "/data/local-store", false, 201, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reqBody, _ := json.Marshal(models.CreateStorageNodeRequest{
+				AccountUuid:      testAccount.Uuid,
+				Name:             tc.name,
+				StorageLocation:  tc.storageLocation,
+				ProviderType:     tc.providerType,
+				SkipProvisioning: tc.skipProvisioning,
+			})
+			request := events.APIGatewayV2HTTPRequest{
+				Body: string(reqBody),
+				RequestContext: events.APIGatewayV2HTTPRequestContext{
+					Authorizer: test.CreateTestAuthorizer(userId, ""),
+				},
+			}
+
+			response, err := storage.PostStorageNodeHandler(ctx, request)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantStatusCode, response.StatusCode, response.Body)
+
+			var node models.StorageNode
+			require.NoError(t, json.Unmarshal([]byte(response.Body), &node))
+			assert.Equal(t, tc.wantProvisioned, node.Provisioned)
+
+			stored, err := storageNodeStore.GetById(ctx, node.Uuid)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantProvisioned, stored.Provisioned)
+		})
+	}
+}
+
+// --- POST /storage-nodes/{id}/update-config ---
+
+func TestPostUpdateConfigHandler_RegisteredNodeRejected(t *testing.T) {
+	accountStore, storageNodeStore, _ := setupStorageHandlerTest(t)
+	ctx := context.Background()
+	userId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, userId)
+
+	// No Provisioned value: a registered node, or a record that predates the attribute.
+	testNode := models.DynamoDBStorageNode{
+		Uuid:            uuid.New().String(),
+		Name:            "Registered",
+		AccountUuid:     testAccount.Uuid,
+		StorageLocation: "registered-bucket",
+		ProviderType:    "s3",
+		Status:          "Enabled",
+		CreatedBy:       userId,
+	}
+	require.NoError(t, storageNodeStore.Put(ctx, testNode))
+
+	request := events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{"id": testNode.Uuid},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, ""),
+		},
+	}
+
+	response, err := storage.PostUpdateConfigHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, response.StatusCode)
+	assert.Contains(t, response.Body, "registered from an existing bucket")
+
+	// The node is left as it was, not moved to Updating.
+	stored, err := storageNodeStore.GetById(ctx, testNode.Uuid)
+	require.NoError(t, err)
+	assert.Equal(t, "Enabled", stored.Status)
+}
+
+func TestPostUpdateConfigHandler_ProvisionedNodeAccepted(t *testing.T) {
+	accountStore, storageNodeStore, _ := setupStorageHandlerTest(t)
+	ctx := context.Background()
+	userId := "user-" + test.GenerateTestId()
+	testAccount := createTestAccount(t, accountStore, userId)
+
+	testNode := models.DynamoDBStorageNode{
+		Uuid:            uuid.New().String(),
+		Name:            "Provisioned",
+		AccountUuid:     testAccount.Uuid,
+		StorageLocation: "provisioned-bucket",
+		ProviderType:    "s3",
+		Status:          "Enabled",
+		CreatedBy:       userId,
+		Provisioned:     true,
+	}
+	require.NoError(t, storageNodeStore.Put(ctx, testNode))
+
+	request := events.APIGatewayV2HTTPRequest{
+		PathParameters: map[string]string{"id": testNode.Uuid},
+		RequestContext: events.APIGatewayV2HTTPRequestContext{
+			Authorizer: test.CreateTestAuthorizer(userId, ""),
+		},
+	}
+
+	// In the test environment no task is launched; the handler accepts the request.
+	response, err := storage.PostUpdateConfigHandler(ctx, request)
+	assert.NoError(t, err)
+	assert.Equal(t, 202, response.StatusCode)
+}
+
 // --- GET /storage-nodes/{id} ---
 
 func TestGetStorageNodeHandler_Success(t *testing.T) {
