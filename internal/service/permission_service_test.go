@@ -145,6 +145,16 @@ func (m *MockNodeStore) Put(ctx context.Context, node models.DynamoDBNode) error
 	return args.Error(0)
 }
 
+func (m *MockNodeStore) StartProvisionerJob(ctx context.Context, node models.DynamoDBNode, read store_dynamodb.JobRead, staleBefore int64) error {
+	args := m.Called(ctx, node, read, staleBefore)
+	return args.Error(0)
+}
+
+func (m *MockNodeStore) PutIfJobUnchanged(ctx context.Context, node models.DynamoDBNode, readJobId string) error {
+	args := m.Called(ctx, node, readJobId)
+	return args.Error(0)
+}
+
 func (m *MockNodeStore) UpdateStatus(ctx context.Context, uuid, status string) error {
 	args := m.Called(ctx, uuid, status)
 	return args.Error(0)

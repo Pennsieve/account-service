@@ -1534,6 +1534,8 @@ paths:
                 $ref: '#/components/schemas/computeNodeResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another provisioner job (a create, update or delete) is changing the node; retry once it has finished
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':
@@ -1586,6 +1588,8 @@ paths:
                 $ref: '#/components/schemas/computeNodeResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: A provisioner job is changing the node (no status change until it reports), or one started or ended since the node was read; retry
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':
@@ -1628,6 +1632,8 @@ paths:
           description: Successfully deleted compute node
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another provisioner job (a create, update or delete) is changing the node; retry once it has finished
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':
@@ -1677,6 +1683,8 @@ paths:
           description: Forbidden (not node owner, account owner, or workspace administrator on public account)
         '404':
           description: Compute node not found
+        '409':
+          description: Another provisioner job (a create, update or delete) is changing the node; retry once it has finished
         '5XX':
           $ref: '#/components/responses/Error'
   /compute-nodes/{id}/permissions:

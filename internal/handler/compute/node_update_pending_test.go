@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/store_dynamodb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,23 @@ func (m *memNodeStore) GetByAccount(context.Context, string) ([]models.DynamoDBN
 }
 func (m *memNodeStore) GetAllEnabled(context.Context) ([]models.DynamoDBNode, error) { return nil, nil }
 func (m *memNodeStore) Put(_ context.Context, n models.DynamoDBNode) error {
+	m.nodes[n.Uuid] = n
+	return nil
+}
+func (m *memNodeStore) StartProvisionerJob(_ context.Context, n models.DynamoDBNode, read store_dynamodb.JobRead, staleBefore int64) error {
+	old, ok := m.nodes[n.Uuid]
+	if !ok || old.Status != read.Status || old.ProvisionerJobId != read.JobId ||
+		(old.ProvisionerJobId != "" && old.ProvisionerJobStartedAt >= staleBefore) {
+		return store_dynamodb.ErrProvisionerJobRunning
+	}
+	m.nodes[n.Uuid] = n
+	return nil
+}
+func (m *memNodeStore) PutIfJobUnchanged(_ context.Context, n models.DynamoDBNode, readJobId string) error {
+	old, ok := m.nodes[n.Uuid]
+	if !ok || old.ProvisionerJobId != readJobId {
+		return store_dynamodb.ErrNodeChanged
+	}
 	m.nodes[n.Uuid] = n
 	return nil
 }

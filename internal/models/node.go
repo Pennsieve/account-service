@@ -147,6 +147,14 @@ type DynamoDBNode struct {
 	Status          string `dynamodbav:"status"`
 	HealthStatus    string `dynamodbav:"healthStatus"`
 	LastHealthCheck string `dynamodbav:"lastHealthCheck"`
+	// ProvisionerJobId is the provisioner job (create, update or delete)
+	// changing the node, ProvisionerJobAction its ACTION and
+	// ProvisionerJobStartedAt when it started (Unix seconds). A job is
+	// started only when no other one holds the node (StartProvisionerJob),
+	// and ends when its event arrives.
+	ProvisionerJobId        string `dynamodbav:"provisionerJobId,omitempty"`
+	ProvisionerJobAction    string `dynamodbav:"provisionerJobAction,omitempty"`
+	ProvisionerJobStartedAt int64  `dynamodbav:"provisionerJobStartedAt,omitempty"`
 }
 
 func (i DynamoDBNode) GetKey() map[string]types.AttributeValue {
