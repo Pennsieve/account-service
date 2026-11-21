@@ -208,7 +208,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Save to DynamoDB, starting the job: refused (409) while another
 	// provisioner job is changing the node.
-	if err := startProvisionerJob(ctx, nodesStore, &computeNode, "UPDATE"); err != nil {
+	if err := startProvisionerJob(ctx, nodesStore, &computeNode, previousStatus, "UPDATE"); err != nil {
 		return provisionerJobRefused(handlerName, err), nil
 	}
 	log.Printf("Updated config for node %s: maxGpuInstances=%d, gpuTier=%s, enableLLMAccess=%v, maxInteractiveSessions=%d",

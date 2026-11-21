@@ -149,7 +149,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 		computeNode.MaxInteractiveSessions = *updateRequest.MaxInteractiveSessions
 	}
 	// Refused (409) while another provisioner job is changing the node.
-	if err := startProvisionerJob(ctx, dynamo_store, &computeNode, "UPDATE"); err != nil {
+	if err := startProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus, "UPDATE"); err != nil {
 		return provisionerJobRefused(handlerName, err), nil
 	}
 	// No update is running when the task doesn't start: the node is as it was.

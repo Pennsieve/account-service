@@ -29,17 +29,25 @@ func launchesProvisioner() bool {
 
 // startProvisionerJob stores node as the start of a provisioner job of
 // action (CREATE, UPDATE or DELETE), and fails with
-// store_dynamodb.ErrProvisionerJobRunning while another job holds the node:
-// two jobs applying one node's Terraform at once corrupt its state. In test
-// environments, which launch no job, node holds none.
-func startProvisionerJob(ctx context.Context, store store_dynamodb.NodeStore, node *models.DynamoDBNode, action string) error {
+// store_dynamodb.ErrProvisionerJobRunning while another job holds the node,
+// or when it changed since it was read with readStatus: two jobs applying
+// one node's Terraform at once corrupt its state. node's job is still the one
+// read. In test environments, which launch no job, node holds none.
+func startProvisionerJob(ctx context.Context, store store_dynamodb.NodeStore, node *models.DynamoDBNode, readStatus, action string) error {
+	read := store_dynamodb.JobRead{JobId: node.ProvisionerJobId, Status: readStatus}
 	now := time.Now()
 	if launchesProvisioner() {
 		node.ProvisionerJobId = uuid.NewString()
 		node.ProvisionerJobAction = action
 		node.ProvisionerJobStartedAt = now.Unix()
 	}
-	return store.StartProvisionerJob(ctx, *node, now.Add(-provisionerJobTimeout).Unix())
+	return store.StartProvisionerJob(ctx, *node, read, now.Add(-provisionerJobTimeout).Unix())
+}
+
+// jobHeld reports whether a provisioner job holds node: one that started
+// within provisionerJobTimeout and hasn't reported.
+func jobHeld(node models.DynamoDBNode) bool {
+	return node.ProvisionerJobId != "" && node.ProvisionerJobStartedAt >= time.Now().Add(-provisionerJobTimeout).Unix()
 }
 
 // endProvisionerJob clears node's job.
@@ -49,12 +57,13 @@ func endProvisionerJob(node *models.DynamoDBNode) {
 	node.ProvisionerJobStartedAt = 0
 }
 
-// abandonProvisionerJob stores node as it was before a job that failed to
+// abandonProvisionerJob stores node as it was before its job, which failed to
 // launch: with previousStatus and no job.
 func abandonProvisionerJob(ctx context.Context, store store_dynamodb.NodeStore, node *models.DynamoDBNode, previousStatus string) {
+	jobId := node.ProvisionerJobId
 	node.Status = previousStatus
 	endProvisionerJob(node)
-	if err := store.Put(ctx, *node); err != nil {
+	if err := store.PutIfJobUnchanged(ctx, *node, jobId); err != nil {
 		log.Printf("Error restoring node %s after its provisioner job failed to launch: %v", node.Uuid, err)
 	}
 }

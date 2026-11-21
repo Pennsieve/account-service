@@ -32,13 +32,13 @@ func TestStartProvisionerJob(t *testing.T) {
 
 	first := store.nodes["node-1"]
 	first.Status = "Updating"
-	require.NoError(t, startProvisionerJob(ctx, store, &first, "UPDATE"))
+	require.NoError(t, startProvisionerJob(ctx, store, &first, "Enabled", "UPDATE"))
 	assert.NotEmpty(t, first.ProvisionerJobId)
 	assert.Equal(t, "UPDATE", first.ProvisionerJobAction)
 	assert.Equal(t, first.ProvisionerJobId, store.nodes["node-1"].ProvisionerJobId)
 
 	second := store.nodes["node-1"]
-	err := startProvisionerJob(ctx, store, &second, "DELETE")
+	err := startProvisionerJob(ctx, store, &second, second.Status, "DELETE")
 	assert.ErrorIs(t, err, store_dynamodb.ErrProvisionerJobRunning)
 	assert.Equal(t, http.StatusConflict, provisionerJobRefused("H", err).StatusCode)
 	assert.Equal(t, first.ProvisionerJobId, store.nodes["node-1"].ProvisionerJobId)
@@ -55,7 +55,7 @@ func TestStartProvisionerJobTakesOverACrashedJob(t *testing.T) {
 		"node-1": heldNode("crashed", time.Now().Add(-provisionerJobTimeout-time.Minute)),
 	}}
 	n := store.nodes["node-1"]
-	require.NoError(t, startProvisionerJob(context.Background(), store, &n, "UPDATE"))
+	require.NoError(t, startProvisionerJob(context.Background(), store, &n, n.Status, "UPDATE"))
 	assert.NotEqual(t, "crashed", store.nodes["node-1"].ProvisionerJobId)
 }
 
@@ -66,18 +66,18 @@ func TestStartProvisionerJobInTests(t *testing.T) {
 	ctx := context.Background()
 	store := &memNodeStore{nodes: map[string]models.DynamoDBNode{"node-1": updatingNode()}}
 	n := store.nodes["node-1"]
-	require.NoError(t, startProvisionerJob(ctx, store, &n, "UPDATE"))
+	require.NoError(t, startProvisionerJob(ctx, store, &n, n.Status, "UPDATE"))
 	assert.Empty(t, store.nodes["node-1"].ProvisionerJobId)
 
 	store.nodes["node-1"] = heldNode("job-a", time.Now())
 	n = store.nodes["node-1"]
-	assert.ErrorIs(t, startProvisionerJob(ctx, store, &n, "UPDATE"), store_dynamodb.ErrProvisionerJobRunning)
+	assert.ErrorIs(t, startProvisionerJob(ctx, store, &n, n.Status, "UPDATE"), store_dynamodb.ErrProvisionerJobRunning)
 }
 
 // A job whose task didn't start leaves the node as it was, free.
 func TestAbandonProvisionerJob(t *testing.T) {
-	store := &memNodeStore{nodes: map[string]models.DynamoDBNode{}}
 	n := heldNode("job-a", time.Now())
+	store := &memNodeStore{nodes: map[string]models.DynamoDBNode{"node-1": n}}
 	abandonProvisionerJob(context.Background(), store, &n, "Enabled")
 	got := store.nodes["node-1"]
 	assert.Equal(t, "Enabled", got.Status)
@@ -132,4 +132,31 @@ func TestErrorForAMissingNode(t *testing.T) {
 	detail, _ := json.Marshal(ComputeNodeErrorEvent{Action: "DELETE", ComputeNodeId: "node-1", ErrorMessage: "boom"})
 	require.NoError(t, handleProvisioningError(context.Background(), store, detail))
 	assert.Empty(t, store.nodes)
+}
+
+// A request that read the node while a job held it doesn't start one over
+// what that job's event stored meanwhile (its gateway URL, its version).
+func TestStartProvisionerJobOnAStaleRead(t *testing.T) {
+	t.Setenv("ENV", "dev")
+	ctx := context.Background()
+	store := &memNodeStore{nodes: map[string]models.DynamoDBNode{"node-1": heldNode("job-a", time.Now().Add(-provisionerJobTimeout-time.Minute))}}
+	read := store.nodes["node-1"]
+
+	detail, _ := json.Marshal(ComputeNodeEvent{Action: "UPDATE", ComputeNodeId: "node-1", JobId: "job-a", ComputeNodeGatewayUrl: "https://new"})
+	require.NoError(t, handleUpdateComplete(ctx, store, detail))
+
+	assert.ErrorIs(t, startProvisionerJob(ctx, store, &read, read.Status, "UPDATE"), store_dynamodb.ErrProvisionerJobRunning)
+	assert.Equal(t, "https://new", store.nodes["node-1"].ComputeNodeGatewayUrl)
+	assert.Empty(t, store.nodes["node-1"].ProvisionerJobId)
+}
+
+// An event's write doesn't undo a job that started after it read the node:
+// it fails, and EventBridge retries it on the node as it is.
+func TestEventDoesNotOverwriteAJobStartedMeanwhile(t *testing.T) {
+	store := &memNodeStore{nodes: map[string]models.DynamoDBNode{"node-1": heldNode("job-b", time.Now())}}
+	n := updatingNode()
+	n.ProvisionerJobId = "job-a" // as the event's handler read it
+	endProvisionerJob(&n)
+	assert.ErrorIs(t, store.PutIfJobUnchanged(context.Background(), n, "job-a"), store_dynamodb.ErrNodeChanged)
+	assert.Equal(t, "job-b", store.nodes["node-1"].ProvisionerJobId)
 }

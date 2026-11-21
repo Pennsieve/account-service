@@ -1588,6 +1588,8 @@ paths:
                 $ref: '#/components/schemas/computeNodeResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: A provisioner job is changing the node (no status change until it reports), or one started or ended since the node was read; retry
         '4XX':
           $ref: '#/components/responses/Unauthorized'
         '5XX':

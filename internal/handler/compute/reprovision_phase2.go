@@ -69,7 +69,7 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 	// Phase 2 is an update like any other: not while another job (an update
 	// someone started meanwhile, which completes phase 2 as well) holds the
 	// node. The node keeps its status.
-	if err := startProvisionerJob(ctx, nodeStore, &node, "UPDATE"); err != nil {
+	if err := startProvisionerJob(ctx, nodeStore, &node, node.Status, "UPDATE"); err != nil {
 		log.Printf("phase2: not re-provisioning node %s: %v", computeNodeID, err)
 		return
 	}

@@ -25,6 +25,10 @@ func jobTestNode() models.DynamoDBNode {
 	}
 }
 
+func read(jobId, status string) store_dynamodb.JobRead {
+	return store_dynamodb.JobRead{JobId: jobId, Status: status}
+}
+
 func withJob(n models.DynamoDBNode, id, status string, startedAt int64) models.DynamoDBNode {
 	n.ProvisionerJobId = id
 	n.ProvisionerJobAction = "UPDATE"
@@ -45,7 +49,7 @@ func TestNodeStore_StartProvisionerJob(t *testing.T) {
 	require.NoError(t, store.Put(ctx, node))
 
 	// A free node: the job starts, with the node's changes.
-	require.NoError(t, store.StartProvisionerJob(ctx, withJob(node, "job-a", "Updating", now), staleBefore))
+	require.NoError(t, store.StartProvisionerJob(ctx, withJob(node, "job-a", "Updating", now), read("", "Enabled"), staleBefore))
 	got, err := store.GetById(ctx, node.Uuid)
 	require.NoError(t, err)
 	assert.Equal(t, "job-a", got.ProvisionerJobId)
@@ -56,7 +60,7 @@ func TestNodeStore_StartProvisionerJob(t *testing.T) {
 	// Held: a second job is refused, and nothing it carried is stored.
 	second := withJob(node, "job-b", "Destroying", now)
 	second.Name = "renamed"
-	err = store.StartProvisionerJob(ctx, second, staleBefore)
+	err = store.StartProvisionerJob(ctx, second, read("job-a", "Updating"), staleBefore)
 	assert.ErrorIs(t, err, store_dynamodb.ErrProvisionerJobRunning)
 	got, _ = store.GetById(ctx, node.Uuid)
 	assert.Equal(t, "job-a", got.ProvisionerJobId)
@@ -64,17 +68,20 @@ func TestNodeStore_StartProvisionerJob(t *testing.T) {
 	assert.Equal(t, "job-node", got.Name)
 
 	// Nor does a start without a job (a test environment's) get through.
-	assert.ErrorIs(t, store.StartProvisionerJob(ctx, node, staleBefore), store_dynamodb.ErrProvisionerJobRunning)
+	assert.ErrorIs(t, store.StartProvisionerJob(ctx, node, read("", "Enabled"), staleBefore), store_dynamodb.ErrProvisionerJobRunning)
 
 	// Ended (the job's event stored the node without it): the next starts.
 	got.ProvisionerJobId, got.ProvisionerJobAction, got.ProvisionerJobStartedAt = "", "", 0
 	require.NoError(t, store.Put(ctx, got))
-	require.NoError(t, store.StartProvisionerJob(ctx, withJob(node, "job-c", "Updating", now), staleBefore))
+	require.NoError(t, store.StartProvisionerJob(ctx, withJob(node, "job-c", "Updating", now), read("", "Updating"), staleBefore))
+
+	// Read before job-c's start: no longer as read.
+	assert.ErrorIs(t, store.StartProvisionerJob(ctx, withJob(node, "job-x", "Updating", now), read("", "Updating"), staleBefore), store_dynamodb.ErrProvisionerJobRunning)
 
 	// A job older than the timeout never reported (its task crashed): it no
 	// longer holds the node.
 	require.NoError(t, store.Put(ctx, withJob(node, "job-crashed", "Updating", staleBefore-1)))
-	require.NoError(t, store.StartProvisionerJob(ctx, withJob(node, "job-d", "Updating", now), staleBefore))
+	require.NoError(t, store.StartProvisionerJob(ctx, withJob(node, "job-d", "Updating", now), read("job-crashed", "Updating"), staleBefore))
 	got, _ = store.GetById(ctx, node.Uuid)
 	assert.Equal(t, "job-d", got.ProvisionerJobId)
 }
@@ -85,7 +92,7 @@ func TestNodeStore_StartProvisionerJob_NodeGone(t *testing.T) {
 	store := setupNodeStoreTest(t)
 	ctx := context.Background()
 	node := jobTestNode()
-	err := store.StartProvisionerJob(ctx, withJob(node, "job-a", "Updating", time.Now().Unix()), 0)
+	err := store.StartProvisionerJob(ctx, withJob(node, "job-a", "Updating", time.Now().Unix()), read("", "Enabled"), 0)
 	assert.Error(t, err)
 	got, _ := store.GetById(ctx, node.Uuid)
 	assert.Empty(t, got.Uuid, "the start created the node")
@@ -106,7 +113,7 @@ func TestNodeStore_StartProvisionerJob_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = store.StartProvisionerJob(ctx, withJob(node, uuid.NewString(), "Updating", now), now-3600)
+			errs[i] = store.StartProvisionerJob(ctx, withJob(node, uuid.NewString(), "Updating", now), read("", "Enabled"), now-3600)
 		}(i)
 	}
 	wg.Wait()
@@ -120,4 +127,31 @@ func TestNodeStore_StartProvisionerJob_Concurrent(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, started)
+}
+
+// Writers that aren't starting a job (PATCH, a job's event) don't drop a job
+// that started, or bring back one that ended, since they read the node.
+func TestNodeStore_PutIfJobUnchanged(t *testing.T) {
+	store := setupNodeStoreTest(t)
+	ctx := context.Background()
+	node := withJob(jobTestNode(), "job-a", "Updating", time.Now().Unix())
+	require.NoError(t, store.Put(ctx, node))
+
+	renamed := node
+	renamed.Name = "renamed"
+	assert.ErrorIs(t, store.PutIfJobUnchanged(ctx, renamed, ""), store_dynamodb.ErrNodeChanged)
+	require.NoError(t, store.PutIfJobUnchanged(ctx, renamed, "job-a"))
+
+	ended := renamed
+	ended.ProvisionerJobId, ended.ProvisionerJobAction, ended.ProvisionerJobStartedAt = "", "", 0
+	require.NoError(t, store.PutIfJobUnchanged(ctx, ended, "job-a"))
+	// A write from before the job ended doesn't bring it back.
+	assert.ErrorIs(t, store.PutIfJobUnchanged(ctx, renamed, "job-a"), store_dynamodb.ErrNodeChanged)
+
+	got, _ := store.GetById(ctx, node.Uuid)
+	assert.Empty(t, got.ProvisionerJobId)
+	assert.Equal(t, "renamed", got.Name)
+
+	gone := jobTestNode()
+	assert.ErrorIs(t, store.PutIfJobUnchanged(ctx, gone, ""), store_dynamodb.ErrNodeChanged)
 }

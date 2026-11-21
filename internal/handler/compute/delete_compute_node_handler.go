@@ -189,7 +189,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	// or update still running) is changing the node.
 	previousStatus := computeNode.Status
 	computeNode.Status = "Destroying"
-	if err := startProvisionerJob(ctx, dynamo_store, &computeNode, "DELETE"); err != nil {
+	if err := startProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus, "DELETE"); err != nil {
 		return provisionerJobRefused(handlerName, err), nil
 	}
 	log.Printf("Set node %s status to Destroying", uuid)

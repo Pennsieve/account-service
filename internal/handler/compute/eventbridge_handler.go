@@ -124,10 +124,12 @@ func handleProvisioningComplete(ctx context.Context, nodeStore store_dynamodb.No
 	node.EfsId = event.EfsId
 	node.QueueUrl = event.QueueUrl
 	node.Status = "Enabled" // Change from Pending to Enabled
+	readJobId := node.ProvisionerJobId
 	endProvisionerJob(&node)
 
-	// Update the node in DynamoDB
-	if err := nodeStore.Put(ctx, node); err != nil {
+	// Update the node in DynamoDB (if no job started or ended meanwhile; the
+	// event is then retried on the node as it is)
+	if err := nodeStore.PutIfJobUnchanged(ctx, node, readJobId); err != nil {
 		log.Printf("Error updating node %s: %v", event.ComputeNodeId, err)
 		return fmt.Errorf("failed to update node: %w", err)
 	}
@@ -207,8 +209,9 @@ func handleProvisioningError(ctx context.Context, nodeStore store_dynamodb.NodeS
 	node.Status = "Failed"
 	node.PendingProvisionerImage = ""
 	node.PendingProvisionerImageTag = ""
+	readJobId := node.ProvisionerJobId
 	endProvisionerJob(&node)
-	if err := nodeStore.Put(ctx, node); err != nil {
+	if err := nodeStore.PutIfJobUnchanged(ctx, node, readJobId); err != nil {
 		log.Printf("Error updating node %s status to Failed: %v", event.ComputeNodeId, err)
 		return fmt.Errorf("failed to update node status: %w", err)
 	}
@@ -282,10 +285,12 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 
 	// Ensure status is Enabled after successful update
 	node.Status = "Enabled"
+	readJobId := node.ProvisionerJobId
 	endProvisionerJob(&node)
 
-	// Save the updated node
-	if err := nodeStore.Put(ctx, node); err != nil {
+	// Save the updated node (if no job started or ended meanwhile; the event
+	// is then retried on the node as it is)
+	if err := nodeStore.PutIfJobUnchanged(ctx, node, readJobId); err != nil {
 		log.Printf("Error updating node %s: %v", event.ComputeNodeId, err)
 		return fmt.Errorf("failed to update node: %w", err)
 	}

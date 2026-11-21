@@ -28,10 +28,19 @@ func (m *memNodeStore) Put(_ context.Context, n models.DynamoDBNode) error {
 	m.nodes[n.Uuid] = n
 	return nil
 }
-func (m *memNodeStore) StartProvisionerJob(_ context.Context, n models.DynamoDBNode, staleBefore int64) error {
+func (m *memNodeStore) StartProvisionerJob(_ context.Context, n models.DynamoDBNode, read store_dynamodb.JobRead, staleBefore int64) error {
 	old, ok := m.nodes[n.Uuid]
-	if !ok || (old.ProvisionerJobId != "" && old.ProvisionerJobStartedAt >= staleBefore) {
+	if !ok || old.Status != read.Status || old.ProvisionerJobId != read.JobId ||
+		(old.ProvisionerJobId != "" && old.ProvisionerJobStartedAt >= staleBefore) {
 		return store_dynamodb.ErrProvisionerJobRunning
+	}
+	m.nodes[n.Uuid] = n
+	return nil
+}
+func (m *memNodeStore) PutIfJobUnchanged(_ context.Context, n models.DynamoDBNode, readJobId string) error {
+	old, ok := m.nodes[n.Uuid]
+	if !ok || old.ProvisionerJobId != readJobId {
+		return store_dynamodb.ErrNodeChanged
 	}
 	m.nodes[n.Uuid] = n
 	return nil

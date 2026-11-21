@@ -76,3 +76,37 @@ func TestHandlersRefuseASecondProvisionerJob(t *testing.T) {
 		})
 	}
 }
+
+// PATCH leaves a running job's node to it: no status change, and a rename
+// keeps the job.
+func TestPatchWhileAProvisionerJobRuns(t *testing.T) {
+	nodeStore, _ := setupPutComputeNodeHandlerTest(t)
+	ctx := context.Background()
+	node := createTestNode(test.GenerateTestId())
+	node.Status = "Updating"
+	node.ProvisionerJobId = "job-a"
+	node.ProvisionerJobStartedAt = time.Now().Unix()
+	require.NoError(t, nodeStore.Put(ctx, node))
+
+	patch := func(body map[string]any) events.APIGatewayV2HTTPResponse {
+		b, _ := json.Marshal(body)
+		response, err := compute.PatchComputeNodeHandler(ctx, events.APIGatewayV2HTTPRequest{
+			PathParameters: map[string]string{"id": node.Uuid},
+			Body:           string(b),
+			RequestContext: events.APIGatewayV2HTTPRequestContext{
+				Authorizer: test.CreateTestAuthorizer(node.UserId, node.OrganizationId),
+			},
+		})
+		require.NoError(t, err)
+		return response
+	}
+
+	assert.Equal(t, 409, patch(map[string]any{"status": "Paused"}).StatusCode)
+	assert.Equal(t, 200, patch(map[string]any{"name": "renamed"}).StatusCode)
+
+	stored, err := nodeStore.GetById(ctx, node.Uuid)
+	require.NoError(t, err)
+	assert.Equal(t, "Updating", stored.Status)
+	assert.Equal(t, "renamed", stored.Name)
+	assert.Equal(t, "job-a", stored.ProvisionerJobId)
+}
