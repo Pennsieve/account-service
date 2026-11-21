@@ -66,10 +66,19 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 		provisionerImageTag = "latest"
 	}
 
+	// Phase 2 is an update like any other: not while another job (an update
+	// someone started meanwhile, which completes phase 2 as well) holds the
+	// node. The node keeps its status.
+	if err := startProvisionerJob(ctx, nodeStore, &node, "UPDATE"); err != nil {
+		log.Printf("phase2: not re-provisioning node %s: %v", computeNodeID, err)
+		return
+	}
+
 	client := ecs.NewFromConfig(cfg)
 	taskDef, err := createDynamicTaskDefinition(ctx, cfg, client, provisionerImage, provisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("phase2: task def for node %s: %v", computeNodeID, err)
+		abandonProvisionerJob(ctx, nodeStore, &node, node.Status)
 		return
 	}
 
@@ -112,6 +121,7 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 		"ENABLE_INTERACTIVE":       "true",
 		"ROLE_NAME":                account.RoleName,
 		"EXTERNAL_ID":              account.ExternalId,
+		"PROVISIONER_JOB_ID":       node.ProvisionerJobId,
 	})
 
 	runTaskIn := &ecs.RunTaskInput{
@@ -133,6 +143,7 @@ func triggerInteractivePhase2(ctx context.Context, cfg aws.Config, nodeStore sto
 	}
 	if err := runner.NewECSTaskRunner(client, runTaskIn).Run(ctx); err != nil {
 		log.Printf("phase2: re-provision RunTask for node %s failed: %v", computeNodeID, err)
+		abandonProvisionerJob(ctx, nodeStore, &node, node.Status)
 		return
 	}
 	log.Printf("phase2: auto-triggered re-provision (UPDATE) for node %s to complete interactive HTTPS", computeNodeID)

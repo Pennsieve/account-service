@@ -29,6 +29,9 @@ type ComputeNodeEvent struct {
 	ProvisionerImage      string `json:"provisionerImage,omitempty"`
 	ProvisionerImageTag   string `json:"provisionerImageTag,omitempty"`
 	CreatedAt             string `json:"createdAt,omitempty"`
+	// JobId is the provisioner job that reports (PROVISIONER_JOB_ID); empty
+	// from a provisioner that predates job ids.
+	JobId string `json:"jobId,omitempty"`
 
 	// Interactive (Jupyter) session subdomain delegation. Present when the node
 	// enabled interactive sessions; account-service upserts the NS record in the
@@ -45,6 +48,7 @@ type ComputeNodeErrorEvent struct {
 	ErrorMessage  string `json:"errorMessage"`
 	ErrorType     string `json:"errorType"`
 	Timestamp     string `json:"timestamp"`
+	JobId         string `json:"jobId,omitempty"`
 }
 
 // ComputeNodeEventBridgeHandler handles EventBridge events from the compute node provisioner
@@ -110,11 +114,17 @@ func handleProvisioningComplete(ctx context.Context, nodeStore store_dynamodb.No
 		return fmt.Errorf("node %s not found", event.ComputeNodeId)
 	}
 
+	if !isCurrentJob(node, event.JobId) {
+		log.Printf("Ignoring CREATE completion of job %s: node %s is held by job %s", event.JobId, event.ComputeNodeId, node.ProvisionerJobId)
+		return nil
+	}
+
 	// Update node with provisioning results
 	node.ComputeNodeGatewayUrl = event.ComputeNodeGatewayUrl
 	node.EfsId = event.EfsId
 	node.QueueUrl = event.QueueUrl
 	node.Status = "Enabled" // Change from Pending to Enabled
+	endProvisionerJob(&node)
 
 	// Update the node in DynamoDB
 	if err := nodeStore.Put(ctx, node); err != nil {
@@ -178,19 +188,29 @@ func handleProvisioningError(ctx context.Context, nodeStore store_dynamodb.NodeS
 
 	log.Printf("Processing provisioning error for node %s: %s", event.ComputeNodeId, event.ErrorMessage)
 
-	// Update node status to Failed
-	if err := nodeStore.UpdateStatus(ctx, event.ComputeNodeId, "Failed"); err != nil {
-		log.Printf("Error updating node %s status to Failed: %v", event.ComputeNodeId, err)
-		return fmt.Errorf("failed to update node status: %w", err)
+	node, err := nodeStore.GetById(ctx, event.ComputeNodeId)
+	if err != nil {
+		log.Printf("Error fetching node %s: %v", event.ComputeNodeId, err)
+		return fmt.Errorf("failed to fetch node: %w", err)
+	}
+	if node.Uuid == "" {
+		log.Printf("Node %s not found in database", event.ComputeNodeId)
+		return nil
+	}
+	if !isCurrentJob(node, event.JobId) {
+		log.Printf("Ignoring %s error of job %s: node %s is held by job %s", event.Action, event.JobId, event.ComputeNodeId, node.ProvisionerJobId)
+		return nil
 	}
 
-	// A failed update leaves the node on the version it was running.
-	if node, err := nodeStore.GetById(ctx, event.ComputeNodeId); err == nil && node.PendingProvisionerImageTag != "" {
-		node.PendingProvisionerImage = ""
-		node.PendingProvisionerImageTag = ""
-		if err := nodeStore.Put(ctx, node); err != nil {
-			log.Printf("Error clearing the pending update of node %s: %v", event.ComputeNodeId, err)
-		}
+	// Update node status to Failed, ending its job. A failed update leaves
+	// the node on the version it was running.
+	node.Status = "Failed"
+	node.PendingProvisionerImage = ""
+	node.PendingProvisionerImageTag = ""
+	endProvisionerJob(&node)
+	if err := nodeStore.Put(ctx, node); err != nil {
+		log.Printf("Error updating node %s status to Failed: %v", event.ComputeNodeId, err)
+		return fmt.Errorf("failed to update node status: %w", err)
 	}
 
 	// Optionally, store error details in a separate field or log
@@ -219,6 +239,11 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 	if node.Uuid == "" {
 		log.Printf("Node %s not found in database", event.ComputeNodeId)
 		return fmt.Errorf("node %s not found", event.ComputeNodeId)
+	}
+
+	if !isCurrentJob(node, event.JobId) {
+		log.Printf("Ignoring UPDATE completion of job %s: node %s is held by job %s", event.JobId, event.ComputeNodeId, node.ProvisionerJobId)
+		return nil
 	}
 
 	// Update infrastructure details if provided
@@ -257,6 +282,7 @@ func handleUpdateComplete(ctx context.Context, nodeStore store_dynamodb.NodeStor
 
 	// Ensure status is Enabled after successful update
 	node.Status = "Enabled"
+	endProvisionerJob(&node)
 
 	// Save the updated node
 	if err := nodeStore.Put(ctx, node); err != nil {

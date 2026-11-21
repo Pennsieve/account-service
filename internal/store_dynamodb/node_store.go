@@ -2,6 +2,7 @@ package store_dynamodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -19,6 +20,7 @@ type NodeStore interface {
 	GetByAccount(context.Context, string) ([]models.DynamoDBNode, error)
 	GetAllEnabled(context.Context) ([]models.DynamoDBNode, error)
 	Put(context.Context, models.DynamoDBNode) error
+	StartProvisionerJob(ctx context.Context, node models.DynamoDBNode, staleBefore int64) error
 	UpdateStatus(context.Context, string, string) error
 	UpdateHealthStatus(ctx context.Context, uuid string, healthStatus string, lastHealthCheck string) error
 	Delete(context.Context, string) error
@@ -84,15 +86,9 @@ func (r *NodeDatabaseStore) Get(ctx context.Context, filter string) ([]models.Dy
 // Put stores node, with organizationId derived from its tenant. A node read
 // before it had a tenant gets one from its organizationId and userId.
 func (r *NodeDatabaseStore) Put(ctx context.Context, node models.DynamoDBNode) error {
-	node, err := node.WithTenant()
+	item, err := nodeItem(node)
 	if err != nil {
-		return fmt.Errorf("error resolving tenant of node %s: %w", node.Uuid, err)
-	}
-	node.OrganizationId = models.LegacyOrganizationId(node.Tenant)
-
-	item, err := attributevalue.MarshalMap(node)
-	if err != nil {
-		return fmt.Errorf("error marshaling node: %w", err)
+		return err
 	}
 
 	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
@@ -104,6 +100,64 @@ func (r *NodeDatabaseStore) Put(ctx context.Context, node models.DynamoDBNode) e
 	}
 
 	return nil
+}
+
+// ErrProvisionerJobRunning is StartProvisionerJob's refusal: another
+// provisioner job is changing the node.
+var ErrProvisionerJobRunning = errors.New("another provisioner job is changing this compute node; try again once it has finished")
+
+// StartProvisionerJob stores node, an existing node, as Put does, unless
+// another provisioner job holds it: one that started at or after staleBefore
+// (Unix seconds), whose end hasn't been recorded. Two jobs applying a node's
+// Terraform at once leave its state missing resources, so a job is started
+// only through here. node holds its new job in ProvisionerJobId, or none
+// when that is empty (test environments, which launch no job).
+func (r *NodeDatabaseStore) StartProvisionerJob(ctx context.Context, node models.DynamoDBNode, staleBefore int64) error {
+	item, err := nodeItem(node)
+	if err != nil {
+		return err
+	}
+
+	cond := expression.AttributeExists(expression.Name("uuid")).And(expression.Or(
+		expression.AttributeNotExists(expression.Name("provisionerJobId")),
+		expression.Name("provisionerJobStartedAt").LessThan(expression.Value(staleBefore)),
+	))
+	expr, err := expression.NewBuilder().WithCondition(cond).Build()
+	if err != nil {
+		return fmt.Errorf("error building condition expression: %w", err)
+	}
+
+	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
+		Item:                      item,
+		TableName:                 aws.String(r.TableName),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	var held *ddbtypes.ConditionalCheckFailedException
+	if errors.As(err, &held) {
+		return ErrProvisionerJobRunning
+	}
+	if err != nil {
+		return fmt.Errorf("error putting node: %w", err)
+	}
+
+	return nil
+}
+
+// nodeItem is node as stored, with organizationId derived from its tenant.
+func nodeItem(node models.DynamoDBNode) (map[string]ddbtypes.AttributeValue, error) {
+	node, err := node.WithTenant()
+	if err != nil {
+		return nil, fmt.Errorf("error resolving tenant of node %s: %w", node.Uuid, err)
+	}
+	node.OrganizationId = models.LegacyOrganizationId(node.Tenant)
+
+	item, err := attributevalue.MarshalMap(node)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling node: %w", err)
+	}
+	return item, nil
 }
 
 func (r *NodeDatabaseStore) GetByAccount(ctx context.Context, accountUuid string) ([]models.DynamoDBNode, error) {
