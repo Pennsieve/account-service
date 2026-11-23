@@ -148,12 +148,15 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	if updateRequest.MaxInteractiveSessions != nil {
 		computeNode.MaxInteractiveSessions = *updateRequest.MaxInteractiveSessions
 	}
-	if err := dynamo_store.Put(ctx, computeNode); err != nil {
-		log.Printf("Error updating provisioner image/tag for node %s: %v", uuid, err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
-		}, nil
+	// Refused (409) while another provisioner job is changing the node.
+	if err := startProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus, "UPDATE"); err != nil {
+		return provisionerJobRefused(handlerName, err), nil
+	}
+	// No update is running when the task doesn't start: the node is as it was.
+	abandon := func() {
+		computeNode.PendingProvisionerImage = ""
+		computeNode.PendingProvisionerImageTag = ""
+		abandonProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus)
 	}
 
 	// In test environment, skip ECS task execution and return mock response
@@ -268,11 +271,14 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	roleNameValue := account.RoleName
 	externalIdKey := "EXTERNAL_ID"
 	externalIdValue := account.ExternalId
+	provisionerJobIdKey := "PROVISIONER_JOB_ID"
+	provisionerJobIdValue := computeNode.ProvisionerJobId
 
 	// Create a dynamic task definition with the custom provisioner image (using function from post_compute_nodes_handler.go)
 	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, updateRequest.ProvisionerImage, updateRequest.ProvisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("Error creating dynamic task definition: %v", err)
+		abandon()
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
@@ -399,6 +405,10 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 							Name:  &externalIdKey,
 							Value: &externalIdValue,
 						},
+						{
+							Name:  &provisionerJobIdKey,
+							Value: &provisionerJobIdValue,
+						},
 					},
 				},
 			},
@@ -409,13 +419,7 @@ func PutComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTTPR
 	taskRunner := runner.NewECSTaskRunner(client, runTaskIn)
 	if err := taskRunner.Run(ctx); err != nil {
 		log.Println(err)
-		// No update is running: the node is as it was.
-		computeNode.Status = previousStatus
-		computeNode.PendingProvisionerImage = ""
-		computeNode.PendingProvisionerImageTag = ""
-		if putErr := dynamo_store.Put(ctx, computeNode); putErr != nil {
-			log.Printf("Error restoring node %s after a failed update launch: %v", uuid, putErr)
-		}
+		abandon()
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 500,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),

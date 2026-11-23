@@ -40,6 +40,10 @@ See `docs/storage-nodes-plan.md` for the full design. Key concepts:
 - DELETE requires `pennsieve:allow-delete=true` tag on the S3 bucket as a safety check; it runs the provisioner's destroy only for provisioned nodes, and otherwise just removes the record
 - EventBridge handler routes by source: `storage-node-provisioner` vs `compute-node-provisioner`
 
+## Provisioner Jobs
+
+One provisioner job (create, update, delete) per compute node at a time: two applying a node's Terraform at once corrupt its state. Handlers start a job with `startProvisionerJob` (a conditional put on `provisionerJobId`/`provisionerJobStartedAt`; 409 while another holds the node, which a job older than `provisionerJobTimeout` no longer does), pass `PROVISIONER_JOB_ID` to the task, and the EventBridge handler ends the job when that job's event arrives. The provisioner also locks the Terraform state itself.
+
 ## Permission Model
 
 See `docs/compute-node-permissions.md` for the full matrix. Key concepts:

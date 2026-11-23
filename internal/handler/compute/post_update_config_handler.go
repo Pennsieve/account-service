@@ -41,6 +41,7 @@ type UpdateConfigRequest struct {
 //
 // Restrictions:
 // - Cannot update nodes in "Pending" or "Destroying" state
+// - 409 while another provisioner job is changing the node
 func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	handlerName := "PostUpdateConfigHandler"
 
@@ -205,13 +206,10 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		computeNode.Status = "Updating"
 	}
 
-	// Save to DynamoDB
-	if err := nodesStore.Put(ctx, computeNode); err != nil {
-		log.Printf("error updating compute node config: %v", err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
-		}, nil
+	// Save to DynamoDB, starting the job: refused (409) while another
+	// provisioner job is changing the node.
+	if err := startProvisionerJob(ctx, nodesStore, &computeNode, previousStatus, "UPDATE"); err != nil {
+		return provisionerJobRefused(handlerName, err), nil
 	}
 	log.Printf("Updated config for node %s: maxGpuInstances=%d, gpuTier=%s, enableLLMAccess=%v, maxInteractiveSessions=%d",
 		nodeUuid, computeNode.MaxGpuInstances, computeNode.GpuTier, computeNode.EnableLLMAccess, computeNode.MaxInteractiveSessions)
@@ -242,10 +240,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if err != nil {
 		log.Printf("Error creating dynamic task definition: %v", err)
 		// No update is running: the node keeps its status.
-		computeNode.Status = previousStatus
-		if putErr := nodesStore.Put(ctx, computeNode); putErr != nil {
-			log.Printf("Error restoring node %s after a failed update launch: %v", nodeUuid, putErr)
-		}
+		abandonProvisionerJob(ctx, nodesStore, &computeNode, previousStatus)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
@@ -320,6 +315,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 		"DESTROY_INTERACTIVE":      destroyInteractive,
 		"ROLE_NAME":                account.RoleName,
 		"EXTERNAL_ID":              account.ExternalId,
+		"PROVISIONER_JOB_ID":       computeNode.ProvisionerJobId,
 	})
 
 	runTaskIn := &ecs.RunTaskInput{
@@ -347,10 +343,7 @@ func PostUpdateConfigHandler(ctx context.Context, request events.APIGatewayV2HTT
 	if err := taskRunner.Run(ctx); err != nil {
 		log.Println(err)
 		// No update is running: the node keeps its status.
-		computeNode.Status = previousStatus
-		if putErr := nodesStore.Put(ctx, computeNode); putErr != nil {
-			log.Printf("Error restoring node %s after a failed update launch: %v", nodeUuid, putErr)
-		}
+		abandonProvisionerJob(ctx, nodesStore, &computeNode, previousStatus)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),

@@ -2,6 +2,7 @@ package store_dynamodb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -19,6 +20,8 @@ type NodeStore interface {
 	GetByAccount(context.Context, string) ([]models.DynamoDBNode, error)
 	GetAllEnabled(context.Context) ([]models.DynamoDBNode, error)
 	Put(context.Context, models.DynamoDBNode) error
+	StartProvisionerJob(ctx context.Context, node models.DynamoDBNode, read JobRead, staleBefore int64) error
+	PutIfJobUnchanged(ctx context.Context, node models.DynamoDBNode, readJobId string) error
 	UpdateStatus(context.Context, string, string) error
 	UpdateHealthStatus(ctx context.Context, uuid string, healthStatus string, lastHealthCheck string) error
 	Delete(context.Context, string) error
@@ -84,15 +87,9 @@ func (r *NodeDatabaseStore) Get(ctx context.Context, filter string) ([]models.Dy
 // Put stores node, with organizationId derived from its tenant. A node read
 // before it had a tenant gets one from its organizationId and userId.
 func (r *NodeDatabaseStore) Put(ctx context.Context, node models.DynamoDBNode) error {
-	node, err := node.WithTenant()
+	item, err := nodeItem(node)
 	if err != nil {
-		return fmt.Errorf("error resolving tenant of node %s: %w", node.Uuid, err)
-	}
-	node.OrganizationId = models.LegacyOrganizationId(node.Tenant)
-
-	item, err := attributevalue.MarshalMap(node)
-	if err != nil {
-		return fmt.Errorf("error marshaling node: %w", err)
+		return err
 	}
 
 	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
@@ -104,6 +101,101 @@ func (r *NodeDatabaseStore) Put(ctx context.Context, node models.DynamoDBNode) e
 	}
 
 	return nil
+}
+
+// ErrProvisionerJobRunning is StartProvisionerJob's refusal: another
+// provisioner job is changing the node, or it changed since it was read.
+var ErrProvisionerJobRunning = errors.New("another provisioner job is changing this compute node; try again once it has finished")
+
+// ErrNodeChanged is PutIfJobUnchanged's refusal: a provisioner job started or
+// ended since the node was read.
+var ErrNodeChanged = errors.New("the compute node changed meanwhile; try again")
+
+// JobRead is what a handler read of a node before starting a job on it: its
+// job (empty for none) and status.
+type JobRead struct {
+	JobId  string
+	Status string
+}
+
+// StartProvisionerJob stores node, an existing node, as Put does, as the
+// start of its provisioner job (ProvisionerJobId; empty in test environments,
+// which launch none). Two jobs applying a node's Terraform at once leave its
+// state missing resources, so a job is started only through here, and only
+// when the node is as read: holding no job, or only one that started before
+// staleBefore (Unix seconds) and never reported, and with read's status. A
+// node that changed meanwhile (a job's event stored its results) isn't
+// overwritten with what was read before.
+func (r *NodeDatabaseStore) StartProvisionerJob(ctx context.Context, node models.DynamoDBNode, read JobRead, staleBefore int64) error {
+	jobId, startedAt := expression.Name("provisionerJobId"), expression.Name("provisionerJobStartedAt")
+	free := expression.AttributeNotExists(jobId)
+	if read.JobId != "" {
+		free = jobId.Equal(expression.Value(read.JobId)).And(expression.Or(
+			expression.AttributeNotExists(startedAt),
+			startedAt.LessThan(expression.Value(staleBefore)),
+		))
+	}
+	cond := expression.AttributeExists(expression.Name("uuid")).
+		And(expression.Name("status").Equal(expression.Value(read.Status))).
+		And(free)
+	return r.putIf(ctx, node, cond, ErrProvisionerJobRunning)
+}
+
+// PutIfJobUnchanged stores node, as Put does, unless its provisioner job is
+// no longer readJobId (empty: none), as when a job started or ended since the
+// node was read: storing it then would drop the new job, or bring back the
+// ended one.
+func (r *NodeDatabaseStore) PutIfJobUnchanged(ctx context.Context, node models.DynamoDBNode, readJobId string) error {
+	jobId := expression.Name("provisionerJobId")
+	same := expression.AttributeNotExists(jobId)
+	if readJobId != "" {
+		same = jobId.Equal(expression.Value(readJobId))
+	}
+	return r.putIf(ctx, node, expression.AttributeExists(expression.Name("uuid")).And(same), ErrNodeChanged)
+}
+
+// putIf stores node, as Put does, when cond holds, and returns refused when
+// it doesn't.
+func (r *NodeDatabaseStore) putIf(ctx context.Context, node models.DynamoDBNode, cond expression.ConditionBuilder, refused error) error {
+	item, err := nodeItem(node)
+	if err != nil {
+		return err
+	}
+	expr, err := expression.NewBuilder().WithCondition(cond).Build()
+	if err != nil {
+		return fmt.Errorf("error building condition expression: %w", err)
+	}
+
+	_, err = r.DB.PutItem(ctx, &dynamodb.PutItemInput{
+		Item:                      item,
+		TableName:                 aws.String(r.TableName),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	var failed *ddbtypes.ConditionalCheckFailedException
+	if errors.As(err, &failed) {
+		return refused
+	}
+	if err != nil {
+		return fmt.Errorf("error putting node: %w", err)
+	}
+	return nil
+}
+
+// nodeItem is node as stored, with organizationId derived from its tenant.
+func nodeItem(node models.DynamoDBNode) (map[string]ddbtypes.AttributeValue, error) {
+	node, err := node.WithTenant()
+	if err != nil {
+		return nil, fmt.Errorf("error resolving tenant of node %s: %w", node.Uuid, err)
+	}
+	node.OrganizationId = models.LegacyOrganizationId(node.Tenant)
+
+	item, err := attributevalue.MarshalMap(node)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling node: %w", err)
+	}
+	return item, nil
 }
 
 func (r *NodeDatabaseStore) GetByAccount(ctx context.Context, accountUuid string) ([]models.DynamoDBNode, error) {

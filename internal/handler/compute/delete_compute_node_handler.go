@@ -184,15 +184,13 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 		}, nil
 	}
 
-	// Set node status to "Destroying" before launching the delete task
+	// Set node status to "Destroying" before launching the delete task,
+	// starting the job: refused (409) while another provisioner job (a create
+	// or update still running) is changing the node.
+	previousStatus := computeNode.Status
 	computeNode.Status = "Destroying"
-	err = dynamo_store.Put(ctx, computeNode)
-	if err != nil {
-		log.Printf("Error updating node status to Destroying: %v", err)
-		return events.APIGatewayV2HTTPResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       errors.ComputeHandlerError(handlerName, errors.ErrDynamoDB),
-		}, nil
+	if err := startProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus, "DELETE"); err != nil {
+		return provisionerJobRefused(handlerName, err), nil
 	}
 	log.Printf("Set node %s status to Destroying", uuid)
 
@@ -224,6 +222,7 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, provisionerImage, provisionerImageTag, envValue)
 	if err != nil {
 		log.Printf("Error creating dynamic task definition: %v", err)
+		abandonProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
@@ -279,6 +278,8 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	// overall, its full shared destroy removes everything regardless of this flag.
 	// Fail safe: on any uncertainty, leave it false (never wrongly destroy infra
 	// another node depends on).
+	provisionerJobIdKey := "PROVISIONER_JOB_ID"
+	provisionerJobIdValue := computeNode.ProvisionerJobId
 	destroyInteractiveKey := "DESTROY_INTERACTIVE"
 	destroyInteractiveValue := "false"
 	if computeNode.MaxInteractiveSessions > 0 {
@@ -369,6 +370,10 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 							Name:  &destroyInteractiveKey,
 							Value: &destroyInteractiveValue,
 						},
+						{
+							Name:  &provisionerJobIdKey,
+							Value: &provisionerJobIdValue,
+						},
 					},
 				},
 			},
@@ -379,6 +384,8 @@ func DeleteComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HT
 	ecsRunner := runner.NewECSTaskRunner(client, runTaskIn)
 	if err := ecsRunner.Run(ctx); err != nil {
 		log.Println(err)
+		// No delete is running: the node is as it was.
+		abandonProvisionerJob(ctx, dynamo_store, &computeNode, previousStatus)
 		return events.APIGatewayV2HTTPResponse{
 			StatusCode: 500,
 			Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),

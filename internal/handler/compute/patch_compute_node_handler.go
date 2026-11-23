@@ -3,6 +3,7 @@ package compute
 import (
 	"context"
 	"encoding/json"
+	goerrors "errors"
 	"log"
 	"net/http"
 	"os"
@@ -128,6 +129,15 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		}, nil
 	}
 
+	// A provisioner job sets the node's status when it reports: not while
+	// one runs.
+	if jobHeld(node) && updateReq.Status != nil {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusConflict,
+			Body:       errors.ComputeHandlerError(handlerName, store_dynamodb.ErrProvisionerJobRunning),
+		}, nil
+	}
+
 	// Check if trying to enable a node while account is paused
 	if updateReq.Status != nil && *updateReq.Status == "Enabled" {
 		accountsTable := os.Getenv("ACCOUNTS_TABLE")
@@ -157,8 +167,15 @@ func PatchComputeNodeHandler(ctx context.Context, request events.APIGatewayV2HTT
 		node.Description = *updateReq.Description
 	}
 
-	// Update the node in the database
-	err = nodesStore.Put(ctx, node)
+	// Update the node in the database, unless a provisioner job started or
+	// ended since it was read (storing it would drop or revive that job)
+	err = nodesStore.PutIfJobUnchanged(ctx, node, node.ProvisionerJobId)
+	if goerrors.Is(err, store_dynamodb.ErrNodeChanged) {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: http.StatusConflict,
+			Body:       errors.ComputeHandlerError(handlerName, err),
+		}, nil
+	}
 	if err != nil {
 		log.Printf("error updating compute node: %v", err)
 		return events.APIGatewayV2HTTPResponse{

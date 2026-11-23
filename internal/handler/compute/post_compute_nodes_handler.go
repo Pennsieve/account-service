@@ -458,11 +458,13 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 	// Create the node in DynamoDB with PENDING status before starting the task
 	computeNodesTable := os.Getenv("COMPUTE_NODES_TABLE")
+	var nodeStore store_dynamodb.NodeStore
+	var pendingNode models.DynamoDBNode
 	if computeNodesTable != "" {
-		nodeStore := store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable)
+		nodeStore = store_dynamodb.NewNodeDatabaseStore(dynamoDBClient, computeNodesTable)
 
 		// Create node with PENDING status
-		pendingNode := models.DynamoDBNode{
+		pendingNode = models.DynamoDBNode{
 			Uuid:                   nodeUuid,
 			Name:                   req.Name,
 			Description:            req.Description,
@@ -489,6 +491,13 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 			RunDataStore:           newNodeRunDataStore,
 			Status:                 "Pending", // New Pending status
 		}
+		// The create is the node's first provisioner job: no other can start
+		// (an update or delete) until it reports.
+		if launchesProvisioner() {
+			pendingNode.ProvisionerJobId = uuid.New().String()
+			pendingNode.ProvisionerJobAction = "CREATE"
+			pendingNode.ProvisionerJobStartedAt = time.Now().Unix()
+		}
 
 		err = nodeStore.Put(ctx, pendingNode)
 		if err != nil {
@@ -510,6 +519,9 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		dynamicTaskDef, err := createDynamicTaskDefinition(ctx, cfg, client, req.ProvisionerImage, req.ProvisionerImageTag, envValue)
 		if err != nil {
 			log.Printf("Error creating dynamic task definition: %v", err)
+			if nodeStore != nil {
+				abandonProvisionerJob(ctx, nodeStore, &pendingNode, pendingNode.Status)
+			}
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: http.StatusInternalServerError,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),
@@ -572,6 +584,8 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 
 		roleNameKey := "ROLE_NAME"
 		roleNameValue := account.RoleName
+		provisionerJobIdKey := "PROVISIONER_JOB_ID"
+		provisionerJobIdValue := pendingNode.ProvisionerJobId
 		externalIdKey := "EXTERNAL_ID"
 		externalIdValue := account.ExternalId
 		computeNodeIdKey := "COMPUTE_NODE_ID"
@@ -688,6 +702,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 								Name:  &externalIdKey,
 								Value: &externalIdValue,
 							},
+							{
+								Name:  &provisionerJobIdKey,
+								Value: &provisionerJobIdValue,
+							},
 						},
 					},
 				},
@@ -698,6 +716,10 @@ func PostComputeNodesHandler(ctx context.Context, request events.APIGatewayV2HTT
 		taskRunner := runner.NewECSTaskRunner(client, runTaskIn)
 		if err := taskRunner.Run(ctx); err != nil {
 			log.Println(err)
+			// No create is running: the node can be deleted.
+			if nodeStore != nil {
+				abandonProvisionerJob(ctx, nodeStore, &pendingNode, pendingNode.Status)
+			}
 			return events.APIGatewayV2HTTPResponse{
 				StatusCode: 500,
 				Body:       errors.ComputeHandlerError(handlerName, errors.ErrRunningFargateTask),

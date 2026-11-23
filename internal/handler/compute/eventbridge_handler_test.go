@@ -13,6 +13,7 @@ import (
 
 	"github.com/pennsieve/account-service/internal/handler/compute"
 	"github.com/pennsieve/account-service/internal/models"
+	"github.com/pennsieve/account-service/internal/store_dynamodb"
 )
 
 // MockNodeStore is a mock implementation of the NodeStore interface
@@ -37,6 +38,16 @@ func (m *MockNodeStore) GetByAccount(ctx context.Context, accountUuid string) ([
 
 func (m *MockNodeStore) Put(ctx context.Context, node models.DynamoDBNode) error {
 	args := m.Called(ctx, node)
+	return args.Error(0)
+}
+
+func (m *MockNodeStore) StartProvisionerJob(ctx context.Context, node models.DynamoDBNode, read store_dynamodb.JobRead, staleBefore int64) error {
+	args := m.Called(ctx, node, read, staleBefore)
+	return args.Error(0)
+}
+
+func (m *MockNodeStore) PutIfJobUnchanged(ctx context.Context, node models.DynamoDBNode, readJobId string) error {
+	args := m.Called(ctx, node, readJobId)
 	return args.Error(0)
 }
 
