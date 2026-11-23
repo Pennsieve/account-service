@@ -1,7 +1,23 @@
+locals {
+  accounts_service_api_body = templatefile("${path.module}/accounts-service.yml", {
+    authorize_lambda_invoke_uri    = data.terraform_remote_state.api_gateway.outputs.authorizer_lambda_invoke_uri
+    gateway_authorizer_role        = data.terraform_remote_state.api_gateway.outputs.authorizer_invocation_role
+    account_service_lambda_arn     = aws_lambda_function.service_lambda.arn
+  })
+  accounts_service_api_info = yamldecode(local.accounts_service_api_body).info
+}
+
+# Every change to body re-imports the API from the OpenAPI spec, which sets the
+# API's name, description and version from the spec's info block and replaces
+# its integrations with the ones the spec defines. name, description and version
+# are therefore read from the spec, so the re-import and this config agree, and
+# every route's integration is defined in the spec
+# (x-amazon-apigateway-integrations), not as a separate resource.
 resource "aws_apigatewayv2_api" "accounts_service_api" {
-  name          = "Accounts Serverless API"
+  name          = local.accounts_service_api_info.title
   protocol_type = "HTTP"
-  description   = "API for the lambda-based Accounts API"
+  description   = local.accounts_service_api_info.description
+  version       = local.accounts_service_api_info.version
   cors_configuration {
     allow_origins     = local.cors_allowed_origins
     allow_methods = ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"]
@@ -10,11 +26,7 @@ resource "aws_apigatewayv2_api" "accounts_service_api" {
     expose_headers = ["*"]
     max_age           = 300
   }
-  body = templatefile("${path.module}/accounts-service.yml", {
-    authorize_lambda_invoke_uri    = data.terraform_remote_state.api_gateway.outputs.authorizer_lambda_invoke_uri
-    gateway_authorizer_role        = data.terraform_remote_state.api_gateway.outputs.authorizer_invocation_role
-    account_service_lambda_arn     = aws_lambda_function.service_lambda.arn
-  })
+  body = local.accounts_service_api_body
 }
 
 resource "aws_apigatewayv2_api_mapping" "accounts_service_api_map" {
@@ -49,14 +61,6 @@ resource "aws_apigatewayv2_stage" "accounts_service_gateway_stage" {
     }
     )
   }
-}
-
-resource "aws_apigatewayv2_integration" "accounts_service_integration" {
-  api_id             = aws_apigatewayv2_api.accounts_service_api.id
-  integration_type   = "AWS_PROXY"
-  connection_type    = "INTERNET"
-  integration_method = "POST"
-  integration_uri    = aws_lambda_function.service_lambda.invoke_arn
 }
 
 resource "aws_lambda_permission" "accounts_service_lambda_permission" {
