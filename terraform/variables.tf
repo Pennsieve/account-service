@@ -112,7 +112,9 @@ locals {
     environment_name = var.environment_name
   }
 
-  cors_allowed_origins = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"]
+  # Discover, the web app, and LabBooks (labbooks.ai, prod only), which lists
+  # the user's compute nodes and connects to notebook sessions.
+  cors_allowed_origins = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io", "https://labbooks.ai"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"]
 
 }
 
