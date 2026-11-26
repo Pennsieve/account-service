@@ -21,6 +21,9 @@ data "template_file" "provisioner_ecs_task_definition" {
     # compute nodes allow their notebook port only from these; empty until
     # the gateway is deployed, which keeps basic notebooks refused.
     interactive_gateway_cidrs = join(",", try(data.terraform_remote_state.workflow_service.outputs.interactive_gateway_egress_cidrs, []))
+    # The sites (data.tf) whose pages open notebook sessions: the nodes'
+    # session proxy allows them once re-applied.
+    site_origins = join(",", local.site_origins)
   }
 }
 

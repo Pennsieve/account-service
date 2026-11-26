@@ -104,3 +104,10 @@ data "terraform_remote_state" "pennsieve_postgres" {
     profile = var.aws_account
   }
 }
+
+# Sites outside the platform that call it from the browser (LabBooks,
+# Epilepsy.Science): one list, kept by the gateway's terraform in
+# infrastructure. A new site is added there, then this service redeploys.
+data "aws_ssm_parameter" "site_origins" {
+  name = "/${var.environment_name}/site-origins"
+}

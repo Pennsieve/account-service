@@ -112,10 +112,13 @@ locals {
     environment_name = var.environment_name
   }
 
-  # Discover, the web app, LabBooks (labbooks.ai, prod only) and
-  # Epilepsy.Science (dev.epilepsy.science on dev), which list the user's
+  # Discover, the web app, and the sites (data.tf) that list the user's
   # compute nodes and connect to notebook sessions.
-  cors_allowed_origins = var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io", "https://labbooks.ai", "https://epilepsy.science"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net", "https://dev.epilepsy.science"]
+  site_origins = split(",", data.aws_ssm_parameter.site_origins.insecure_value)
+  cors_allowed_origins = concat(
+    var.environment_name == "prod" ? ["https://discover.pennsieve.io", "https://app.pennsieve.io"] : ["http://localhost:3000", "https://discover.pennsieve.net", "https://app.pennsieve.net"],
+    local.site_origins,
+  )
 
 }
 
